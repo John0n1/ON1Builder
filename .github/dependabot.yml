@@ -11,9 +11,13 @@ updates:
         dependency-type: "direct"
     assignees:
       - "John0n1"
+      - "soljuan"
+      - "denibur"
 
     reviewers:
       - "John0n1"
+      - "soljuan"
+      - "denibur"
 
     commit-message:
       prefix: "chore: "
