@@ -11,12 +11,12 @@ updates:
         dependency-type: "direct"
     assignees:
       - "John0n1"
-      - "soljuan"
+      - "Soljuan"
       - "denibur"
 
     reviewers:
       - "John0n1"
-      - "soljuan"
+      - "Soljuan"
       - "denibur"
 
     commit-message:
