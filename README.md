@@ -1,6 +1,6 @@
-# ON1Builder MEV Bot
+# ON1Builder
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 **ON1Builder is a sophisticated, production-grade, multi-chain Maximum Extractable Value (MEV) trading bot designed for Ethereum Mainnet and Polygon Mainnet (and easily configurable for others). It incorporates advanced features like secure secret management, comprehensive monitoring, automated strategies, and robust deployment practices.**
 
