@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from python.transaction_core import TransactionCore
-from python.configuration import Configuration
+from scripts.python.transaction_core import TransactionCore
+from scripts.python.configuration import Configuration
 
 @pytest.fixture
 def configuration():

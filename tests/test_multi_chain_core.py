@@ -4,16 +4,16 @@
 Tests for the MultiChainCore class.
 """
 
-from python.multi_chain_core import MultiChainCore
-from python.configuration_multi_chain import MultiChainConfiguration
+from scripts.python.multi_chain_core import MultiChainCore
+from scripts.python.configuration_multi_chain import MultiChainConfiguration
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import sys
 import os
 import asyncio
 
-# Add the parent directory to the path so we can import the modules
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the project root to the path so we can import the modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Import after path setup
 

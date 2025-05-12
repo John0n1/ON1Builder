@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch
 import logging
-from python.logger_on1 import setup_logging
+from scripts.python.logger_on1 import setup_logging
 
 @pytest.fixture
 def logger():

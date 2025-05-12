@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from python.configuration import Configuration
+from scripts.python.configuration import Configuration
 
 @pytest.fixture
 def configuration():
@@ -20,7 +20,7 @@ def configuration_instance(configuration):
 
 @pytest.mark.asyncio
 async def test_load_env(configuration_instance):
-    with patch('python.configuration.dotenv.load_dotenv') as mock_load_dotenv:
+    with patch('scripts.python.configuration.dotenv.load_dotenv') as mock_load_dotenv:
         configuration_instance._load_env()
         mock_load_dotenv.assert_called_once_with(dotenv_path=configuration_instance.env_path)
 

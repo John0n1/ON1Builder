@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from python.nonce_core import NonceCore
-from python.configuration import Configuration
+from scripts.python.nonce_core import NonceCore
+from scripts.python.configuration import Configuration
 from web3 import AsyncWeb3
 
 @pytest.fixture

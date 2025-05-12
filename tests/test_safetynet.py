@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from python.safety_net import SafetyNet
-from python.configuration import Configuration
+from scripts.python.safety_net import SafetyNet
+from scripts.python.configuration import Configuration
 from web3 import AsyncWeb3
 from eth_account import Account
 

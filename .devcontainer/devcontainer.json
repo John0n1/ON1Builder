@@ -1,29 +1,54 @@
 {
   "name": "ON1Builder Dev Container",
-  "image": "mcr.microsoft.com/devcontainers/python:3.12", // Updated to Python 3.12
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "features": {
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12"
-    }
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "pip install -r requirements.txt && pytest tests/",
+  "postCreateCommand": "pip install -r requirements.txt && pre-commit install",
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-python.python", // Python extension
-        "ms-python.vscode-pylance", // Pylance for IntelliSense
-        "ms-toolsai.jupyter", // Jupyter support
-        "ms-python.black-formatter", // Black formatter
-        "ms-python.flake8", // Flake8 linter
-        "ms-python.isort" // isort for imports
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-python.isort",
+        "GitHub.copilot",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker",
+        "JuanBlanco.solidity",
+        "tintinweb.solidity-visual-auditor",
+        "ms-vscode.makefile-tools"
       ],
       "settings": {
         "python.formatting.provider": "black",
         "python.linting.flake8Enabled": true,
         "python.linting.enabled": true,
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        "solidity.formatter": "prettier",
+        "solidity.linter": "solhint"
       }
     }
   },
-  "workspaceFolder": "/workspaces/ON1Builder" // Set default workspace folder
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/ON1Builder",
+  "mounts": [
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+  ],
+  "containerEnv": {
+    "PYTHONPATH": "${containerWorkspaceFolder}"
+  }
 }

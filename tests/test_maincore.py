@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from python.main_core import MainCore
-from python.configuration import Configuration
+from scripts.python.main_core import MainCore
+from scripts.python.configuration import Configuration
 
 @pytest.fixture
 def configuration():

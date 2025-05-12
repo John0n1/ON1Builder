@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from python.market_monitor import MarketMonitor
-from python.configuration import Configuration
+from scripts.python.market_monitor import MarketMonitor
+from scripts.python.configuration import Configuration
 
 @pytest.fixture
 def configuration():

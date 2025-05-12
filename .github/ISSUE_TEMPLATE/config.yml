@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://github.com/John0n1/ON1Builder/tree/main/docs
+    about: Check our documentation before creating an issue
+  - name: 💬 Discussions
+    url: https://github.com/John0n1/ON1Builder/discussions
+    about: Please ask and answer questions here
+  - name: 🔒 Security Issues
+    url: https://github.com/John0n1/ON1Builder/security/policy
+    about: Please report security vulnerabilities directly through our security policy
+  - name: 📖 Contributing Guidelines
+    url: https://github.com/John0n1/ON1Builder/blob/main/CONTRIBUTING.md
+    about: Review our contributing guidelines before submitting PRs

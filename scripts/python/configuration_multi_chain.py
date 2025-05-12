@@ -168,17 +168,17 @@ def _checksum(address: str, key: str) -> str:
 class MultiChainConfiguration(types.SimpleNamespace):
     """Configuration class with multi-chain support."""
 
-    BASE_PATH: Path = Path(__file__).parent.parent  # project root
+    BASE_PATH: Path = Path(__file__).parent.parent.parent  # project root
 
     # ML-related settings
     ML_PATH: str = os.path.join(
-        str(Path(__file__).parent.parent), "ml"
+        str(Path(__file__).parent.parent.parent), "data/ml"
     )  # Relative path to ml directory
     MODEL_PATH: str = os.path.join(
-        str(Path(__file__).parent.parent), "ml/price_model.joblib"
+        str(Path(__file__).parent.parent.parent), "data/ml/price_model.joblib"
     )  # Path to the price model
     TRAINING_DATA_PATH: str = os.path.join(
-        str(Path(__file__).parent.parent), "ml/training_data.csv"
+        str(Path(__file__).parent.parent.parent), "data/ml/training_data.csv"
     )  # Path to the training data
     MODEL_RETRAINING_INTERVAL: int = 3600  # 1 hour retraining interval
     MIN_TRAINING_SAMPLES: int = 100  # Minimum 100 training samples
@@ -192,8 +192,8 @@ class MultiChainConfiguration(types.SimpleNamespace):
 
     def __init__(
         self,
-        env_path: str | Path = ".env",
-        yaml_file: str | Path = "config.yaml",
+        env_path: str | Path = "config/template.env",
+        yaml_file: str | Path = "config/config_multi_chain.yaml",
         environment: str = "development",
         **overrides: Any,
     ) -> None:

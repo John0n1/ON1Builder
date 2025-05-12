@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch, AsyncMock
-from python.abi_registry import ABIRegistry
+from scripts.python.abi_registry import ABIRegistry
 
 @pytest.fixture
 def abi_registry():
@@ -11,7 +11,7 @@ def abi_registry():
 
 @pytest.mark.asyncio
 async def test_initialize(abi_registry):
-    with patch('python.abi_registry.ABIRegistry._load_all_abis', new_callable=AsyncMock) as mock_load_all_abis:
+    with patch('scripts.python.abi_registry.ABIRegistry._load_all_abis', new_callable=AsyncMock) as mock_load_all_abis:
         await abi_registry.initialize()
         mock_load_all_abis.assert_called_once()
         assert abi_registry._initialized is True
@@ -22,7 +22,7 @@ async def test_load_and_validate_abi(abi_registry):
     abi_path = Path('tests/abi/erc20_abi.json')
     critical_abis = {'erc20'}
 
-    with patch('python.abi_registry.ABIRegistry._load_abi_from_path', new_callable=AsyncMock) as mock_load_abi_from_path:
+    with patch('scripts.python.abi_registry.ABIRegistry._load_abi_from_path', new_callable=AsyncMock) as mock_load_abi_from_path:
         mock_load_abi_from_path.return_value = [{'name': 'transfer', 'type': 'function', 'inputs': []}]
         await abi_registry._load_and_validate_abi(abi_type, abi_path, critical_abis)
         assert abi_type in abi_registry.abis

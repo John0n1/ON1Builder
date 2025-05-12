@@ -98,13 +98,13 @@ def _checksum(addr: str, key_name: str) -> str:
 
 
 class Configuration(types.SimpleNamespace):  # noqa: D101 – docstring above
-    BASE_PATH: Path = Path(__file__).parent.parent  # project root
-    ML_PATH: str = "/ml/training_data.csv"  # Initialize here
+    BASE_PATH: Path = Path(__file__).parent.parent.parent  # project root
+    ML_PATH: str = "/data/ml/training_data.csv"  # Initialize here
 
     def __init__(
         self,
-        env_path: str | Path = ".env",
-        yaml_file: str | Path = "config.yaml",
+        env_path: str | Path = "config/template.env",
+        yaml_file: str | Path = "config/config.yaml",
         environment: str = "development",
         **overrides: Any,
     ) -> None:

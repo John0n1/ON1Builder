@@ -5,9 +5,9 @@ import unittest
 class TestInit(unittest.TestCase):
     def test_import(self):
         try:
-            import python.pyutils
+            import scripts.python.pyutils
         except ImportError:
-            self.fail("Failed to import python.pyutils")
+            self.fail("Failed to import scripts.python.pyutils")
 
 if __name__ == '__main__':
     unittest.main()

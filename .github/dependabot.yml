@@ -1,36 +1,41 @@
-# Dependabot - ON1Builder
+# Dependabot configuration for ON1Builder
 version: 2
 updates:
+  # Python dependencies
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     target-branch: "master"
     allow:
-      - dependency-name: "*"
-        dependency-type: "direct"
+      - dependency-type: "direct"
     assignees:
       - "John0n1"
-      - "Soljuan"
       - "denibur"
-
+      - "Soljuan"
     reviewers:
       - "John0n1"
-      - "Soljuan"
       - "denibur"
-
+      - "Soljuan"
     commit-message:
-      prefix: "chore: "
-      prefix-development: "chore(dev): "
+      prefix: "deps"
+      prefix-development: "deps(dev)"
       include: "scope"
-    open-pull-requests-limit: 8
+    open-pull-requests-limit: 10
     rebase-strategy: "auto"
-    versioning-strategy: "increase-if-necessary"
-    milestone: 1
+    versioning-strategy: "auto"
     groups:
-      core:
+      python-packages:
         patterns:
-          - "django"
+          - "*"
         update-types:
           - "minor"
           - "patch"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "master"
+
