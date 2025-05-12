@@ -17,7 +17,7 @@ cytoolz==1.0.1
 dotenv==0.9.9
 eth-account==0.13.7
 eth-hash==0.7.1
-eth-keyfile==0.8.1
+eth-keyfile==0.9.1
 eth-keys==0.7.0
 eth-rlp==2.2.0
 eth-typing==5.2.1
