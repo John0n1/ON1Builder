@@ -292,7 +292,7 @@ class MultiChainConfiguration(types.SimpleNamespace):
                             secret_key = f"CHAIN_{chain_id}_{key}"
                             secret_value = _get_vault_secret(vault_addr, vault_token, chain_path, key)
                             if secret_value:
-                                logger.info(f"Loaded {secret_key} from Vault")
+                                logger.info("Loaded a secret for a chain-specific key from Vault")
                                 data[secret_key] = secret_value
             else:
                 logger.warning("VAULT_ADDR or VAULT_TOKEN not set, skipping Vault secret loading")
