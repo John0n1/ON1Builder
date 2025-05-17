@@ -327,10 +327,10 @@ def test_alert() -> Dict[str, Any]:
             "message": "Test alert sent",
         })
     except Exception as e:
-        logger.error(f"Error sending test alert: {e}")
+        logger.error(f"Error sending test alert: {e}", exc_info=True)
         return jsonify({
             "status": "error",
-            "message": f"Error sending test alert: {str(e)}",
+            "message": "An internal error occurred while sending the test alert.",
         }), 500
 
 # Simulate transaction endpoint
