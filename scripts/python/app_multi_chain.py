@@ -295,10 +295,10 @@ def stop_bot() -> Dict[str, Any]:
             "message": "Bot stopping",
         })
     except Exception as e:
-        logger.error(f"Error stopping bot: {e}")
+        logger.error(f"Error stopping bot: {e}", exc_info=True)
         return jsonify({
             "status": "error",
-            "message": f"Error stopping bot: {str(e)}",
+            "message": "An internal error occurred while stopping the bot.",
         }), 500
 
 # Test alert endpoint
