@@ -381,7 +381,7 @@ def simulate_transaction() -> Dict[str, Any]:
         logger.error(f"Error simulating transaction: {e}")
         return jsonify({
             "status": "error",
-            "message": f"Error simulating transaction: {str(e)}",
+            "message": "An internal error occurred while simulating the transaction.",
         }), 500
 
 # Main function
