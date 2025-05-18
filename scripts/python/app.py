@@ -180,7 +180,7 @@ def start_bot():
         
     except Exception as e:
         logger.error(f"Error starting bot: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)})
+        return jsonify({"status": "error", "message": "An internal error occurred. Please try again later."})
 
 
 @app.route("/stop", methods=["POST"])
@@ -210,7 +210,7 @@ def stop_bot():
         
     except Exception as e:
         logger.error(f"Error stopping bot: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)})
+        return jsonify({"status": "error", "message": "An internal error occurred. Please try again later."})
 
 
 def stop_core_async():
