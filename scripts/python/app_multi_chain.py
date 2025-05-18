@@ -13,6 +13,7 @@ import logging
 import asyncio
 import time
 import datetime
+import html
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 from flask import Flask, jsonify, request, Response
@@ -434,7 +435,7 @@ def simulate_transaction() -> Dict[str, Any]:
         chain_id = data["chain_id"]
         
         if chain_id not in core.workers:
-            return {"success": False, "error": f"Chain ID {chain_id} not supported"}, 400
+            return {"success": False, "error": f"Chain ID {html.escape(chain_id)} not supported"}, 400
             
         # Run simulation async
         result = asyncio.run(_run_simulation(tx_hash, chain_id))
