@@ -3,7 +3,7 @@
 
 -- Transaction History Table
 CREATE TABLE IF NOT EXISTS transaction_history (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     tx_hash VARCHAR(66) UNIQUE NOT NULL,
     chain_id VARCHAR(20) NOT NULL,
     block_number BIGINT,
