@@ -1,146 +1,82 @@
-<div align="center">
-
 # ON1Builder
 
-</div>
-<div align="center">
+ON1Builder is a multi-chain MEV trading bot designed for high-performance, security, and reliability.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)](https://www.python.org)
-[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Build Status](https://img.shields.io/badge/Build%20Status-Passed-2496ED?logo=github&logoColor=white)](https://github.com/ON1Builder)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Documentation](https://img.shields.io/badge/docs-view%20docs-green.svg)](docs/DEPLOYMENT.md)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+## Key Features
 
+- **Multi-Chain Support**: Run the bot across multiple blockchains simultaneously
+- **MEV Detection**: Identify and capitalize on Miner Extractable Value opportunities
+- **Transaction Simulation**: Estimate gas costs and evaluate profitability before execution
+- **Real-time Alerts**: Get notified of important events via Slack and email
+- **Production-Ready**: Complete with monitoring, backup, and security tools
 
-<h3>Production-Grade Multi-Chain MEV Trading Bot</h3>
+## Documentation
 
-[Documentation](docs/DEPLOYMENT.md) •
-[Security](docs/SECURITY.md) •
-[Deployment Guide](docs/DEPLOYMENT.md) •
-[Contributing](CONTRIBUTING.md)
+- [Usage Guide](docs/usage_guide.md) - How to use ON1Builder
+- [Alert System](docs/alert_system.md) - Configure and use the alert system
+- [Transaction Simulation](docs/transaction_simulation.md) - Simulate transaction execution
+- [Deployment Guide](DEPLOYMENT.md) - Deploy ON1Builder to production
+- [Security Policy](SECURITY.md) - Security best practices and policies
+- [Architecture](docs/architecture.md) - Technical architecture overview
+- [Post-Deployment Checklist](post_deployment_checklist.md) - Verify your deployment
 
-</div>
-<div align="center">
+## Quick Start
 
-**ON1Builder** is a sophisticated, production-grade, multi-chain Maximum Extractable Value (MEV) trading bot designed for Ethereum Mainnet and Polygon Mainnet (and easily configurable for others). It incorporates advanced features like secure secret management, comprehensive monitoring, automated strategies, and robust deployment practices.
-
-</div>
-
-## 🚀 Key Features
-
- - **Multi-Chain Support**: Native support for multiple EVM-compatible chains
- - **Advanced MEV Strategies**: Front-running, back-running, sandwich attacks
- - **Machine Learning Integration**: Price prediction and strategy optimization
- - **Production Ready**: Docker support, monitoring, and secure deployment
- - **Comprehensive Security**: Vault integration and best practices
-
-
-
-## 📦 Project Structure
-
-```
-ON1Builder/
-├── config/                   # Configuration files
-│   ├── config.yaml          # Main configuration
-│   ├── config_multi_chain.yaml  # Multi-chain configuration
-│   ├── prometheus/          # Prometheus configuration
-│   └── grafana/            # Grafana dashboards & provisioning
-├── contracts/               # Smart contracts
-├── data/                    # Data directory
-│   ├── abi/                # Contract ABIs
-│   └── ml/                 # Machine learning models
-├── deploy/                  # Deployment scripts
-├── docs/                    # Documentation
-├── scripts/                 # Source code
-│   └── python/             # Python modules
-├── tests/                   # Test files
-└── ui/                      # User interface
-```
-
-## 🛠 Quick Start
-
-1. **Clone the Repository**
+1. Clone the repository:
    ```bash
    git clone https://github.com/John0n1/ON1Builder.git
    cd ON1Builder
    ```
 
-2. **Setup Environment**
+2. Set up the environment:
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # Linux/macOS
-   pip install -r requirements.txt
+   cp template.env .env
+   # Edit .env with your configuration
    ```
 
-3. **Configure**
+3. Run the deployment helper:
    ```bash
-   cp config/template.env config/.env
-   # Edit .env with your settings
+   ./deploy/deploy_helper.sh
    ```
 
-4. **Deploy**
-   ```bash
-   cd deploy
-   ./deploy_prod_multi_chain.sh
-   ```
+4. Choose deployment option:
+   - Single Chain: Option 1
+   - Multi-Chain: Option 2
 
-## 📚 Documentation
+## Deployment Tools
 
-- [**Deployment Guide**](docs/DEPLOYMENT.md): Detailed deployment instructions
-- [**Security Guidelines**](docs/SECURITY.md): Security best practices
-- [**Post-Deployment Checklist**](docs/post_deployment_checklist.md): Deployment verification
-- [**Architecture Overview**](docs/architecture.md): System design and components
+The project includes several tools to help with deployment and management:
 
-## 🔒 Security
+- **deploy_helper.sh**: Interactive helper for common operations
+- **security_audit.sh**: Check for security issues
+- **emergency_shutdown.sh**: Safe shutdown procedure
+- **backup_config.sh** and **backup_data.sh**: Backup tools
+- **cron_setup.sh**: Setup automated maintenance
 
-ON1Builder takes security seriously. Key security features include:
+## System Requirements
 
-- HashiCorp Vault integration for secret management
-- Comprehensive security policies and guidelines
-- Regular security audits and updates
-- Secure deployment practices
+- Python 3.12 or higher
+- Docker and Docker Compose
+- 8+ GB RAM (16+ GB recommended)
+- 4+ CPU cores
+- SSD with at least 100GB free space
 
-Read our [Security Guidelines](docs/SECURITY.md) for more details.
+## Core Components
 
-## 📊 Monitoring
+- **Multi-Chain Core**: Manages operations across multiple blockchains
+- **Chain Workers**: Handle chain-specific transaction monitoring
+- **Safety Net**: Implements protection mechanisms and fail-safes
+- **Transaction Core**: Handles transaction creation, signing, and submission
+- **Monitoring and Metrics**: Prometheus and Grafana integration for real-time monitoring
 
-Built-in monitoring includes:
+## Contributing
 
-- Grafana dashboards for visualization
-- Prometheus metrics collection
-- Alert system integration
-- Performance monitoring
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## ⚠️ Disclaimer
-
-**Trading cryptocurrencies and engaging in MEV activities involves substantial risk of financial loss.** ON1Builder is provided "AS IS" without warranty of any kind. The authors or contributors are not responsible for any financial losses incurred through the use of this software.
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🌟 Support
+## Disclaimer
 
-- **Issues**: Report bugs or suggest features via [GitHub Issues]()
-- **Discussions**: Join our community discussions
-- **Updates**: Star and watch the repository for updates
-
----
-
-<div align="center">
-
-Made with ❤️ by the ON1Builder Team
-
-</div>
+This software is for educational purposes only. Trading cryptocurrencies involves significant risk. Always test thoroughly in a sandbox environment before using in production. The authors are not responsible for any financial losses.

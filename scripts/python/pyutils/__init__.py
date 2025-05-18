@@ -1,32 +1,17 @@
 # LICENSE: MIT // github.com/John0n1/ON1Builder
 
 """
-ON1Builder package initialization.
+Utilities for ON1Builder
 """
 # ./ON1Builder/utils/Python/__init__.py
 
-from strategyexecutionerror import StrategyExecutionError
+__all__ = ["strategyexecutionerror"]
 
-__all__: list[str] = ["StrategyExecutionError"]
-
-
+# Use lazy imports to avoid circular dependencies
 def initialize_package() -> None:
-    """
-    Initialize the ON1Builder package.
-    """
-    try:
-        # Add any package initialization logic here
-        pass
-    except Exception as e:
-        raise RuntimeError(f"Failed to initialize ON1Builder package: {e}")
-
+    """Initialize the pyutils package."""
+    pass
 
 def cleanup_package() -> None:
-    """
-    Clean up resources used by the ON1Builder package.
-    """
-    try:
-        # Add any package cleanup logic here
-        pass
-    except Exception as e:
-        raise RuntimeError(f"Failed to clean up ON1Builder package: {e}")
+    """Cleanup resources when closing the package."""
+    pass

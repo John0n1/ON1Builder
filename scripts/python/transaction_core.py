@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
+import time
 
 from web3 import AsyncWeb3
 from web3.exceptions import ContractLogicError, TransactionNotFound
@@ -53,25 +54,35 @@ class TransactionCore:
         safety_net: Optional[SafetyNet] = None,
         gas_price_multiplier: float = 1.10,
     ) -> None:
+        """Initialize transaction core."""
         self.web3 = web3
         self.account = account
-        self.configuration = configuration
-
+        self.config = configuration
         self.api_config = api_config
         self.market_monitor = market_monitor
         self.txpool_monitor = txpool_monitor
         self.nonce_core = nonce_core
-        self.safety_net = safety_net
-
+        self._safety_net = safety_net
         self.gas_price_multiplier = gas_price_multiplier
+        
+        # Price caching
+        self._price_cache = {}
+        self._price_cache_expiry = {}
+        self._cache_lock = asyncio.Lock()
+        self._price_cache_ttl = 60  # seconds
+        
+        # Contracts
+        self.weth_contract = None
+        self.usdc_contract = None
+        self.usdt_contract = None
+        self.uniswap_contract = None
+        self.sushiswap_contract = None
+        self.aave_pool_contract = None
+        self.aave_flashloan_contract = None
+        self.gas_price_oracle_contract = None
+        self.abi_registry = None
 
         # runtime state -----------------------------------------------------
-        self.abi_registry = ABIRegistry()
-        self.aave_flashloan = None
-        self.aave_pool = None
-        self.uniswap_router = None
-        self.sushiswap_router = None
-
         self.erc20_abi: List[Dict[str, Any]] = []
         self.flashloan_abi: List[Dict[str, Any]] = []
 
@@ -88,7 +99,7 @@ class TransactionCore:
         logger.info("TransactionCore initialised.")
 
     async def _load_abis(self) -> None:
-        await self.abi_registry.initialize(self.configuration.BASE_PATH)
+        await self.abi_registry.initialize(self.config.BASE_PATH)
         self.erc20_abi = self.abi_registry.get_abi("erc20") or []
         self.flashloan_abi = self.abi_registry.get_abi("aave_flashloan") or []
         self.aave_pool_abi = self.abi_registry.get_abi("aave") or []
@@ -97,11 +108,11 @@ class TransactionCore:
 
     async def _initialize_contracts(self) -> None:
         self.aave_flashloan = self.web3.eth.contract(
-            address=self.web3.to_checksum_address(self.configuration.AAVE_FLASHLOAN_ADDRESS),
+            address=self.web3.to_checksum_address(self.config.AAVE_FLASHLOAN_ADDRESS),
             abi=self.flashloan_abi,
         )
         self.aave_pool = self.web3.eth.contract(
-            address=self.web3.to_checksum_address(self.configuration.AAVE_POOL_ADDRESS),
+            address=self.web3.to_checksum_address(self.config.AAVE_POOL_ADDRESS),
             abi=self.aave_pool_abi,
         )
 
@@ -109,16 +120,16 @@ class TransactionCore:
         for c in (self.aave_flashloan, self.aave_pool):
             await self._validate_contract(c)
 
-        if self.uniswap_abi and self.configuration.UNISWAP_ADDRESS:
+        if self.uniswap_abi and self.config.UNISWAP_ADDRESS:
             self.uniswap_router = self.web3.eth.contract(
-                address=self.web3.to_checksum_address(self.configuration.UNISWAP_ADDRESS),
+                address=self.web3.to_checksum_address(self.config.UNISWAP_ADDRESS),
                 abi=self.uniswap_abi,
             )
             await self._validate_contract(self.uniswap_router)
 
-        if self.sushiswap_abi and self.configuration.SUSHISWAP_ADDRESS:
+        if self.sushiswap_abi and self.config.SUSHISWAP_ADDRESS:
             self.sushiswap_router = self.web3.eth.contract(
-                address=self.web3.to_checksum_address(self.configuration.SUSHISWAP_ADDRESS),
+                address=self.web3.to_checksum_address(self.config.SUSHISWAP_ADDRESS),
                 abi=self.sushiswap_abi,
             )
             await self._validate_contract(self.sushiswap_router)
@@ -162,7 +173,7 @@ class TransactionCore:
                 }
             )
         else:
-            dyn_gas_gwei = await self.safety_net.get_dynamic_gas_price()
+            dyn_gas_gwei = await self._safety_net.get_dynamic_gas_price()
             params["gasPrice"] = int(
                 self.web3.to_wei(dyn_gas_gwei * self.gas_price_multiplier, "gwei")
             )
@@ -236,34 +247,53 @@ class TransactionCore:
 
     async def execute_transaction(self, tx: Dict[str, Any]) -> Optional[str]:
         """Signs and broadcasts a tx, retrying with gas bump on failure."""
-        max_retries = self.configuration.MEMPOOL_MAX_RETRIES
-        delay_s = float(self.configuration.MEMPOOL_RETRY_DELAY)
+        # Perform simulation first
+        simulation_success = await self.simulate_transaction(tx)
+        if not simulation_success:
+            logger.error("Transaction simulation failed, aborting execution")
+            return None
+            
+        max_retries = self.config.MEMPOOL_MAX_RETRIES
+        delay_s = float(self.config.MEMPOOL_RETRY_DELAY)
 
         # ensure nonce
-        if "nonce" not in tx:
+        if "nonce" not in tx and self.nonce_core:
             tx["nonce"] = await self.nonce_core.get_nonce()
-        if "gas" not in tx:
-            tx["gas"] = self.DEFAULT_GAS_LIMIT
 
-        for attempt in range(1, max_retries + 1):
+        # use our account (where we know private key) if not specified
+        if "from" not in tx:
+            tx["from"] = self.account.address
+
+        # retry loop up to `max_retries` times
+        for attempt in range(max_retries):
             try:
+                # sign tx via our account object
                 raw = await self.sign_transaction(tx)
-                tx_hash = await self.send_signed(raw, nonce_used=tx["nonce"])
-                return tx_hash
-            except Exception as exc:
-                logger.debug("Tx send attempt %d/%d failed: %s", attempt, max_retries, exc)
-                await asyncio.sleep(delay_s * attempt)
 
-                # bump gas & retry
+                # send tx to node
+                tx_hash = await self.send_signed(raw, tx.get("nonce"))
+                logger.info(f"Transaction sent: {tx_hash}")
+
+                # return resulting transaction hash
+                return tx_hash
+
+            except Exception as e:
+                if attempt >= max_retries - 1:
+                    logger.exception(f"Final attempt ({attempt+1}/{max_retries}) failed: {e}")
+                    return None
+
+                logger.warning(f"Attempt {attempt+1}/{max_retries} failed: {e}")
                 self._bump_gas(tx)
 
-                # respect global cap
-                effective_gp = tx.get("gasPrice") or tx.get("maxFeePerGas", 0)
-                if effective_gp and effective_gp > self.web3.to_wei(
-                    self.configuration.MAX_GAS_PRICE_GWEI, "gwei"
+                if tx.get("gasPrice") and int(tx["gasPrice"]) > self.web3.to_wei(
+                    self.config.MAX_GAS_PRICE_GWEI, "gwei"
                 ):
                     logger.warning("Gas price cap reached – aborting retries.")
                     return None
+
+                # sleep and retry
+                await asyncio.sleep(delay_s)
+
         return None
 
     def _bump_gas(self, tx: Dict[str, Any]) -> None:
@@ -330,13 +360,13 @@ class TransactionCore:
 
         if gas_price_field == "gasPrice":
             price = target_tx.get("gasPrice") or self.web3.to_wei(
-                (await self.safety_net.get_dynamic_gas_price()) * self.gas_price_multiplier,
+                (await self._safety_net.get_dynamic_gas_price()) * self.gas_price_multiplier,
                 "gwei",
             )
             tx["gasPrice"] = int(price * self.GAS_RETRY_BUMP)
         else:
             price = target_tx.get("maxFeePerGas") or self.web3.to_wei(
-                (await self.safety_net.get_dynamic_gas_price()) * self.gas_price_multiplier,
+                (await self._safety_net.get_dynamic_gas_price()) * self.gas_price_multiplier,
                 "gwei",
             )
             tx["maxFeePerGas"] = int(price * self.GAS_RETRY_BUMP)
@@ -378,7 +408,7 @@ class TransactionCore:
         if "gasPrice" in target_tx:
             target_tx["gasPrice"] = int(target_tx["gasPrice"] * 1.30)
         else:
-            dyn = await self.safety_net.get_dynamic_gas_price()
+            dyn = await self._safety_net.get_dynamic_gas_price()
             target_tx["gasPrice"] = int(
                 self.web3.to_wei(dyn * self.gas_price_multiplier * 1.30, "gwei")
             )
@@ -394,7 +424,7 @@ class TransactionCore:
         if "gasPrice" in target_tx:
             target_tx["gasPrice"] = int(target_tx["gasPrice"] * mult)
         else:
-            dyn = await self.safety_net.get_dynamic_gas_price()
+            dyn = await self._safety_net.get_dynamic_gas_price()
             target_tx["gasPrice"] = int(
                 self.web3.to_wei(dyn * self.gas_price_multiplier * mult, "gwei")
             )
@@ -406,7 +436,7 @@ class TransactionCore:
         if "gasPrice" in target_tx:
             target_tx["gasPrice"] = int(target_tx["gasPrice"] * 0.80)
         else:
-            dyn = await self.safety_net.get_dynamic_gas_price()
+            dyn = await self._safety_net.get_dynamic_gas_price()
             target_tx["gasPrice"] = int(
                 self.web3.to_wei(dyn * self.gas_price_multiplier * 0.80, "gwei")
             )
@@ -421,7 +451,7 @@ class TransactionCore:
         if "gasPrice" in target_tx:
             target_tx["gasPrice"] = int(target_tx["gasPrice"] * 0.85)
         else:
-            dyn = await self.safety_net.get_dynamic_gas_price()
+            dyn = await self._safety_net.get_dynamic_gas_price()
             target_tx["gasPrice"] = int(
                 self.web3.to_wei(dyn * self.gas_price_multiplier * 0.85, "gwei")
             )
@@ -483,3 +513,26 @@ class TransactionCore:
     async def stop(self) -> None:
         # future-proof placeholder
         await asyncio.sleep(0)
+
+    async def get_cached_token_price(self, token_address: str, vs: str = "eth") -> Optional[Decimal]:
+        """Get token price with caching for efficiency."""
+        cache_key = f"{token_address}:{vs}"
+        current_time = time.time()
+        
+        async with self._cache_lock:
+            if (cache_key in self._price_cache and 
+                cache_key in self._price_cache_expiry and 
+                current_time < self._price_cache_expiry[cache_key]):
+                return self._price_cache[cache_key]
+        
+        # Cache miss or expired, fetch new price
+        if self._safety_net:
+            price = await self._safety_net.get_token_price(token_address, vs)
+            
+            if price is not None:
+                async with self._cache_lock:
+                    self._price_cache[cache_key] = price
+                    self._price_cache_expiry[cache_key] = current_time + self._price_cache_ttl
+                    
+            return price
+        return None

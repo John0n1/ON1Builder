@@ -375,3 +375,22 @@ class MultiChainConfiguration(types.SimpleNamespace):
         
         self._chains = chains
         logger.info(f"Parsed {len(chains)} chains: {', '.join(c.get('CHAIN_NAME', 'Unknown') for c in chains)}")
+
+    def _validate_chain_config(self, chain_config: Dict[str, Any]) -> List[str]:
+        """Validate a chain configuration and return a list of errors."""
+        errors = []
+        
+        # Required fields
+        required = ["CHAIN_ID", "CHAIN_NAME", "HTTP_ENDPOINT", "WALLET_ADDRESS"]
+        for field in required:
+            if not chain_config.get(field):
+                errors.append(f"Missing required field: {field}")
+        
+        # Validate addresses
+        if "WALLET_ADDRESS" in chain_config and chain_config["WALLET_ADDRESS"]:
+            try:
+                _ = _checksum(chain_config["WALLET_ADDRESS"], "WALLET_ADDRESS")
+            except ValueError as e:
+                errors.append(f"Invalid wallet address: {e}")
+        
+        return errors

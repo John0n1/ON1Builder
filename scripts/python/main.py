@@ -1,11 +1,11 @@
-from logger_on1 import setup_logging
-from main_core import MainCore
-from configuration import Configuration
-import signal
-import logging
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import asyncio
-import os
+import logging
+import signal
 import sys
+import os
 import traceback
 
 sys.path.insert(
@@ -15,32 +15,68 @@ sys.path.insert(
             os.path.dirname(__file__),
             "..")))
 
+from logger_on1 import setup_logging
+from main_core import MainCore
+from configuration import Configuration
 
+# Configure logging
 logger = setup_logging("Main", level=logging.INFO)
 
+# Global variables
+_core = None
+
+async def shutdown(sig):
+    """Shutdown gracefully."""
+    logger.info(f"Received exit signal {sig.name}...")
+    
+    # Stop all tasks
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    
+    for task in tasks:
+        task.cancel()
+        
+    await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Clean-up resources
+    global _core
+    if _core:
+        await _core.stop()
+    
+    logger.info("Shutdown complete.")
+    
 
 async def main():
-    config = Configuration()
-    core = MainCore(config)
+    """Main entry point."""
+    global _core
+    
+    # Setup signal handlers for graceful shutdown
     loop = asyncio.get_running_loop()
-    stop_event = asyncio.Event()
-
-    def _signal_handler():
-        stop_event.set()
-
-    loop.add_signal_handler(signal.SIGINT, _signal_handler)
-    loop.add_signal_handler(signal.SIGTERM, _signal_handler)
-
-    await core.initialize_components()
-    runner = asyncio.create_task(core.run())
-    await stop_event.wait()
-    await core.stop()
-    await runner
+    signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
+    
+    for s in signals:
+        loop.add_signal_handler(
+            s, lambda s=s: asyncio.create_task(shutdown(s))
+        )
+    
+    try:
+        # Initialize components
+        logger.info("Starting ON1Builder...")
+        
+        # Load configuration
+        config = Configuration()
+        await config.load()
+        
+        # Initialize core
+        _core = MainCore(config)
+        await _core.run()
+        
+        return 0
+    
+    except Exception as e:
+        logger.exception(f"Fatal error: {e}")
+        logger.debug(traceback.format_exc())
+        return 1
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logger.critical(f"Fatal error: {e}")
-        logger.debug(traceback.format_exc())  
+    sys.exit(asyncio.run(main()))  

@@ -62,14 +62,21 @@ class SafetyNet:
         logger.debug("SafetyNet initialised.")
 
     async def stop(self) -> None:
-        self._running = False
-        for t in self._tasks:
-            t.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        """Stop and clean up resources."""
+        logger.info("Stopping SafetyNet...")
+        
+        # Cancel any running tasks
+        for task_name, task in self._tasks.items():
+            if not task.done():
+                logger.debug(f"Cancelling task: {task_name}")
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        
         self._tasks.clear()
-        self._price_cache.clear()
-        self._gas_cache.clear()
-        logger.debug("SafetyNet stopped.")
+        logger.info("SafetyNet stopped")
 
     # ------------------------------------------------------------------ #
     # price helpers                                                      #

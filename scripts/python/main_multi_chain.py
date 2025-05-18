@@ -8,6 +8,7 @@ Loads configuration, creates MultiChainCore, and runs it.
 
 import asyncio
 import logging
+import signal
 import sys
 import traceback
 from configuration_multi_chain import MultiChainConfiguration
@@ -16,12 +17,45 @@ from logger_on1 import setup_logging
 
 logger = setup_logging("MultiChainMain", level="DEBUG")
 
+# Global variables
+_core = None
+
+async def shutdown(sig):
+    """Shutdown gracefully."""
+    logger.info(f"Received exit signal {sig.name}...")
+    
+    # Stop all tasks
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    
+    for task in tasks:
+        task.cancel()
+        
+    await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Clean-up resources
+    global _core
+    if _core:
+        await _core.stop()
+    
+    logger.info("Shutdown complete.")
+
 async def main() -> int:
     """Main entry point.
     
     Returns:
         Exit code
     """
+    global _core
+    
+    # Setup signal handlers for graceful shutdown
+    loop = asyncio.get_running_loop()
+    signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
+    
+    for s in signals:
+        loop.add_signal_handler(
+            s, lambda s=s: asyncio.create_task(shutdown(s))
+        )
+    
     try:
         # Load configuration
         logger.info("Loading configuration...")
@@ -42,17 +76,17 @@ async def main() -> int:
         
         # Create and initialize MultiChainCore
         logger.info("Creating MultiChainCore...")
-        core = MultiChainCore(cfg)
+        _core = MultiChainCore(cfg)
         
         logger.info("Initializing MultiChainCore...")
-        success = await core.initialize()
+        success = await _core.initialize()
         if not success:
             logger.error("Failed to initialize MultiChainCore")
             return 1
         
         # Run MultiChainCore
         logger.info("Running MultiChainCore...")
-        await core.run()
+        await _core.run()
         
         return 0
     except KeyboardInterrupt:

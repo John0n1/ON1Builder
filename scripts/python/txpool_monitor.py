@@ -74,6 +74,9 @@ class TxpoolMonitor:
             self.configuration.MEMPOOL_MAX_PARALLEL_TASKS
         )
 
+        # Event for stopping the dispatcher
+        self._stop_event = asyncio.Event()
+
     async def initialize(self) -> None:
         """Prepare for monitoring; does not start background tasks yet."""
         # ensure queues clean on hot-reload
@@ -179,10 +182,32 @@ class TxpoolMonitor:
     # ---------- dispatcher / analyser --------------------------------------
 
     async def _analysis_dispatcher(self) -> None:
-        while self._running:
-            tx_hash = await self._tx_hash_queue.get()
-            await self._semaphore.acquire()
-            asyncio.create_task(self._analyse_transaction(tx_hash))
+        """Analyze transactions in the queue."""
+        while not self._stop_event.is_set():
+            try:
+                if self._tx_hash_queue.empty():
+                    await asyncio.sleep(0.1)
+                    continue
+                    
+                tx_hash = await self._tx_hash_queue.get()
+                
+                # Process transaction in a separate task to avoid blocking
+                asyncio.create_task(self._process_transaction_safe(tx_hash))
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in transaction analysis dispatcher: {e}")
+                
+    async def _process_transaction_safe(self, tx_hash: str) -> None:
+        """Process a transaction with error handling."""
+        try:
+            await self._analyse_transaction(tx_hash)
+        except Exception as e:
+            logger.error(f"Error analyzing transaction {tx_hash}: {e}")
+        finally:
+            # Always mark task as done
+            self._tx_hash_queue.task_done()
 
     async def _analyse_transaction(self, tx_hash: str) -> None:
         try:

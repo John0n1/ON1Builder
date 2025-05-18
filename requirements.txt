@@ -1,5 +1,6 @@
-aiohappyeyeballs==2.6.1
+# Core dependencies
 aiohttp==3.11.18
+aiohappyeyeballs==2.6.1
 aiosignal==1.3.2
 annotated-types==0.7.0
 async-timeout==5.0.1
@@ -15,6 +16,8 @@ click==8.2.0
 colorlog==6.9.0
 cytoolz==1.0.1
 dotenv==0.9.9
+
+# Ethereum specific
 eth-account==0.13.7
 eth-hash==0.7.1
 eth-keyfile==0.8.1
@@ -23,54 +26,56 @@ eth-rlp==2.2.0
 eth-typing==5.2.1
 eth-utils==5.3.0
 eth_abi==5.2.0
+web3==7.11.0
+
+# Web framework
 Flask==3.1.1
 flask-cors==5.0.1
 Flask-SocketIO==5.5.1
-frozenlist==1.6.0
-h11==0.16.0
-hexbytes==1.3.0
-idna==3.10
-itsdangerous==2.2.0
+Werkzeug==3.1.3
 Jinja2==3.1.6
-joblib==1.5.0
 MarkupSafe==3.0.2
-multidict==6.4.3
+
+# Data processing
 numpy==2.2.5
 pandas==2.2.3
-parsimonious==0.10.0
-propcache==0.3.1
-pyaml==25.1.0
+scikit-learn==1.6.1
+scipy==1.15.3
+joblib==1.5.0
+
+# Security
 pycryptodome==3.22.0
-pydantic==2.11.4
-pydantic_core==2.33.2
+hvac==2.3.0  # HashiCorp Vault client
+
+# Monitoring and logging
+prometheus-client==0.20.0
+python-json-logger==2.0.7
+structlog==24.1.0
+
+# Testing
+pytest==8.3.5
+pytest-asyncio==0.23.5
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-xdist==3.5.0
+
+# Development tools
+black==24.2.0
+isort==5.13.2
+flake8==7.0.0
+mypy==1.8.0
+pre-commit==3.6.0
+
+# Documentation
+Sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+sphinx-autodoc-typehints==2.0.1
+
+# Utilities
 python-dateutil==2.9.0.post0
-python-dotenv==1.1.0
-python-engineio==4.12.1
-python-socketio==5.13.0
 pytz==2025.2
 pyunormalize==16.0.0
 PyYAML==6.0.2
-regex==2024.11.6
 requests==2.32.3
-rlp==4.1.0
-scikit-learn==1.6.1
-scipy==1.15.3
-simple-websocket==1.1.0
-six==1.17.0
-threadpoolctl==3.6.0
-toolz==1.0.0
-types-requests==2.32.0.20250328
-typing-inspection==0.4.0
-typing_extensions==4.13.2
-tzdata==2025.2
 urllib3==2.4.0
-web3==7.11.0
 websockets==15.0.1
-Werkzeug==3.1.3
-wsproto==1.2.0
-yarl==1.20.0
-hvac==2.3.0
-pytest==8.3.5
-iniconfig==2.1.0
-packaging==25.0
-pluggy==1.5.0

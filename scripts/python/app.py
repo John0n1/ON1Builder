@@ -9,7 +9,7 @@ from main_core import MainCore
 from collections import deque
 from typing import Any, Dict, List, Optional
 from cachetools import TTLCache
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, render_template
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import threading
@@ -19,12 +19,14 @@ import logging
 import sys
 import os
 from decimal import Decimal
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
 
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__, static_folder="../../ui", template_folder="../../ui")
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
@@ -32,49 +34,48 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 ui_logger = setup_logging("FlaskUI", level=logging.INFO)
 
 
+# Add rate limiting
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+
+
 class BotState:
     def __init__(self):
-        self.is_running: bool = False
-        self.thread: Optional[threading.Thread] = None
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
-        self.main_core: Optional[MainCore] = None
-        self.lock: threading.Lock = threading.Lock()
-
+        self.running = False
+        self.start_time = None
+        self.status = "stopped"
+        self.metrics = {}
+        self.logs = []
+        
 
 bot_state = BotState()
 
 
 class WebSocketLogHandler(logging.Handler):
     MAX_QUEUE_SIZE = 200
-
+    
     def __init__(self):
-        super().__init__(level=logging.DEBUG)
-        self.log_queue = deque(maxlen=self.MAX_QUEUE_SIZE)
-
+        super().__init__()
+        self.logs = []
+        
     def emit(self, record: logging.LogRecord):
-        try:
-
-            log_entry = {
-                "level": record.levelname,
-                "name": record.name,
-                "message": record.getMessage(),
-                "timestamp": time.strftime(
-                    "%Y-%m-%d %H:%M:%S", time.localtime(record.created)
-                ),
-                "component": getattr(record, "component", None),
-                "tx_hash": getattr(record, "tx_hash", None),
-            }
-
-            log_entry = {k: v for k, v in log_entry.items() if v is not None}
-
-            self.log_queue.append(log_entry)
-
-            socketio.emit("log_message", log_entry)
-
-        except Exception as e:
-
-            print(f"Error in WebSocketLogHandler: {e}", file=sys.stderr)
-            self.handleError(record)
+        log_entry = {
+            "timestamp": time.time(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module
+        }
+        self.logs.append(log_entry)
+        
+        # Trim logs to prevent memory issues
+        if len(self.logs) > self.MAX_QUEUE_SIZE:
+            self.logs = self.logs[-self.MAX_QUEUE_SIZE:]
+            
+        # Emit to WebSocket clients
+        socketio.emit("log", log_entry)
 
 
 ws_handler = WebSocketLogHandler()
@@ -86,423 +87,291 @@ ui_logger.info("WebSocketLogHandler attached to root logger.")
 
 
 def run_bot_in_thread():
-    """Target function for the bot's background thread."""
-
-    global bot_state
-    ui_logger.info("Bot thread started.")
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    with bot_state.lock:
-        bot_state.loop = loop
-
-        try:
-            configuration = Configuration()
-
-            bot_state.main_core = MainCore(configuration)
-        except Exception as config_err:
-            ui_logger.critical(
-                "Failed to load configuration in bot thread: %s",
-                config_err,
-                exc_info=True,
-            )
-            bot_state.is_running = False
-            return
-
-    main_core_instance = bot_state.main_core
-
+    """Run the bot in a separate thread."""
+    global bot_state, core
+    
+    # Update state
+    bot_state.running = True
+    bot_state.start_time = time.time()
+    bot_state.status = "starting"
+    socketio.emit("status_update", {"status": "starting"})
+    
     try:
-
-        loop.run_until_complete(main_core_instance.initialize_components())
-        ui_logger.info("MainCore initialized successfully in bot thread.")
-
-        loop.run_until_complete(main_core_instance.run())
-        ui_logger.info("MainCore run loop finished in bot thread.")
-
+        # Create and run event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Run the core
+        loop.run_until_complete(core.run())
+        
+        # Update state on success
+        bot_state.status = "running"
+        socketio.emit("status_update", {"status": "running"})
+        
+        # Start metrics update task
+        update_metrics_task = loop.create_task(update_metrics_periodically(loop))
+        
+        # Run the loop
+        loop.run_forever()
+        
     except Exception as e:
-        ui_logger.critical(
-            "An error occurred in the bot thread: %s",
-            e,
-            exc_info=True)
-
-        if main_core_instance and main_core_instance.running:
-            ui_logger.info("Attempting to stop MainCore due to error...")
-            try:
-                loop.call_soon_threadsafe(
-                    asyncio.create_task, main_core_instance.stop()
-                )
-            except Exception as stop_err:
-                ui_logger.error(
-                    "Error scheduling stop after bot thread error: %s",
-                    stop_err)
-
+        logger.error(f"Error running bot: {e}", exc_info=True)
+        bot_state.status = "error"
+        bot_state.running = False
+        socketio.emit("status_update", {"status": "error", "error": str(e)})
     finally:
-        ui_logger.info("Bot thread finishing.")
-        with bot_state.lock:
+        if loop and not loop.is_closed():
+            loop.close()
 
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-                loop.close()
-                ui_logger.info("Bot thread event loop closed.")
-            except Exception as loop_close_err:
-                ui_logger.error(
-                    "Error closing event loop in bot thread: %s",
-                    loop_close_err)
 
-            bot_state.is_running = False
-            bot_state.loop = None
+async def update_metrics_periodically(loop):
+    """Update metrics from the core periodically."""
+    global bot_state, core
+    
+    while bot_state.running:
+        try:
+            metrics = get_live_metrics()
+            bot_state.metrics = metrics
+            socketio.emit("metrics_update", metrics)
+        except Exception as e:
+            logger.warning(f"Error updating metrics: {e}")
+            
+        await asyncio.sleep(2)  # Update every 2 seconds
 
 
 @app.route("/")
+@limiter.exempt  # Don't rate limit the main UI
 def serve_index():
-
-    ui_dir = os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "ui"))
-    return send_from_directory(ui_dir, "index.html")
+    """Serve the main UI page."""
+    return render_template("index.html")
 
 
 @app.route("/<path:filename>")
 def serve_static_files(filename):
-
-    ui_dir = os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "ui"))
-    return send_from_directory(ui_dir, filename)
+    """Serve static files from the UI directory."""
+    return send_from_directory(app.static_folder, filename)
 
 
 @app.route("/start", methods=["POST"])
+@limiter.limit("5/minute")  # Rate limit starting the bot
 def start_bot():
-    """Starts the bot in a background thread."""
-    global bot_state
-    with bot_state.lock:
-        if not bot_state.is_running:
-            bot_state.is_running = True
-            bot_state.thread = threading.Thread(
-                target=run_bot_in_thread, daemon=True, name="ON1BuilderBotThread")
-            bot_state.thread.start()
-            ui_logger.info(
-                "Bot start request received. Starting background thread.")
-            return jsonify({"status": "Bot starting..."}), 202
-        else:
-            ui_logger.warning(
-                "Received start request, but bot is already running.")
-            return jsonify({"status": "Bot is already running"}), 409
+    """Start the bot if it's not already running."""
+    global bot_state, bot_thread, core, configuration
+    
+    try:
+        if bot_state.running:
+            return jsonify({"status": "error", "message": "Bot is already running"})
+        
+        # Initialize if not already done
+        if not core:
+            configuration = Configuration()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(configuration.load())
+            core = MainCore(configuration)
+            loop.run_until_complete(core.initialize())
+        
+        # Start bot in a separate thread
+        bot_thread = threading.Thread(target=run_bot_in_thread)
+        bot_thread.daemon = True
+        bot_thread.start()
+        
+        return jsonify({"status": "success", "message": "Bot started"})
+        
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)})
 
 
 @app.route("/stop", methods=["POST"])
+@limiter.limit("5/minute")  # Rate limit stopping the bot
 def stop_bot():
-    """Requests the bot to stop gracefully."""
-    global bot_state
-    with bot_state.lock:
-        if bot_state.is_running and bot_state.main_core and bot_state.loop:
-            ui_logger.info(
-                "Bot stop request received. Signaling MainCore to stop.")
-            try:
+    """Stop the bot if it's running."""
+    global bot_state, bot_thread, core, loop
+    
+    try:
+        if not bot_state.running:
+            return jsonify({"status": "error", "message": "Bot is not running"})
+        
+        # Flag bot as stopping
+        bot_state.status = "stopping"
+        socketio.emit("status_update", {"status": "stopping"})
+        
+        # Stop the bot
+        if loop and not loop.is_closed():
+            loop.call_soon_threadsafe(stop_core_async)
+            
+        # Update state
+        bot_state.running = False
+        bot_state.status = "stopped"
+        socketio.emit("status_update", {"status": "stopped"})
+        
+        return jsonify({"status": "success", "message": "Bot stopped"})
+        
+    except Exception as e:
+        logger.error(f"Error stopping bot: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)})
 
-                future = asyncio.run_coroutine_threadsafe(
-                    bot_state.main_core.stop(), bot_state.loop
-                )
 
-                future.result(timeout=2)
-                return jsonify({"status": "Bot stopping..."}), 202
-            except TimeoutError:
-                ui_logger.warning(
-                    "Timeout waiting for stop() initiation acknowledgement."
-                )
-                return (
-                    jsonify({"status": "Stop signal sent, acknowledgement timeout."}),
-                    202,
-                )
-            except Exception as e:
-                ui_logger.error(
-                    "Error occurred while trying to stop the bot: %s",
-                    e,
-                    exc_info=True)
-                return jsonify({"status": "Error signaling stop"}), 500
-        elif bot_state.is_running:
-
-            ui_logger.warning(
-                "Stop requested, but bot state is inconsistent (running=True, but core/loop missing). Forcing state update."
-            )
-            bot_state.is_running = False
-            return (
-                jsonify(
-                    {"status": "Bot was in inconsistent running state. State reset."}
-                ),
-                409,
-            )
-        else:
-            ui_logger.info("Stop requested, but bot is not running.")
-            return jsonify({"status": "Bot is not running"}), 400
+def stop_core_async():
+    """Stop the core in the event loop."""
+    global loop, core
+    
+    if loop and core:
+        asyncio.create_task(core.stop())
+        loop.stop()
 
 
 @app.route("/status", methods=["GET"])
 def get_status():
-    """Returns the current status of the bot and its components."""
+    """Get the current status of the bot."""
     global bot_state
-    with bot_state.lock:
-        status = {"bot_running": bot_state.is_running}
-        core = bot_state.main_core
-        if core:
-            status["components_initialized"] = {
-                name: comp is not None for name,
-                comp in core.components.items()}
-
-            if hasattr(core, "_component_health"):
-                status["components_health"] = core._component_health
-
-        else:
-            status["components_initialized"] = {}
-            status["components_health"] = {}
-
-    return jsonify(status), 200
+    
+    status_data = {
+        "status": bot_state.status,
+        "running": bot_state.running,
+        "uptime": time.time() - bot_state.start_time if bot_state.start_time else 0,
+        "metrics": bot_state.metrics
+    }
+    
+    return jsonify(status_data)
 
 
 def run_async_from_sync(coro):
-    """Runs an async coroutine from a sync context (Flask route)."""
-    global bot_state
-    loop = None
-    with bot_state.lock:
-        if bot_state.is_running and bot_state.loop and bot_state.loop.is_running():
-            loop = bot_state.loop
-
-    if loop:
-        try:
-
-            future = asyncio.run_coroutine_threadsafe(coro, loop)
-
-            return future.result(timeout=5)
-        except asyncio.TimeoutError:
-            ui_logger.error(
-                "Timeout waiting for async result in run_async_from_sync.")
-            return None
-        except Exception as e:
-            ui_logger.error(
-                "Error running async task from sync context: %s",
-                e,
-                exc_info=True)
-            return None
-    else:
-
-        ui_logger.warning(
-            "Cannot run async task: Bot is not running or loop is unavailable."
-        )
-        return None
+    """Run an async function from a sync context."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 def _safe_get(obj: Optional[object], attr: str, default: Any = None) -> Any:
-    if obj is None:
-        return default
-    return getattr(obj, attr, default)
+    """Safely get an attribute from an object."""
+    return getattr(obj, attr, default) if obj is not None else default
 
 
 def _safe_get_nested(
     obj: Optional[object], attrs: List[str], default: Any = None
 ) -> Any:
-    current = obj
+    """Safely get nested attributes from an object."""
+    result = obj
     for attr in attrs:
-        if current is None:
+        result = _safe_get(result, attr)
+        if result is None:
             return default
-        current = getattr(current, attr, None)
-    return current if current is not None else default
+    return result
 
 
 def get_live_metrics() -> Dict[str, Any]:
-    """Fetches live metrics from running bot components."""
-    default_metrics = {
+    """Get live metrics from the bot core."""
+    global core
+    
+    metrics = {
         "timestamp": time.time(),
-        "strategy_performance": {},
-        "overall_profit_eth": "0.0",
-        "account_balance_eth": "N/A",
-        "network_congestion_pct": "N/A",
-        "avg_gas_price_gwei": "N/A",
-        "mempool_queue_sizes": {},
-        "cache_stats": {},
+        "wallet": {
+            "balance": 0,
+            "transactions": 0,
+            "gas_spent": 0
+        },
+        "market": {
+            "gas_price": 0,
+            "network_congestion": 0
+        },
+        "performance": {
+            "total_profit": 0,
+            "highest_profit_tx": None,
+            "strategies": {}
+        },
+        "system": {
+            "memory_usage_mb": 0,
+            "cpu_usage": 0
+        }
     }
-    if not bot_state.is_running or not bot_state.main_core:
-        return default_metrics
-
-    core = bot_state.main_core
-    metrics = default_metrics.copy()
-
+    
+    # If core is not running, return default metrics
+    if not core:
+        return metrics
+    
     try:
-
-        safety_net: Optional[SafetyNet] = core.components.get("safety_net")
-        strategy_net: Optional[StrategyNet] = core.components.get("strategy_net")
-        mempoolmon: Optional[TxpoolMonitor] = core.components.get(
-            "txpool_monitor")
-        nonce_core: Optional[NonceCore] = core.components.get("nonce_core")
-
-        # --- Account Balance (Async) ---
-        if safety_net and isinstance(safety_net.account, LocalAccount):
-            balance = run_async_from_sync(safety_net.get_balance())
-            metrics["account_balance_eth"] = (
-                f"{balance:.8f}" if isinstance(balance, Decimal) else "Error"
-            )
-        else:
-            metrics["account_balance_eth"] = "N/A (SafetyNet Error)"
-
-        # --- Strategy Performance ---
-        if strategy_net:
-            overall_profit = Decimal("0")
-            perf_data = {}
-            for stype, perf_metrics in strategy_net.strategy_performance.items():
-
-                perf_data[stype] = {
-                    "executions": _safe_get(
-                        perf_metrics,
-                        "total_executions",
-                        0),
-                    "success_rate": f"{
-                        _safe_get(
-                            perf_metrics,
-                            'success_rate',
-                            0.0):.2%}",
-                    "avg_exec_time_ms": f"{
-                        _safe_get(
-                            perf_metrics,
-                            'avg_execution_time',
-                            0.0) * 1000:.2f}",
-                    "total_profit_eth": f"{
-                        _safe_get(
-                            perf_metrics,
-                            'total_profit',
-                            Decimal('0')):.8f}",
-                }
-                overall_profit += _safe_get(perf_metrics,
-                                            "total_profit", Decimal("0"))
-            metrics["strategy_performance"] = perf_data
-            metrics["overall_profit_eth"] = f"{overall_profit:.8f}"
-
-        # --- Network & Gas (Async) ---
-        if safety_net:
-            congestion = run_async_from_sync(
-                safety_net.get_network_congestion())
-            metrics["network_congestion_pct"] = (
-                f"{congestion * 100:.2f}%" if isinstance(congestion, float) else "Error"
-            )
-
-            gas_price = run_async_from_sync(safety_net.get_dynamic_gas_price())
-            metrics["avg_gas_price_gwei"] = (
-                f"{gas_price:.2f}" if isinstance(gas_price, Decimal) else "Error"
-            )
-
-        # --- Queue Sizes ---
-        if mempoolmon:
-            metrics["mempool_queue_sizes"] = {
-                "hash_queue": _safe_get_nested(
-                    mempoolmon, ["_tx_hash_queue", "qsize"], -1
-                )(),
-                "analysis_queue": _safe_get_nested(
-                    mempoolmon, ["_tx_analysis_queue", "qsize"], -1
-                )(),
-                "profit_queue": _safe_get_nested(
-                    mempoolmon, ["profitable_transactions", "qsize"], -1
-                )(),
-            }
-
-        # --- Cache Stats (Example for one cache) ---
-        if mempoolmon:
-            processed_cache: Optional[TTLCache] = _safe_get(
-                mempoolmon, "processed_transactions"
-            )
-            if processed_cache:
-                metrics["cache_stats"]["processed_tx"] = {
-                    "size": len(processed_cache),
-                    "max_size": processed_cache.maxsize,
-                    "ttl": processed_cache.ttl,
-                }
-
-        # --- Nonce ---
-        if nonce_core:
-            current_nonce = run_async_from_sync(nonce_core.get_nonce())
-            pending_tx_count = len(
-                _safe_get(
-                    nonce_core,
-                    "pending_transactions",
-                    set()))
-            metrics["nonce_info"] = {
-                "current_nonce": (
-                    current_nonce if isinstance(current_nonce, int) else "Error"
-                ),
-                "pending_tracked_tx": pending_tx_count,
-                "cache_ttl": _safe_get_nested(
-                    nonce_core, ["configuration", "NONCE_CACHE_TTL"]
-                ),
-            }
-
+        # Extract metrics from core components
+        if hasattr(core, "safety_net"):
+            metrics["market"]["gas_price"] = run_async_from_sync(core.safety_net.get_dynamic_gas_price())
+            metrics["market"]["network_congestion"] = run_async_from_sync(core.safety_net.get_network_congestion())
+        
+        # Get balance and transactions
+        if hasattr(core, "web3") and hasattr(core.web3, "eth") and core.account:
+            metrics["wallet"]["balance"] = run_async_from_sync(core.web3.eth.get_balance(core.account.address)) / 10**18
+        
+        # Get strategy metrics if available
+        if hasattr(core, "strategy_net") and hasattr(core.strategy_net, "weights"):
+            metrics["performance"]["strategies"] = core.strategy_net.weights
+        
+        # Get system metrics
+        import psutil
+        process = psutil.Process(os.getpid())
+        metrics["system"]["memory_usage_mb"] = process.memory_info().rss / (1024 * 1024)
+        metrics["system"]["cpu_usage"] = psutil.cpu_percent()
+        
     except Exception as e:
-        ui_logger.error("Error gathering live metrics: %s", e, exc_info=True)
-        metrics["error"] = f"Failed to gather some metrics: {e}"
-
-    metrics["timestamp"] = time.time()
+        logger.warning(f"Error collecting metrics: {e}")
+    
     return metrics
 
 
 @app.route("/metrics", methods=["GET"])
 def get_metrics():
-    """Returns live operational metrics from the bot."""
-
-    live_metrics = get_live_metrics()
-
-    return jsonify(live_metrics), 200
+    """Get current metrics."""
+    return jsonify(get_live_metrics())
 
 
 @app.route("/components", methods=["GET"])
 def get_components_status():
-    """Returns the initialization status of components."""
-    global bot_state
-    with bot_state.lock:
-        core = bot_state.main_core
-        if core and hasattr(core, "components"):
-
-            status = {
-                name: comp is not None for name,
-                comp in core.components.items()}
-            return jsonify(status), 200
-        else:
-            return (
-                jsonify({"error": "Bot not running or components not initialized"}),
-                404,
-            )
+    """Get status of all components."""
+    global core
+    
+    if not core:
+        return jsonify({"status": "not_initialized"})
+    
+    components = {
+        "core": "initialized",
+        "web3": "connected" if _safe_get(core, "web3") else "disconnected",
+        "safety_net": "active" if _safe_get(core, "safety_net") else "inactive",
+        "strategy_net": "active" if _safe_get(core, "strategy_net") else "inactive",
+        "market_monitor": "active" if _safe_get(core, "market_monitor") else "inactive",
+        "txpool_monitor": "active" if _safe_get(core, "txpool_monitor") else "inactive",
+    }
+    
+    return jsonify(components)
 
 
 @app.route("/logs", methods=["GET"])
 def get_logs():
-    """Returns recent buffered logs."""
-
-    log_list = list(ws_handler.log_queue)
-    return jsonify(log_list)
+    """Get recent logs."""
+    global log_handler
+    
+    # Return the last 100 logs
+    return jsonify(log_handler.logs[-100:])
 
 
 # --- WebSocket Events ---
 @socketio.on("connect")
 def handle_connect():
-    """Handles new client connections by sending initial logs."""
-    ui_logger.info(f"Client connected: {request.sid}")
-
-    initial_logs = list(ws_handler.log_queue)
-    emit("initial_logs", initial_logs)
+    """Handle WebSocket connection."""
+    logger.debug(f"Client connected: {request.sid}")
+    socketio.emit("status_update", {"status": bot_state.status})
 
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    """Handles client disconnections."""
-    ui_logger.info(f"Client disconnected: {request.sid}")
+    """Handle WebSocket disconnection."""
+    logger.debug(f"Client disconnected: {request.sid}")
 
 
 @socketio.on("request_metrics")
 def handle_request_metrics():
-    """Handles client requests for updated metrics."""
-    ui_logger.debug(f"Metrics requested by client: {request.sid}")
-    live_metrics = get_live_metrics()
-    emit("update_metrics", live_metrics)
+    """Handle metrics request from WebSocket client."""
+    socketio.emit("metrics_update", get_live_metrics())
 
 
 # --- Main Execution ---

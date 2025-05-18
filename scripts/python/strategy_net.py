@@ -143,11 +143,18 @@ class StrategyNet:
                 logger.warning("Failed to load strategy weights: %s", exc)
 
     def _save_weights(self) -> None:
+        """Save strategy weights to disk if changed."""
         try:
-            payload = {k: v.tolist() for k, v in self.weights.items()}
-            self._WEIGHT_FILE.write_text(json.dumps(payload, indent=2))
-        except Exception as exc:
-            logger.error("Saving strategy weights failed: %s", exc)
+            current_weights_json = json.dumps(self.weights, sort_keys=True)
+            
+            # Only save if weights have changed
+            if not hasattr(self, '_last_saved_weights') or self._last_saved_weights != current_weights_json:
+                with open(self._WEIGHT_FILE, 'w') as f:
+                    f.write(current_weights_json)
+                self._last_saved_weights = current_weights_json
+                logger.debug(f"Saved updated strategy weights to {self._WEIGHT_FILE}")
+        except Exception as e:
+            logger.error(f"Failed to save strategy weights: {e}")
 
     # ------------------------------------------------------------------ #
     # public helpers                                                     #

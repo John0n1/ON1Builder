@@ -1,1 +1,240 @@
-[![](https://mermaid.ink/img/pako:eNqNVttu4zYQ_RWCwC52ldi5OIljtw2Q9WZbA_Y2SBws2roIaGkscy2RKkmlceMA-ZD2tR-WL-mQukSylbZ6sEXyzMzhmYv9QH0ZAO3TeSR_9xdMGTL5OBUke3Q6CxVLFmQ8uh2xFSjyy5SSKf21RJC9iAtg6lZBqEBrLgVCPG_M_AUekBGeCS5Cz_t2pvbO3rW9RHEfbmOMGrW_ylnEZ96OZxTjFnYbMMPavr7z3pdRQARTkb1mn2_ekO-Kh9wMyR4ZSGGUjF62M2BJ_2b4Gv1PEdPLm6Hj7N7fiplOvtlBtmfX0l-CaQ9_RHvPa-JTY4Ik5jxMFTMowqtUMtRrdGo-HKnaTqkiiLucKPnpfDx6_z_IKSBXqTA8hn_hpuC2AG1xG2OKLCLPb7bIGWmDlZMmZIdI5S9Am4yvs3_xgIwwll5pA7GuOIY4kTIaS8GNVJn72lYeJMHLYY20zD2ZAwQ1ctc2IoSrz2Ccg8o6t1bAxRzZQQzCkMjWJaiaj4liQjPfEi_vubGX-5qlPAqw7jQPhf2yqlc9fZbCh9JHucqthV0THzsE6ndgczAvNyhWBX-ulyTES20kRWGN1qSr7hTK2Z5DouNRzfj8w_AKQo7ZWjnTyjo3xB2i0U896PnlMCvLzKpY5TZxGhneukNNpLJQt7lDbD5aEY-50f9ZrRf3BpRgWw39BWadq8uBC3thFqAgjQlueF4-Gt55IZgFlmGiVjquDJFLqwCS0Wj7gQsmnB4DycX34C-lfR8PyPPT3y81P1hgjddD2aoXNiMZwvMthAfkwKtUev0mQQh68xr50CGtFka7urieYPgv19hvrdZZ2WaFu_pYabVbZ2sNxmAjaCJnX8E364rNKxYJMwuNsvhSYKsKo9fV5L9qhoKRJawsukhyQasImXGutWsDoNKODacbTdaAKFuoyXfRKE3Eqs3QcF651vZZVaAytSofj1xgiWac81FWF8G6WD8__ZkoOeeGzSIg5v756S_yWwoprLcVqWw4W7gHPzWIbFRnY9NZuLmy3tSqCelmCY4ff4mp3dCvCR87GYn9cV43adpkg_I1VVkDtGjrQuWSkPMTrASLuY-jT5O3xE2y9XbeKpSclcNp7Ks7GaXxtkW5dOgfJpNLHMhRhIzLSVHQKfWsc21Oef08X7gDN06mgu7SUPGA9ucs0rBLY1Axs2v6YG2mFGdNjOO2j68BXmtKp-IRjRImfpYypn2jUjRTMg0XpZM0wdTAR87wd_wFgtMV1EBiwdJ-p3Pac05o_4He0_5hp9M-Oe0e7Z8eHXUPT45PDnfpivZbB732wcl-t3fQ6XX3e3jUfdylf7jA-23E9_A52u-ddo6Pe51dCoG9-Dj7C-k7QenjP4JCRs4?type=png)](https://mermaid.live/edit#pako:eNqNVttu4zYQ_RWCwC52ldi5OIljtw2Q9WZbA_Y2SBws2roIaGkscy2RKkmlceMA-ZD2tR-WL-mQukSylbZ6sEXyzMzhmYv9QH0ZAO3TeSR_9xdMGTL5OBUke3Q6CxVLFmQ8uh2xFSjyy5SSKf21RJC9iAtg6lZBqEBrLgVCPG_M_AUekBGeCS5Cz_t2pvbO3rW9RHEfbmOMGrW_ylnEZ96OZxTjFnYbMMPavr7z3pdRQARTkb1mn2_ekO-Kh9wMyR4ZSGGUjF62M2BJ_2b4Gv1PEdPLm6Hj7N7fiplOvtlBtmfX0l-CaQ9_RHvPa-JTY4Ik5jxMFTMowqtUMtRrdGo-HKnaTqkiiLucKPnpfDx6_z_IKSBXqTA8hn_hpuC2AG1xG2OKLCLPb7bIGWmDlZMmZIdI5S9Am4yvs3_xgIwwll5pA7GuOIY4kTIaS8GNVJn72lYeJMHLYY20zD2ZAwQ1ctc2IoSrz2Ccg8o6t1bAxRzZQQzCkMjWJaiaj4liQjPfEi_vubGX-5qlPAqw7jQPhf2yqlc9fZbCh9JHucqthV0THzsE6ndgczAvNyhWBX-ulyTES20kRWGN1qSr7hTK2Z5DouNRzfj8w_AKQo7ZWjnTyjo3xB2i0U896PnlMCvLzKpY5TZxGhneukNNpLJQt7lDbD5aEY-50f9ZrRf3BpRgWw39BWadq8uBC3thFqAgjQlueF4-Gt55IZgFlmGiVjquDJFLqwCS0Wj7gQsmnB4DycX34C-lfR8PyPPT3y81P1hgjddD2aoXNiMZwvMthAfkwKtUev0mQQh68xr50CGtFka7urieYPgv19hvrdZZ2WaFu_pYabVbZ2sNxmAjaCJnX8E364rNKxYJMwuNsvhSYKsKo9fV5L9qhoKRJawsukhyQasImXGutWsDoNKODacbTdaAKFuoyXfRKE3Eqs3QcF651vZZVaAytSofj1xgiWac81FWF8G6WD8__ZkoOeeGzSIg5v756S_yWwoprLcVqWw4W7gHPzWIbFRnY9NZuLmy3tSqCelmCY4ff4mp3dCvCR87GYn9cV43adpkg_I1VVkDtGjrQuWSkPMTrASLuY-jT5O3xE2y9XbeKpSclcNp7Ks7GaXxtkW5dOgfJpNLHMhRhIzLSVHQKfWsc21Oef08X7gDN06mgu7SUPGA9ucs0rBLY1Axs2v6YG2mFGdNjOO2j68BXmtKp-IRjRImfpYypn2jUjRTMg0XpZM0wdTAR87wd_wFgtMV1EBiwdJ-p3Pac05o_4He0_5hp9M-Oe0e7Z8eHXUPT45PDnfpivZbB732wcl-t3fQ6XX3e3jUfdylf7jA-23E9_A52u-ddo6Pe51dCoG9-Dj7C-k7QenjP4JCRs4)
+# ON1Builder Architecture
+
+This document outlines the architecture and design principles of the ON1Builder system, a multi-chain MEV (Miner/Maximal Extractable Value) trading bot platform.
+
+## System Overview
+
+ON1Builder is designed as a modular, scalable system for running trading strategies across multiple EVM-compatible blockchains. The architecture follows a microservice-oriented approach with clear separation of concerns.
+
+```
+                                +-----------------+
+                                |     UI / API    |
+                                +-----------------+
+                                        |
+                                        v
++----------------+            +-------------------+            +-----------------+
+|                |            |                   |            |                 |
+|  Monitoring    |<---------->|  Multi-Chain Core |<---------->|  External APIs  |
+|  (Prometheus/  |            |                   |            |                 |
+|   Grafana)     |            +-------------------+            +-----------------+
+|                |                     |
++----------------+                     |
+                                       v
+                          +---------------------------+
+                          |                           |
+                    +-----v------+             +------v-----+
+                    |            |             |            |
+                    | Chain      |     ...     | Chain      |
+                    | Worker 1   |             | Worker N   |
+                    |            |             |            |
+                    +-----+------+             +------+-----+
+                          |                           |
+                          v                           v
+                    +------------+               +------------+
+                    | Blockchain |               | Blockchain |
+                    | Network 1  |               | Network N  |
+                    +------------+               +------------+
+```
+
+## Core Components
+
+### Multi-Chain Core (`multi_chain_core.py`)
+
+The central orchestration layer that manages:
+- Initialization of chain-specific workers
+- Coordination between chains
+- Global configuration handling
+- Metrics aggregation
+
+### Chain Worker (`chain_worker.py`)
+
+Each blockchain has a dedicated worker responsible for:
+- Blockchain connection management
+- Transaction handling for that chain
+- Mempool monitoring
+- Opportunity detection
+
+### Safety Net (`safety_net.py`)
+
+Provides risk management and guardrails:
+- Gas price monitoring and optimization
+- Transaction profitability checks
+- Slippage protection
+- Network congestion awareness
+
+### Transaction Core (`transaction_core.py`)
+
+Handles all transaction-related operations:
+- Transaction building
+- Signing and broadcasting
+- Simulation and estimation
+- Flashloan execution
+- Bundle creation
+
+### Strategy Net (`strategy_net.py`)
+
+Manages and executes trading strategies:
+- Strategy selection based on reinforcement learning
+- Strategy performance tracking
+- Adaptive strategy weights
+- Dynamic strategy parameters
+
+### Market Monitor (`market_monitor.py`)
+
+Analyzes market conditions:
+- Price prediction with machine learning
+- Volatility monitoring
+- Liquidity assessment
+- Market trend analysis
+
+### API Configuration (`api_config.py`)
+
+Manages external API integrations:
+- Price data aggregation
+- Token metadata
+- External service integration
+- Rate limiting
+
+### Configuration Management (`configuration.py`, `configuration_multi_chain.py`)
+
+Handles system configuration:
+- Environment-specific settings
+- Chain-specific parameters
+- Secret management via Vault integration
+- Configuration validation
+
+## Data Flow
+
+1. **Initialization Flow**:
+   - Load configuration from YAML and environment variables
+   - Initialize Vault connection for secrets
+   - Create chain workers for each configured chain
+   - Connect to blockchain nodes
+   - Initialize components (API, market monitor, etc.)
+
+2. **Transaction Flow**:
+   - Mempool transaction detected by `txpool_monitor`
+   - Transaction analyzed for profit opportunity
+   - Strategy selected by `strategy_net`
+   - Transaction built by `transaction_core`
+   - Safety checks performed by `safety_net`
+   - Transaction signed and broadcast
+   - Results tracked and metrics updated
+
+3. **Monitoring Flow**:
+   - Metrics collected from all components
+   - Pushed to Prometheus
+   - Visualized in Grafana dashboards
+   - Alerts generated based on thresholds
+
+## Security Architecture
+
+Security is implemented at multiple layers:
+
+1. **Secret Management**:
+   - HashiCorp Vault for private keys and API tokens
+   - Strict file permissions
+   - Environment isolation
+
+2. **Network Security**:
+   - Rate limiting
+   - Connection pooling
+   - Retry mechanisms with exponential backoff
+
+3. **Transaction Security**:
+   - Multiple validation steps
+   - Simulation before execution
+   - Gas price and limit safeguards
+
+4. **System Security**:
+   - Privilege separation
+   - Container isolation
+   - Minimal base images
+
+## Design Principles
+
+1. **Modularity**:
+   Each component has a single responsibility and can be tested in isolation.
+
+2. **Resilience**:
+   The system is designed to handle failures at various levels with appropriate recovery mechanisms.
+
+3. **Observability**:
+   Comprehensive logging and metrics collection throughout the system.
+
+4. **Scalability**:
+   Adding support for additional chains or strategies requires minimal changes.
+
+5. **Security**:
+   Defense in depth with multiple layers of protection.
+
+## Technology Stack
+
+- **Language**: Python 3.12+
+- **Blockchain Connectivity**: Web3.py
+- **API Framework**: Flask
+- **Secret Management**: HashiCorp Vault
+- **Monitoring**: Prometheus, Grafana
+- **Containerization**: Docker
+- **Machine Learning**: Scikit-learn, Joblib
+- **Data Storage**: JSON, CSV
+
+## Deployment Architecture
+
+ON1Builder supports both single-chain and multi-chain deployment models:
+
+### Single-Chain Deployment
+
+```
++------------------+
+| Docker Compose   |
+|                  |
+| +-------------+  |
+| | ON1Builder  |  |
+| +-------------+  |
+|                  |
+| +-------------+  |
+| | Vault       |  |
+| +-------------+  |
+|                  |
+| +-------------+  |
+| | Prometheus  |  |
+| +-------------+  |
+|                  |
+| +-------------+  |
+| | Grafana     |  |
+| +-------------+  |
++------------------+
+```
+
+### Multi-Chain Deployment
+
+```
++------------------+
+| Docker Compose   |
+|                  |
+| +-------------+  |
+| | ON1Builder  |  |
+| | Multi-Chain |  |
+| +-------------+  |
+|                  |
+| +-------------+  |
+| | Vault       |  |
+| +-------------+  |
+|                  |
+| +-------------+  |
+| | Prometheus  |  |
+| +-------------+  |
+|                  |
+| +-------------+  |
+| | Grafana     |  |
+| +-------------+  |
++------------------+
+```
+
+## Future Architecture Considerations
+
+1. **Sharding**: As the number of chains grows, implement sharding to distribute load
+2. **Event-Driven Architecture**: Move toward a more event-driven model using message queues
+3. **Advanced ML Pipeline**: Separate ML training and inference for better scalability
+4. **Distributed Execution**: Support for distributed strategy execution across multiple nodes

@@ -16,6 +16,7 @@ from api_config import APIConfig
 from configuration import Configuration
 from logger_on1 import setup_logging
 import logging
+import math
 
 logger = setup_logging("MarketMonitor", level=logging.DEBUG)
 
@@ -70,28 +71,58 @@ class MarketMonitor:
                 self._last_update = now
             await asyncio.sleep(60)
 
-    async def check_market_conditions(
-            self, token_address: str) -> Dict[str, bool]:
-        conditions = {"high_volatility": False, "bullish_trend": False,
-                      "bearish_trend": False, "low_liquidity": False}
-        symbol = self.api_config.get_token_symbol(token_address)
-        if not symbol:
-            return conditions
-        prices = await self.api_config.get_token_price_data(symbol, "historical", timeframe=1, vs="usd")
-        if not prices or len(prices) < 2:
-            return conditions
-        volatility = float(np.std(prices) / np.mean(prices))
-        if volatility > self.VOLATILITY_THRESHOLD:
-            conditions["high_volatility"] = True
-        avg = float(np.mean(prices))
-        if prices[-1] > avg:
-            conditions["bullish_trend"] = True
-        elif prices[-1] < avg:
-            conditions["bearish_trend"] = True
-        volume = await self.api_config.get_token_volume(symbol)
-        if volume < self.LIQUIDITY_THRESHOLD:
-            conditions["low_liquidity"] = True
-        return conditions
+    async def check_market_conditions(self, token_address: str) -> Dict[str, bool]:
+        """Check market conditions with better error handling."""
+        result = {
+            "is_volatile": False,
+            "has_liquidity": False,
+            "is_trending": False,
+            "is_profitable": False,
+            "error": None
+        }
+        
+        try:
+            # Get token symbol from address
+            token_symbol = self.api_config.get_token_symbol(token_address)
+            if not token_symbol:
+                result["error"] = f"Unknown token address: {token_address}"
+                return result
+            
+            # Check volatility
+            price_data = await self.api_config.get_token_price_data(token_symbol, "historical", 24)
+            if price_data and len(price_data) >= 2:
+                volatility = self._calculate_volatility(price_data)
+                result["is_volatile"] = volatility > self.VOLATILITY_THRESHOLD
+            
+            # Check liquidity
+            volume = await self.api_config.get_token_volume(token_symbol)
+            result["has_liquidity"] = volume > self.LIQUIDITY_THRESHOLD
+            
+            # Additional checks for trending
+            # ...
+            
+        except Exception as e:
+            logger.error(f"Error checking market conditions for {token_address}: {e}")
+            result["error"] = str(e)
+            
+        return result
+        
+    def _calculate_volatility(self, price_data: List[float]) -> float:
+        """Calculate price volatility from historical data."""
+        if not price_data or len(price_data) < 2:
+            return 0.0
+            
+        # Calculate percent changes
+        changes = [(price_data[i] - price_data[i-1]) / price_data[i-1] 
+                  for i in range(1, len(price_data))]
+        
+        # Return standard deviation of changes as volatility measure  
+        if not changes:
+            return 0.0
+            
+        mean = sum(changes) / len(changes)
+        variance = sum((x - mean) ** 2 for x in changes) / len(changes)
+        return math.sqrt(variance)
 
     async def predict_price_movement(self, token_symbol: str) -> float:
         cache_key = f"prediction:{token_symbol}"

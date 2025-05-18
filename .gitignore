@@ -1,43 +1,7 @@
-
-# Node modules
-node_modules/
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime data
-pids/
-*.pid
-*.seed
-
-# Coverage directory used by tools like istanbul
-coverage/
-
-# Environment variable files
+venv/
+.venv/
+venv/bin/
 .env
-.env.local
-.env.development
-.env.test
-.env.production
-venv
-.venv
-# Build output
-dist/
-build/
 __pycache__
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE directories
-.vscode/
-.idea/
-
-# Private directories
-private/
+__pycache__/
 

@@ -12,6 +12,7 @@ import json
 import logging
 import asyncio
 import time
+import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 from flask import Flask, jsonify, request, Response
@@ -320,7 +321,85 @@ def test_alert() -> Dict[str, Any]:
         # Log test alert
         logger.info("Sending test alert")
         
-        # TODO: Implement alert sending
+        # Implementation of alert sending
+        message = request.json.get("message", "Test alert from ON1Builder")
+        level = request.json.get("level", "INFO")
+        
+        # Send Slack alert if configured
+        if os.environ.get("SLACK_WEBHOOK_URL"):
+            try:
+                import requests
+                webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+                icon = "🟢" if level == "INFO" else "🔴"
+                
+                payload = {
+                    "text": f"{icon} *ON1Builder Alert*",
+                    "attachments": [
+                        {
+                            "color": "#36a64f" if level == "INFO" else "#ff0000",
+                            "title": f"{level} Alert",
+                            "text": message,
+                            "fields": [
+                                {
+                                    "title": "Environment",
+                                    "value": os.environ.get("ENVIRONMENT", "production"),
+                                    "short": True
+                                },
+                                {
+                                    "title": "Time",
+                                    "value": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    "short": True
+                                }
+                            ]
+                        }
+                    ]
+                }
+                
+                requests.post(webhook_url, json=payload, timeout=5)
+                logger.info(f"Sent Slack alert: {message}")
+            except Exception as e:
+                logger.error(f"Error sending Slack alert: {e}")
+        
+        # Send email alert if configured
+        if all(os.environ.get(key) for key in ["SMTP_SERVER", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "ALERT_EMAIL"]):
+            try:
+                import smtplib
+                from email.mime.text import MIMEText
+                from email.mime.multipart import MIMEMultipart
+                
+                smtp_server = os.environ.get("SMTP_SERVER")
+                smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+                smtp_user = os.environ.get("SMTP_USERNAME")
+                smtp_password = os.environ.get("SMTP_PASSWORD")
+                to_email = os.environ.get("ALERT_EMAIL")
+                
+                msg = MIMEMultipart()
+                msg["Subject"] = f"ON1Builder {level} Alert"
+                msg["From"] = smtp_user
+                msg["To"] = to_email
+                
+                html_content = f"""
+                <html>
+                <body>
+                    <h2>ON1Builder Alert</h2>
+                    <p><strong>Level:</strong> {level}</p>
+                    <p><strong>Message:</strong> {message}</p>
+                    <p><strong>Time:</strong> {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+                    <p><strong>Environment:</strong> {os.environ.get("ENVIRONMENT", "production")}</p>
+                </body>
+                </html>
+                """
+                
+                msg.attach(MIMEText(html_content, "html"))
+                
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_password)
+                    server.send_message(msg)
+                    
+                logger.info(f"Sent email alert to {to_email}")
+            except Exception as e:
+                logger.error(f"Error sending email alert: {e}")
         
         return jsonify({
             "status": "success",
@@ -336,53 +415,64 @@ def test_alert() -> Dict[str, Any]:
 # Simulate transaction endpoint
 @app.route("/api/simulate-transaction", methods=["POST"])
 def simulate_transaction() -> Dict[str, Any]:
-    """Simulate a transaction.
-    
-    Returns:
-        A dictionary with the result
-    """
+    """Simulate a transaction."""
     try:
-        # Check if core is initialized
-        if core is None:
-            return jsonify({
-                "status": "error",
-                "message": "Core not initialized",
-            }), 500
+        data = request.json
+        if not data or not isinstance(data, dict):
+            return {"success": False, "error": "Invalid request format"}, 400
+            
+        required_fields = ["tx_hash", "chain_id"]
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            return {
+                "success": False, 
+                "error": f"Missing required fields: {', '.join(missing_fields)}"
+            }, 400
+            
+        # Get transaction data
+        tx_hash = data["tx_hash"]
+        chain_id = data["chain_id"]
         
-        # Get request data
-        data = request.json or {}
-        chain_id = data.get("chain_id", "1")
-        
-        # Check if chain is active
         if chain_id not in core.workers:
-            return jsonify({
-                "status": "error",
-                "message": f"Chain {chain_id} is not active",
-            }), 400
+            return {"success": False, "error": f"Chain ID {chain_id} not supported"}, 400
+            
+        # Run simulation async
+        result = asyncio.run(_run_simulation(tx_hash, chain_id))
         
-        # Log simulation
-        logger.info(f"Simulating transaction on chain {chain_id}")
-        
-        # TODO: Implement transaction simulation
-        
-        return jsonify({
-            "status": "success",
-            "message": "Transaction simulated",
-            "chain_id": chain_id,
-            "result": {
-                "success": True,
-                "gas_used": 100000,
-                "gas_price_gwei": 20,
-                "estimated_cost_eth": 0.002,
-                "estimated_profit_eth": 0.005,
-            },
-        })
+        if result.get("success", False):
+            return {"success": True, "result": result}, 200
+        else:
+            return {"success": False, "error": result.get("error", "Unknown error")}, 400
+            
     except Exception as e:
-        logger.error(f"Error simulating transaction: {e}")
-        return jsonify({
-            "status": "error",
-            "message": "An internal error occurred while simulating the transaction.",
-        }), 500
+        logger.exception(f"Error simulating transaction: {e}")
+        return {"success": False, "error": str(e)}, 500
+
+async def _run_simulation(tx_hash: str, chain_id: str) -> Dict[str, Any]:
+    """Run transaction simulation with proper error handling."""
+    try:
+        # Get chain worker
+        worker = core.workers.get(chain_id)
+        if not worker:
+            return {"success": False, "error": f"Chain worker for {chain_id} not found"}
+            
+        # Get transaction
+        tx = await worker.txpool_monitor._fetch_transaction(tx_hash)
+        if not tx:
+            return {"success": False, "error": f"Transaction {tx_hash} not found"}
+            
+        # Simulate transaction
+        simulation_result = await worker.transaction_core.simulate_transaction(tx)
+        
+        return {
+            "success": simulation_result,
+            "transaction": tx,
+            "chain_id": chain_id,
+            "error": None if simulation_result else "Simulation failed"
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # Main function
 async def main() -> int:

@@ -54,7 +54,7 @@ fi
 
 # Start the application with multi-chain support
 echo "Starting the application with multi-chain support in dry-run mode..."
-docker-compose -f docker-compose.multi-chain.yml up -d
+docker-compose -f deploy/docker-compose.multi-chain.yml up -d
 
 # Wait for the application to start
 echo "Waiting for the application to start..."
@@ -113,9 +113,9 @@ echo "Do you want to stop the application? (y/n)"
 read -r response
 if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
     echo "Stopping the application..."
-    docker-compose -f docker-compose.multi-chain.yml down
+    docker-compose -f deploy/docker-compose.multi-chain.yml down
     echo "Application stopped"
 else
     echo "Application is still running. You can stop it later with:"
-    echo "docker-compose -f docker-compose.multi-chain.yml down"
+    echo "docker-compose -f deploy/docker-compose.multi-chain.yml down"
 fi
