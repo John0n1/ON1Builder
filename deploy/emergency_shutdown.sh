@@ -57,8 +57,10 @@ fi
 if [ -n "$EMERGENCY_WALLET_ADDRESS" ]; then
     echo "Attempting to transfer funds to emergency wallet: $EMERGENCY_WALLET_ADDRESS"
     
-    # Create a simple script to withdraw funds
-    cat > "${PROJECT_DIR}/withdraw_emergency.py" <<EOL
+    # Create a secure temporary file for the withdrawal script
+    TEMP_SCRIPT=$(mktemp --suffix=.py)
+    chmod 600 "$TEMP_SCRIPT"
+    cat > "$TEMP_SCRIPT" <<EOL
 import asyncio
 from web3 import Web3
 import os
