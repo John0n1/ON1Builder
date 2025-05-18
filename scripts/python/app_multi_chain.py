@@ -447,7 +447,7 @@ def simulate_transaction() -> Dict[str, Any]:
             
     except Exception as e:
         logger.exception(f"Error simulating transaction: {e}")
-        return {"success": False, "error": str(e)}, 500
+        return {"success": False, "error": "An internal error occurred."}, 500
 
 async def _run_simulation(tx_hash: str, chain_id: str) -> Dict[str, Any]:
     """Run transaction simulation with proper error handling."""
