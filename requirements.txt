@@ -59,7 +59,7 @@ simple-websocket==1.1.0
 six==1.17.0
 threadpoolctl==3.6.0
 toolz==1.0.0
-types-requests==2.32.0.20250328
+types-requests==2.32.0.20250515
 typing-inspection==0.4.0
 typing_extensions==4.13.2
 tzdata==2025.2
