@@ -53,7 +53,7 @@ markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 mccabe==0.7.0
 mdurl==0.1.2
-multidict==6.4.3
+multidict==6.4.4
 mypy==1.15.0
 mypy_extensions==1.1.0
 nodeenv==1.9.1
