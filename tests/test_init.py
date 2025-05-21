@@ -5,9 +5,9 @@ import unittest
 class TestInit(unittest.TestCase):
     def test_import(self):
         try:
-            import scripts.python.pyutils
+            import on1builder.utils
         except ImportError:
-            self.fail("Failed to import scripts.python.pyutils")
+            self.fail("Failed to import on1builder.utils")
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,31 @@
+chains:
+  ethereum:
+    rpc_url: "https://mainnet.infura.io/v3/${INFURA_PROJECT_ID}"
+    websocket_url: "wss://mainnet.infura.io/ws/v3/${INFURA_PROJECT_ID}"
+    chain_id: 1
+    block_time: 12
+    gas_price_strategy: "medium"
+  optimism:
+    rpc_url: "https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+    websocket_url: "wss://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+    chain_id: 10
+    block_time: 2
+    gas_price_strategy: "fast"
+  arbitrum:
+    rpc_url: "https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+    websocket_url: "wss://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+    chain_id: 42161
+    block_time: 0.25
+    gas_price_strategy: "fastest"
+global_settings:
+  prometheus_port: 9090
+  monitor_interval: 5
+  tx_confirmation_blocks: 2
+  log_level: "INFO"
+  max_retries: 3
+  gas_price_multiplier: 1.1
+monitoring:
+  mempool_polling_interval: 1.0
+  block_polling_interval: 12.0
+  price_update_interval: 60.0
+  health_check_interval: 300.0

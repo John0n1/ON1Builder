@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 LABEL maintainer="ON1Builder Team <info@on1builder.com>"
-LABEL version="1.0.0"
+LABEL version="2.0.0"
 LABEL description="ON1Builder - Multi-Chain MEV Trading Bot"
 
 # Set working directory
@@ -31,7 +31,8 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install -e .
 
 # Copy the application code
 COPY . .
@@ -43,8 +44,7 @@ RUN chown -R on1builder:on1builder /app
 USER on1builder
 
 # Create necessary directories with correct permissions
-RUN mkdir -p data/logs && \
-    mkdir -p data/ml
+RUN mkdir -p data/logs data/db
 
 # Expose the application port
 EXPOSE 5001
@@ -53,4 +53,4 @@ EXPOSE 5001
 ENTRYPOINT ["python"]
 
 # Set default command
-CMD ["scripts/python/app_multi_chain.py"] 
+CMD ["python", "-m", "on1builder.__main__"] 

@@ -1,0 +1,60 @@
+[tool.poetry]
+name = "on1builder"
+version = "0.1.0"
+description = "ON1Builder - Multi-chain blockchain transaction execution framework"
+authors = ["john0n1 <john0n1@example.com>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/john0n1/ON1Builder"
+packages = [{include = "on1builder", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+web3 = "^7.0.0"
+eth-typing = "^5.2.1"
+eth-utils = "^5.3.0"
+pyyaml = "^6.0"
+python-dotenv = "^1.0.0"
+aiohttp = "^3.11.18"
+prometheus-client = "^0.17.1"
+sqlalchemy = "^2.0.0"
+pydantic = "^2.5.0"
+joblib = "^1.3.0"
+pandas = "^2.0.0"
+numpy = "^1.24.0"
+eth-account = "^0.13.7"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.21.0"
+black = "^23.0.0"
+isort = "^5.12.0"
+flake8 = "^6.0.0"
+mypy = "^1.4.0"
+pytest-cov = "^4.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+on1builder = "on1builder.__main__:main"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

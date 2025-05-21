@@ -1,4 +1,3 @@
-# Dependabot configuration for ON1Builder
 version: 2
 updates:
   # Python dependencies
@@ -7,30 +6,10 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: "master"
-    allow:
-      - dependency-type: "direct"
-    assignees:
-      - "John0n1"
-      - "denibur"
-      - "Soljuan"
     reviewers:
       - "John0n1"
-      - "denibur"
-      - "Soljuan"
-    commit-message:
-      prefix: "deps"
-      prefix-development: "deps(dev)"
-      include: "scope"
-    open-pull-requests-limit: 10
-    rebase-strategy: "auto"
-    versioning-strategy: "auto"
-    groups:
-      python-packages:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
+    assignees:
+      - "John0n1"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -38,4 +17,7 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: "master"
-
+    reviewers:
+      - "John0n1"
+    assignees:
+      - "John0n1"

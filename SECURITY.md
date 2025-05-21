@@ -9,7 +9,7 @@ This document outlines security policies and best practices for deploying and ma
 ```
 ON1Builder/
 ├── config/                   # Configuration (restricted access)
-│   └── template.env         # Never commit actual .env files
+│   └── .env.example         # Never commit actual .env files
 ├── data/                    # Data directory (controlled access)
 │   ├── abi/                # Contract ABIs
 │   └── ml/                 # ML models and data

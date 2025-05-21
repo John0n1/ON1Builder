@@ -1,7 +1,39 @@
+# Virtual environments
 venv/
 .venv/
 venv/bin/
+
+# Environment variables
 .env
-__pycache__
+!.env.example
+
+# Python caches
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Logs
+data/logs/
+logs/
+*.log
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Local development
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
 

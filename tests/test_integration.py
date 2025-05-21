@@ -8,12 +8,12 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Test imports - these should work with our improved code
-from scripts.python.abi_registry import ABIRegistry, get_registry
-from scripts.python.configuration import Configuration
-from scripts.python.multi_chain_core import MultiChainCore
-from scripts.python.configuration_multi_chain import MultiChainConfiguration
-from scripts.python.db_manager import DatabaseManager, get_db_manager
-from scripts.python.logger_on1 import setup_logging
+from on1builder.integrations.abi_registry import ABIRegistry, get_registry
+from on1builder.config.config import Configuration
+from on1builder.core.multi_chain_core import MultiChainCore
+from on1builder.config.config import MultiChainConfiguration
+from on1builder.persistence.db_manager import DatabaseManager, get_db_manager
+from on1builder.utils.logger import setup_logging
 
 # Set up logging for tests
 logger = setup_logging("TestIntegration", level="DEBUG")

@@ -1,47 +1,78 @@
 # ON1Builder
 
-ON1Builder is a multi-chain MEV trading bot designed for high-performance, security, and reliability.
+ON1Builder is a multi-chain blockchain transaction framework designed for high-performance, security, and reliability. It specializes in building, signing, simulating, and dispatching MEV-style transactions across multiple blockchains.
 
 ## Key Features
 
-- **Multi-Chain Support**: Run the bot across multiple blockchains simultaneously
+- **Multi-Chain Support**: Run the framework across multiple blockchains simultaneously
 - **MEV Detection**: Identify and capitalize on Miner Extractable Value opportunities
 - **Transaction Simulation**: Estimate gas costs and evaluate profitability before execution
 - **Real-time Alerts**: Get notified of important events via Slack and email
 - **Production-Ready**: Complete with monitoring, backup, and security tools
 
-## Documentation
-
-- [Usage Guide](docs/usage_guide.md) - How to use ON1Builder
-- [Alert System](docs/alert_system.md) - Configure and use the alert system
-- [Transaction Simulation](docs/transaction_simulation.md) - Simulate transaction execution
-- [Deployment Guide](DEPLOYMENT.md) - Deploy ON1Builder to production
-- [Security Policy](SECURITY.md) - Security best practices and policies
-- [Architecture](docs/architecture.md) - Technical architecture overview
-- [Post-Deployment Checklist](post_deployment_checklist.md) - Verify your deployment
-
 ## Quick Start
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/John0n1/ON1Builder.git
-   cd ON1Builder
-   ```
+### Prerequisites
 
-2. Set up the environment:
-   ```bash
-   cp template.env .env
-   # Edit .env with your configuration
-   ```
+- Python 3.12 or higher
+- Docker and Docker Compose (for production deployment)
+- 8+ GB RAM (16+ GB recommended)
+- SSD with at least 100GB free space
 
-3. Run the deployment helper:
-   ```bash
-   ./deploy/deploy_helper.sh
-   ```
+### Installation
 
-4. Choose deployment option:
-   - Single Chain: Option 1
-   - Multi-Chain: Option 2
+```bash
+# Clone the repository
+git clone https://github.com/John0n1/ON1Builder.git
+cd ON1Builder
+
+# Set up the environment
+cp template.env .env
+# Edit .env with your configuration
+
+# Install dependencies with Poetry (recommended)
+./setup_dev.sh
+
+# Activate virtual environment
+poetry shell
+```
+
+### Running ON1Builder
+
+```bash
+# Run in single-chain mode
+python -m on1builder run --config configs/chains/config.yaml
+
+# Run in multi-chain mode
+python -m on1builder run --config configs/chains/config_multi_chain.yaml
+```
+
+## Documentation
+
+For complete documentation, visit our [Documentation Center](docs/index.md).
+
+### User Guides
+
+- [Getting Started Guide](docs/guides/getting_started.md)
+- [Installation Guide](docs/guides/installation.md)
+- [Configuration Guide](docs/guides/configuration.md)
+- [Running Guide](docs/guides/running.md)
+- [Monitoring Guide](docs/guides/monitoring.md)
+- [Troubleshooting Guide](docs/guides/troubleshooting.md)
+
+### Reference Docs
+
+- [Architecture Overview](docs/reference/architecture.md)
+- [API Reference](docs/reference/api.md)
+- [Configuration Reference](docs/reference/configuration_reference.md)
+- [Components Reference](docs/reference/components.md)
+- [Glossary](docs/reference/glossary.md)
+
+### Examples
+
+- [Single Chain Example](docs/examples/single_chain_example.md)
+- [Multi-Chain Example](docs/examples/multi_chain_example.md)
+- [Custom Strategy Example](docs/examples/custom_strategy_example.md)
 
 ## Deployment Tools
 
@@ -51,7 +82,6 @@ The project includes several tools to help with deployment and management:
 - **security_audit.sh**: Check for security issues
 - **emergency_shutdown.sh**: Safe shutdown procedure
 - **backup_config.sh** and **backup_data.sh**: Backup tools
-- **cron_setup.sh**: Setup automated maintenance
 
 ## System Requirements
 
