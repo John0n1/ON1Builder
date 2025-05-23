@@ -20,31 +20,33 @@
 - **Production-Ready**: Complete with monitoring, backup, and security tools
 
 ## Quick Start
-### Installation
 
+### Clone the repository
 ```bash
-# Clone the repository
 git clone https://github.com/John0n1/ON1Builder.git
 cd ON1Builder
-
-# Set up the environment
-cp template.env .env
-# Edit .env with your configuration
-
-# Install dependencies with Poetry (recommended)
-./setup_dev.sh
-
-# Activate virtual environment
-poetry shell
 ```
-### Running ON1Builder
 
+### Set up the environment
+```bash
+cp template.env .env
+```
+### Edit .env with your configuration
+
+### Install dependencies with Poetry (recommended)
+```bash
+./setup_dev.sh
+```
+
+### Activate virtual environment
+```bash
+poetry sh
+```
+### Run ON1Builder
 ```bash
 # Run in single-chain mode
 python -m on1builder run --config configs/chains/config.yaml
-
-# Run in multi-chain mode
-python -m on1builder run --config configs/chains/config_multi_chain.yaml
+```
 
 For complete documentation, visit our [Documentation Center](docs/index.md).
 
