@@ -1,6 +1,9 @@
-# main_core.py
+# src/on1builder/core/main_core.py
+
 """
-ON1Builder – MainCor# Use POA_CHAINS from Configuration=====================
+ON1Builder – MainCo# Chains that need the geth/erigon "extraData" PoA middleware
+_POA_CHAINS: set[int] = {99, 100, 77, 7766, 56, 11155111}
+import random Use POA_CHAINS from Configuration=====================
 Boot-straps every long-lived component, owns the single AsyncIO event-loop,
 and exposes `.run()` / `.stop()` for callers (CLI, Flask UI, tests).
 
@@ -11,6 +14,8 @@ keeps a minimal heartbeat to verify health.
 from __future__ import annotations
 
 import asyncio
+import os
+import random
 import tracemalloc
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,6 +28,7 @@ from web3.providers import AsyncHTTPProvider, WebSocketProvider, IPCProvider
 
 from on1builder.config.config import APIConfig, Configuration
 from on1builder.utils.logger import setup_logging
+from on1builder.utils import logger
 from on1builder.monitoring.market_monitor import MarketMonitor
 from on1builder.monitoring.txpool_monitor import TxpoolMonitor
 from on1builder.core.nonce_core import NonceCore
@@ -31,6 +37,7 @@ from on1builder.engines.strategy_net import StrategyNet
 from on1builder.core.transaction_core import TransactionCore
 
 logger = setup_logging("MainCore", level="DEBUG")
+
 
 # --------------------------------------------------------------------------- #
 # constants                                                                   #
@@ -42,6 +49,8 @@ _POA_CHAINS: set[int] = {99, 100, 77, 7766, 56, 11155111}
 
 class MainCore:
     """High-level conductor that owns all sub-components and the main loop."""
+    # set logger at MainCore Attribute
+    logger = logger
 
     # --- life-cycle -------------------------------------------------------
 
@@ -180,25 +189,62 @@ class MainCore:
     async def _connect_web3(self) -> Optional[AsyncWeb3]:
         """Attempts each configured provider with exponential back-off + jitter."""
         provs = self._provider_candidates()
+        if not provs:
+            logger.error("No Web3 providers configured. Please check your HTTP_ENDPOINT, WEBSOCKET_ENDPOINT, or IPC_ENDPOINT settings.")
+            return None
+            
+        # Get connection timeout from config or environment variable
+        connection_timeout = getattr(self.cfg, "CONNECTION_TIMEOUT", 
+                                    int(os.getenv("CONNECTION_TIMEOUT", 10)))
+        retry_delay = getattr(self.cfg, "CONNECTION_RETRY_DELAY", 
+                            float(os.getenv("CONNECTION_RETRY_DELAY", 2.0)))
+        
+        logger.info("Attempting to connect to %d Web3 providers with max %d retries each", 
+                   len(provs), self.cfg.WEB3_MAX_RETRIES)
+                   
         for name, provider in provs:
-            delay = 1.5
+            delay = retry_delay
             for attempt in range(1, self.cfg.WEB3_MAX_RETRIES + 1):
                 try:
-                    logger.info("Connecting to Web3 %s (attempt %d)…", name, attempt)
+                    logger.info("Connecting to Web3 %s (attempt %d/%d)…", 
+                               name, attempt, self.cfg.WEB3_MAX_RETRIES)
                     w3 = AsyncWeb3(provider, modules={"eth": (AsyncEth,)})
-                    async with async_timeout.timeout(8):
-                        if await w3.is_connected():
-                            chain_id = await w3.eth.chain_id
-                            if chain_id in self.config.POA_CHAINS:
-                                w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-                            logger.info("✔ %s connected (chain %s)", name, chain_id)
-                            return w3
+                    
+                    # Test connection with timeout
+                    async with async_timeout.timeout(connection_timeout):
+                        is_connected = await w3.is_connected()
+                        if not is_connected:
+                            logger.warning("%s provider is not connected", name)
+                            raise RuntimeError(f"{name} provider is_connected() returned False")
+                            
+                        # Get chain ID
+                        chain_id = await w3.eth.chain_id
+                        
+                        # Apply middleware if needed
+                        if isinstance(self.cfg.POA_CHAINS, set) and chain_id in self.cfg.POA_CHAINS:
+                            logger.info("Applying POA middleware for chain %s", chain_id)
+                            w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+                            
+                        logger.info("✓ Successfully connected to %s (chain %s)", name, chain_id)
+                        return w3
+                        
                 except asyncio.CancelledError:
+                    logger.warning("Connection attempt cancelled")
                     raise
-                except Exception:
-                    logger.debug("Connect to %s failed, retrying in %.1fs", name, delay)
+                    
+                except asyncio.TimeoutError:
+                    logger.warning("Connection to %s timed out after %s seconds", 
+                                  name, connection_timeout)
+                    
+                except Exception as e:
+                    logger.warning("Failed to connect to %s: %s", name, str(e))
+                    
+                if attempt < self.cfg.WEB3_MAX_RETRIES:
+                    logger.debug("Retrying %s connection in %.1fs (attempt %d/%d)", 
+                                name, delay, attempt+1, self.cfg.WEB3_MAX_RETRIES)
                     await asyncio.sleep(delay)
-                    delay *= 2.0
+                    # Apply exponential backoff with some jitter
+                    delay = delay * 1.5 + (random.random() * 0.5)
         return None
 
     async def connect(self) -> bool:
@@ -214,42 +260,88 @@ class MainCore:
         return self.web3 is not None and await self.web3.is_connected()
 
     async def connect_websocket(self) -> bool:
-        """Connect to the WebSocket endpoint.
-        
-        This method is now a wrapper around _connect_web3 for backwards compatibility.
-        The _connect_web3 method will handle WebSocket connections if configured.
-        
-        Returns:
-            bool: True if connected successfully, False otherwise.
+        """
+        Establishes WebSocket connection with retry logic.
+        Returns True if connection is successful, False otherwise.
         """
         if not self.cfg.WEBSOCKET_ENDPOINT:
-            logger.warning("No WebSocket endpoint configured.")
+            self.logger.warning("No WebSocket endpoint configured")
             return False
             
-        # Reuse the _connect_web3 method which already handles WebSocket connections
-        web3_instance = await self._connect_web3()
-        return web3_instance is not None and await web3_instance.is_connected()
+        retry_count = 0
+        max_retries = self.cfg.WEB3_MAX_RETRIES or 3
+        retry_delay = self.cfg.CONNECTION_RETRY_DELAY or 3.0
+
+        while retry_count <= max_retries:
+            try:
+                provider = WebSocketProvider(self.cfg.WEBSOCKET_ENDPOINT)
+                self.w3_ws = AsyncWeb3(provider)
+                
+                # Verify connection
+                if await self.w3_ws.is_connected():
+                    self.logger.info("WebSocket connection established")
+                    return True
+                else:
+                    self.logger.warning("WebSocket connected but verification failed")
+                    
+            except Exception as e:
+                self.logger.warning(f"WebSocketProvider failed: {str(e)}")
+                
+                # If we've reached max retries, give up
+                if retry_count >= max_retries:
+                    break
+                    
+                # Exponential backoff for retry
+                wait_time = retry_delay * (2 ** retry_count) / 4
+                self.logger.info(f"Retrying WebSocket connection in {wait_time:.1f}s (attempt {retry_count+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+                
+            retry_count += 1
+                
+        self.logger.error("Failed to establish WebSocket connection after retries")
+        return False
 
     def _provider_candidates(self) -> List[Tuple[str, object]]:
         out: List[Tuple[str, object]] = []
+        
+        # Try primary HTTP endpoint
         if self.cfg.HTTP_ENDPOINT:
             try:
                 out.append(("http", AsyncHTTPProvider(self.cfg.HTTP_ENDPOINT)))
+                logger.debug("Added primary HTTP endpoint: %s", self.cfg.HTTP_ENDPOINT)
             except Exception as e:
-                logger.warning("HTTPProvider failed: %s", e)
-
-        if not out and self.cfg.IPC_ENDPOINT:
+                logger.warning("Primary HTTPProvider failed: %s", e)
+        
+        # Try backup HTTP endpoints if configured
+        backup_endpoints = getattr(self.cfg, "BACKUP_HTTP_ENDPOINTS", "")
+        if backup_endpoints:
+            endpoints = backup_endpoints.split(",") if isinstance(backup_endpoints, str) else backup_endpoints
+            for i, endpoint in enumerate(endpoints):
+                if not endpoint.strip():
+                    continue
+                try:
+                    out.append((f"backup-http-{i+1}", AsyncHTTPProvider(endpoint.strip())))
+                    logger.debug("Added backup HTTP endpoint: %s", endpoint.strip())
+                except Exception as e:
+                    logger.warning("Backup HTTP endpoint %s failed: %s", endpoint.strip(), e)
+        
+        # Try IPC endpoint if HTTP endpoints failed or not configured
+        if getattr(self.cfg, "IPC_ENDPOINT", None):
             try:
                 out.append(("ipc", IPCProvider(self.cfg.IPC_ENDPOINT)))
+                logger.debug("Added IPC endpoint: %s", self.cfg.IPC_ENDPOINT)
             except Exception as e:
                 logger.warning("IPCProvider failed: %s", e)
 
-        if not out and self.cfg.WEBSOCKET_ENDPOINT:
+        # Try WebSocket endpoint as a last resort
+        if getattr(self.cfg, "WEBSOCKET_ENDPOINT", None):
             try:
                 out.append(("websocket", WebSocketProvider(self.cfg.WEBSOCKET_ENDPOINT)))
+                logger.debug("Added WebSocket endpoint: %s", self.cfg.WEBSOCKET_ENDPOINT)
             except Exception as e:
                 logger.warning("WebSocketProvider failed: %s", e)
                 
+        logger.info("Configured %d provider candidates", len(out))
         return out
 
     async def _mk_api_config(self) -> APIConfig:
@@ -297,7 +389,24 @@ class MainCore:
         mm: MarketMonitor,
     ) -> TxpoolMonitor:
         token_map = await self.cfg._load_json_safe(self.cfg.TOKEN_ADDRESSES, "TOKEN_ADDRESSES") or {}
-        mp = TxpoolMonitor(self.web3, sn, nc, apicfg, list(token_map.values()), self.cfg, mm)
+        
+        # Filter out any None or invalid token addresses
+        valid_tokens = [addr for addr in token_map.values() if addr and isinstance(addr, str)]
+        
+        if not valid_tokens:
+            # If no valid tokens are found, add some common tokens to monitor
+            logger.warning("No valid tokens found in TOKEN_ADDRESSES, using default tokens")
+            weth_addr = self.cfg.get("WETH_ADDRESS")
+            usdc_addr = self.cfg.get("USDC_ADDRESS")
+            usdt_addr = self.cfg.get("USDT_ADDRESS")
+            wbtc_addr = self.cfg.get("WBTC_ADDRESS")
+            
+            valid_tokens = [addr for addr in [weth_addr, usdc_addr, usdt_addr, wbtc_addr] 
+                           if addr and isinstance(addr, str)]
+        
+        logger.debug(f"Monitoring {len(valid_tokens)} tokens in TxpoolMonitor")
+        
+        mp = TxpoolMonitor(self.web3, sn, nc, apicfg, valid_tokens, self.cfg, mm)
         await mp.initialize()
         return mp
 

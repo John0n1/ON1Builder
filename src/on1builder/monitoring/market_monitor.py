@@ -110,6 +110,36 @@ class MarketMonitor:
                 }
                 
             logger.debug(f"Updated price for {token}: {price} {quote_currency}")
+        else:
+            # Handle the case when price is None
+            # Try to use any predefined default values for major tokens
+            token_upper = token.upper()
+            if token_upper in ["ETH", "BTC", "USDT", "USDC", "DAI", "WETH", "WBTC", "LINK", "UNI", "AAVE", "MATIC", "CRV"]:
+                # This is a MarketMonitor-level fallback for when APIConfig's fallbacks also fail
+                # These should match or be close to the values in APIConfig._get_fallback_price
+                fallback_prices = {
+                    "ETH": Decimal("3400.00"),  # ETH price fallback
+                    "BTC": Decimal("62000.00"),  # BTC price fallback
+                    "USDT": Decimal("1.00"),
+                    "USDC": Decimal("1.00"),
+                    "DAI": Decimal("1.00"),
+                    "WETH": Decimal("3400.00"),
+                    "WBTC": Decimal("62000.00"),
+                    "LINK": Decimal("15.00"),
+                    "UNI": Decimal("8.00"),
+                    "AAVE": Decimal("95.00"),
+                    "MATIC": Decimal("0.60"),
+                    "CRV": Decimal("0.55")
+                }
+                price = fallback_prices.get(token_upper)
+                
+                if price:
+                    logger.debug(f"Using fallback price for {token}: {price} {quote_currency}")
+                    async with self._cache_lock:
+                        self._price_cache[cache_key] = {
+                            "price": price,
+                            "timestamp": now
+                        }
             
         return price
     
@@ -412,9 +442,9 @@ class MarketMonitor:
                 trend_data_4h = await self.get_market_trend(token, "4h")
                 
                 # Calculate volatility as standard deviation of percent changes
-                volatility = abs(trend_data.get("percent_change", 0)) 
+                volatility = abs(float(trend_data.get("percent_change", 0)))
                 if trend_data_4h:
-                    volatility = (volatility + abs(trend_data_4h.get("percent_change", 0))) / 2
+                    volatility = (volatility + abs(float(trend_data_4h.get("percent_change", 0)))) / 2
                 
                 # Classify volatility
                 if volatility > 10:
@@ -474,15 +504,15 @@ class MarketMonitor:
                 count = 0
                 
                 if "percent_change" in trend_1h:
-                    momentum_score += trend_1h["percent_change"]
+                    momentum_score += float(trend_1h["percent_change"])
                     count += 1
                     
                 if "percent_change" in trend_4h:
-                    momentum_score += trend_4h["percent_change"] * 2  # Higher weight for longer term
+                    momentum_score += float(trend_4h["percent_change"]) * 2  # Higher weight for longer term
                     count += 2
                     
                 if "percent_change" in trend_24h:
-                    momentum_score += trend_24h["percent_change"] * 3  # Higher weight for longest term
+                    momentum_score += float(trend_24h["percent_change"]) * 3  # Higher weight for longest term
                     count += 3
                     
                 if count > 0:

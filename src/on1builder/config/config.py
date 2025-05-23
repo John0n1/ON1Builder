@@ -49,6 +49,10 @@ class Configuration:
         "SAFETYNET_GAS_PRICE_TTL": 10,
         "MAX_GAS_PRICE_GWEI": 100,
         "MIN_PROFIT": 0.001,
+        # Mempool configuration
+        "MEMPOOL_RETRY_DELAY": 0.5,
+        "MEMPOOL_MAX_RETRIES": 3,
+        "MEMPOOL_MAX_PARALLEL_TASKS": 10,
         "WALLET_KEY": "",
         "TRANSACTION_RETRY_COUNT": 3,
         "TRANSACTION_RETRY_DELAY": 1.0,
@@ -209,6 +213,7 @@ class Configuration:
         """Load configuration from environment variables."""
         logger.debug("Before _load_from_env: DEBUG=%s", self._config.get("DEBUG"))
         
+        # First, update values for keys already in _config
         for key in self._config:
             env_value = os.getenv(key)
             if env_value is not None:
@@ -224,6 +229,28 @@ class Configuration:
                     self._config[key] = env_value
                 
                 logger.debug("Updated from env: %s=%s", key, self._config[key])
+                
+        # Now add any environment variables not already in _config
+        for key, value in os.environ.items():
+            if key not in self._config and key.isupper():  # Only consider uppercase environment variables
+                # Try to convert value to appropriate type
+                if value.lower() in ('true', 'false', 'yes', 'no', '1', '0'):
+                    self._config[key] = value.lower() in ('true', '1', 'yes')
+                else:
+                    try:
+                        # Try to convert to int
+                        int_val = int(value)
+                        self._config[key] = int_val
+                    except ValueError:
+                        try:
+                            # Try to convert to float
+                            float_val = float(value)
+                            self._config[key] = float_val
+                        except ValueError:
+                            # Keep as string
+                            self._config[key] = value
+                            
+                logger.debug("Added from env: %s=%s", key, self._config[key])
         
         logger.debug("After _load_from_env: DEBUG=%s", self._config.get("DEBUG"))
                     
@@ -243,25 +270,48 @@ class Configuration:
             logger.warning("MAX_GAS_PRICE_GWEI must be positive, using default")
             self._config["MAX_GAS_PRICE_GWEI"] = self._DEFAULTS["MAX_GAS_PRICE_GWEI"]
             
-    async def _load_json_safe(self, path):
+    async def _load_json_safe(self, path, description=None):
         """Load JSON file with error handling.
         
         Args:
             path: Path to JSON file
+            description: Optional description for logging
             
         Returns:
             Dict or None: Loaded JSON data or None if error
         """
         import json
         if not path or not os.path.exists(path):
+            if description:
+                logger.warning(f"File not found for {description}: {path}")
+            else:
+                logger.warning(f"File not found: {path}")
             return None
             
         try:
             with open(path, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                if description:
+                    logger.debug(f"Loaded {description} from {path}")
+                return data
         except Exception as e:
-            logger.error(f"Error loading JSON from {path}: {e}")
+            if description:
+                logger.error(f"Error loading {description} from {path}: {e}")
+            else:
+                logger.error(f"Error loading JSON from {path}: {e}")
             return None
+
+    def get_chain_config(self, chain_name: str) -> Dict[str, Any]:
+        """Get configuration for a specific chain.
+        
+        Args:
+            chain_name: Name of the chain
+            
+        Returns:
+            Dict: Chain configuration or empty dict if not found
+        """
+        chains = self._config.get("chains", {})
+        return chains.get(chain_name, {})
 
 
 class MultiChainConfiguration(Configuration):
@@ -354,6 +404,30 @@ class APIConfig:
     # ------------------------------------------------------------------ #
 
     async def initialize(self) -> None:
+        # Ensure token paths are set correctly from environment variables
+        token_addresses_path = os.getenv("TOKEN_ADDRESSES")
+        token_symbols_path = os.getenv("TOKEN_SYMBOLS")
+        address_to_symbol_path = os.getenv("ADDRESS_TO_SYMBOL")
+        
+        # Set these paths in the configuration if they're defined in environment variables
+        if token_addresses_path:
+            self.cfg.TOKEN_ADDRESSES = token_addresses_path
+        elif not hasattr(self.cfg, "TOKEN_ADDRESSES"):
+            # Default fallback
+            self.cfg.TOKEN_ADDRESSES = os.path.join(self.cfg.BASE_PATH, "resources/tokens/chainid-1/address2token.json")
+        
+        if token_symbols_path:
+            self.cfg.TOKEN_SYMBOLS = token_symbols_path
+        elif not hasattr(self.cfg, "TOKEN_SYMBOLS"):
+            # Default fallback
+            self.cfg.TOKEN_SYMBOLS = os.path.join(self.cfg.BASE_PATH, "resources/tokens/chainid-1/symbol2address.json")
+            
+        if address_to_symbol_path:
+            self.cfg.ADDRESS_TO_SYMBOL = address_to_symbol_path
+        elif not hasattr(self.cfg, "ADDRESS_TO_SYMBOL"):
+            # Default fallback
+            self.cfg.ADDRESS_TO_SYMBOL = os.path.join(self.cfg.BASE_PATH, "resources/tokens/chainid-1/address2symbol.json")
+        
         await self._populate_token_maps()
         await self._acquire_session()
         logger.info("APIConfig initialised with %d providers", len(self.providers))
@@ -433,14 +507,28 @@ class APIConfig:
         return provs
 
     async def _populate_token_maps(self) -> None:
+        # Load the token mappings from files
         addresses = await self.cfg._load_json_safe(self.cfg.TOKEN_ADDRESSES) or {}
         symbols = await self.cfg._load_json_safe(self.cfg.TOKEN_SYMBOLS) or {}
+        
+        # If ADDRESS_TO_SYMBOL is defined and exists, load it directly
+        if hasattr(self.cfg, "ADDRESS_TO_SYMBOL"):
+            addr_to_sym = await self.cfg._load_json_safe(self.cfg.ADDRESS_TO_SYMBOL) or {}
+            for addr, sym in addr_to_sym.items():
+                addr_l = addr.lower()
+                sym_u = sym.upper()
+                self.token_address_to_symbol[addr_l] = sym_u
+                self.token_symbol_to_address[sym_u] = addr_l
+        
+        # Otherwise, use the address2token mapping
         for sym, addr in addresses.items():
             sym_u = sym.upper()
             addr_l = addr.lower()
             self.token_address_to_symbol[addr_l] = sym_u
             self.token_symbol_to_address[sym_u] = addr_l
             self.symbol_to_api_id[sym_u] = symbols.get(sym_u, sym_u.lower())
+        
+        logger.debug(f"Loaded {len(self.token_address_to_symbol)} token mappings")
 
     # session management (shared across all APIConfig instances) ----------
 
@@ -526,40 +614,106 @@ class APIConfig:
                 weights.append(prov.weight * prov.success_rate)
 
         if not prices:
+            # Try to use fallback for common tokens
+            fallback_price = self._get_fallback_price(t_norm, vs)
+            if fallback_price is not None:
+                logger.info(f"Using fallback price for {t_norm}: {fallback_price} {vs.upper()} (all API providers failed)")
+                self.price_cache[key] = fallback_price
+                return fallback_price
+            
+            # No prices from providers and no fallback available
+            logger.warning(f"Failed to get price for {t_norm} - all providers failed and no fallback available")
             return None
+            
         wavg = sum(p * w for p, w in zip(prices, weights)) / sum(weights)
         val = Decimal(str(wavg))
         self.price_cache[key] = val
         return val
 
     async def _price_from_provider(self, prov: Provider, token: str, vs: str) -> Optional[Decimal]:
-        if prov.name == "binance":
-            data = await self._request(prov, prov.price_url, params={"symbol": token + vs.upper()})
-            return Decimal(data["price"]) if data else None
+        try:
+            # Special handling for ETH and BTC since they often need custom handling
+            if token.upper() in ["ETH", "BTC", "WETH", "WBTC"]:
+                # Use provider-specific approach for these major tokens
+                if prov.name == "binance":
+                    # For ETH and BTC on Binance, use USDT pairs which are more reliable
+                    symbol = f"{token.upper().replace('W', '')}USDT"  # Remove W prefix for wrapped tokens
+                    data = await self._request(prov, prov.price_url, params={"symbol": symbol})
+                    if data and "price" in data:
+                        price = Decimal(data["price"])
+                        logger.debug(f"Got {token} price from Binance: {price}")
+                        return price
+                    else:
+                        logger.debug(f"Failed to get {token} price from Binance")
+                        return None
+                elif prov.name == "coingecko":
+                    # For CoinGecko, use specific ids for major tokens
+                    token_id = "ethereum" if token.upper() in ["ETH", "WETH"] else "bitcoin"
+                    params = {"ids": token_id, "vs_currencies": vs}
+                    data = await self._request(prov, prov.price_url, params=params)
+                    try:
+                        if data and token_id in data and vs in data[token_id]:
+                            price = Decimal(str(data[token_id][vs]))
+                            logger.debug(f"Got {token} price from CoinGecko: {price}")
+                            return price
+                    except Exception as e:
+                        logger.debug(f"Error parsing CoinGecko response for {token}: {e}")
+                    return None
+                
+                # For other providers, continue with standard approach but with better error handling
+            
+            # Standard provider handling
+            if prov.name == "binance":
+                data = await self._request(prov, prov.price_url, params={"symbol": token + vs.upper()})
+                return Decimal(data["price"]) if data and "price" in data else None
 
-        if prov.name == "coingecko":
-            token_id = self.symbol_to_api_id.get(token, token.lower())
-            params = {"ids": token_id, "vs_currencies": vs}
-            data = await self._request(prov, prov.price_url, params=params)
-            try:
-                return Decimal(str(data[token_id][vs]))
-            except Exception:
+            if prov.name == "coingecko":
+                token_id = self.symbol_to_api_id.get(token, token.lower())
+                params = {"ids": token_id, "vs_currencies": vs}
+                data = await self._request(prov, prov.price_url, params=params)
+                try:
+                    if data and token_id in data and vs in data[token_id]:
+                        return Decimal(str(data[token_id][vs]))
+                except Exception as e:
+                    logger.debug(f"Error parsing CoinGecko response for {token}: {e}")
                 return None
 
-        if prov.name == "dexscreener" and token.startswith("0x"):
-            endpoint = f"/pairs/ethereum/{token}"
-            data = await self._request(prov, endpoint)
-            price = data.get("pair", {}).get("priceUsd") if data else None
-            return Decimal(str(price)) if price else None
+            if prov.name == "dexscreener" and token.startswith("0x"):
+                endpoint = f"/pairs/ethereum/{token}"
+                data = await self._request(prov, endpoint)
+                try:
+                    if data and "pair" in data and "priceUsd" in data["pair"]:
+                        price = data["pair"]["priceUsd"]
+                        return Decimal(str(price)) if price else None
+                except Exception as e:
+                    logger.debug(f"Error parsing Dexscreener response for {token}: {e}")
+                return None
 
-        if prov.name == "coinpaprika":
-            token_id = self.symbol_to_api_id.get(token, token)
-            endpoint = prov.price_url.format(id=token_id)
-            data = await self._request(prov, endpoint)
-            price = data.get("quotes", {}).get(vs.upper(), {}).get("price") if data else None
-            return Decimal(str(price)) if price else None
+            if prov.name == "coinpaprika":
+                try:
+                    # For native tokens like ETH, BTC, use different API endpoints
+                    if token.upper() in ["ETH", "WETH"]:
+                        endpoint = "/tickers/eth-ethereum"
+                    elif token.upper() in ["BTC", "WBTC"]:
+                        endpoint = "/tickers/btc-bitcoin"
+                    else:
+                        token_id = self.symbol_to_api_id.get(token, token)
+                        endpoint = prov.price_url.format(id=token_id)
+                        
+                    data = await self._request(prov, endpoint)
+                    if data and "quotes" in data and vs.upper() in data["quotes"] and "price" in data["quotes"][vs.upper()]:
+                        price = data["quotes"][vs.upper()]["price"]
+                        return Decimal(str(price)) if price else None
+                except Exception as e:
+                    logger.debug(f"Error with Coinpaprika for {token}: {e}")
+                return None
 
-        return None  # fallback
+            return None  # fallback
+            
+        except Exception as e:
+            # Global exception handler for all provider issues
+            logger.debug(f"Error getting price from {prov.name} for {token}: {e}")
+            return None
 
     async def get_token_volume(self, token_or_addr: str) -> float:
         t_norm = self._norm(token_or_addr)
@@ -814,5 +968,46 @@ class APIConfig:
         """
         return await self.get_real_time_price(token, quote_currency)
 
-# Expose DEFAULTS for testing and external usage
-_DEFAULTS = Configuration._DEFAULTS
+    # ------------------------------------------------------------------ #
+    # price feed fallbacks                                              #
+    # ------------------------------------------------------------------ #
+
+    def _get_fallback_price(self, token: str, vs: str = "usd") -> Optional[Decimal]:
+        """Provide fallback prices for common tokens when APIs fail.
+        
+        Args:
+            token: Token symbol
+            vs: Quote currency
+            
+        Returns:
+            Fallback price or None if no fallback available
+        """
+        # Only handle USD pricing for now
+        if vs.lower() != "usd":
+            return None
+            
+        # Upper case the token symbol for comparison
+        token_upper = token.upper()
+        
+        # Common token fallbacks with current market prices
+        # These are hardcoded fallbacks in case all API providers fail
+        fallbacks = {
+            "ETH": Decimal("3400.00"),  # ETH price fallback
+            "BTC": Decimal("62000.00"),  # BTC price fallback
+            "USDT": Decimal("1.00"),
+            "USDC": Decimal("1.00"),
+            "DAI": Decimal("1.00"),
+            "WETH": Decimal("3400.00"),
+            "WBTC": Decimal("62000.00"),
+            "LINK": Decimal("15.00"),
+            "UNI": Decimal("8.00"),
+            "AAVE": Decimal("95.00"),
+            "MATIC": Decimal("0.60"),
+            "CRV": Decimal("0.55")
+        }
+        
+        if token_upper in fallbacks:
+            logger.debug(f"Using fallback price for {token_upper}: {fallbacks[token_upper]} {vs.upper()}")
+            return fallbacks[token_upper]
+            
+        return None

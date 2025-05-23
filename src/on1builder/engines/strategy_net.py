@@ -286,7 +286,7 @@ class StrategyNet:
         """
         try:
             # Check if required dependencies are available
-            if not self.transaction_core or not self.safety_net:
+            if not self.txc or not self.safety_net:
                 logger.warning("Required dependencies are not available")
                 return False
                 

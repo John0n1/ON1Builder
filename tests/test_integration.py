@@ -18,32 +18,55 @@ from on1builder.utils.logger import setup_logging
 # Set up logging for tests
 logger = setup_logging("TestIntegration", level="DEBUG")
 
-@pytest.fixture
+import pytest_asyncio  # Import asyncio fixture support
+
+@pytest_asyncio.fixture
 async def config():
     """Create a test configuration."""
     config = Configuration()
     await config.load()
     return config
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def multi_chain_config():
     """Create a test multi-chain configuration."""
     config = MultiChainConfiguration()
     await config.load()
     return config
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def abi_registry():
     """Create a test ABI registry."""
-    base_path = Path(__file__).parent.parent
-    registry = await get_registry(base_path)
+    # Create a new registry with reset state
+    registry = ABIRegistry()
+    
+    # Reset shared state to avoid test interference
+    ABIRegistry._GLOBAL_ABIS = {}
+    ABIRegistry._GLOBAL_SIG_MAP = {}
+    ABIRegistry._GLOBAL_SELECTOR_MAP = {}
+    ABIRegistry._FILE_HASH = {}
+    ABIRegistry._initialized = False
+    
+    # Add minimal ERC20 data for health check
+    ABIRegistry._GLOBAL_ABIS['erc20'] = [
+        {
+            "name": "transfer", 
+            "type": "function", 
+            "inputs": [
+                {"name": "to", "type": "address"}, 
+                {"name": "value", "type": "uint256"}
+            ]
+        }
+    ]
+    ABIRegistry._initialized = True
+    
     return registry
 
-@pytest.fixture
-async def db_manager():
+@pytest_asyncio.fixture
+async def db_manager(config):
     """Create a test database manager."""
-    db_path = ":memory:"  # Use in-memory SQLite for testing
-    manager = DatabaseManager(db_path)
+    # Use in-memory SQLite for testing
+    manager = DatabaseManager(config, db_url="sqlite+aiosqlite:///:memory:")
     await manager.initialize()
     yield manager
     await manager.close()
@@ -59,24 +82,41 @@ async def test_db_manager_initialization(db_manager):
     """Test that the database manager initializes correctly."""
     assert db_manager is not None
     
-    # Test recording a transaction
-    tx = {
-        "tx_hash": "0x123456",
-        "chain_id": "1",
-        "from_address": "0xabcdef",
-        "to_address": "0x123456",
-        "gas_price": 50,
-        "total_gas_cost": 1000000,
-        "status": "success"
-    }
+    # Test saving a transaction
+    tx_hash = "0x123456"
+    chain_id = 1
+    from_address = "0xabcdef"
+    to_address = "0x123456"
+    value = "0"  # No value in wei
+    gas_price = "50"
+    gas_used = 20000
+    block_number = 123456
+    status = True
+    data = '{"note": "test transaction"}'
     
-    result = await db_manager.record_transaction(tx)
-    assert result is True
+    # Using the save_transaction method that exists in the db_manager
+    result = await db_manager.save_transaction(
+        tx_hash=tx_hash,
+        chain_id=chain_id,
+        from_address=from_address,
+        to_address=to_address,
+        value=value,
+        gas_price=gas_price,
+        gas_used=gas_used,
+        block_number=block_number,
+        status=status,
+        data=data
+    )
+    
+    # Result should be the transaction ID or None if error occurred
+    assert result is not None
     
     # Test retrieving the transaction
-    retrieved_tx = await db_manager.get_transaction("0x123456")
+    retrieved_tx = await db_manager.get_transaction(tx_hash)
     assert retrieved_tx is not None
-    assert retrieved_tx["tx_hash"] == "0x123456"
+    assert retrieved_tx["tx_hash"] == tx_hash
+    assert retrieved_tx["chain_id"] == chain_id
+    assert retrieved_tx["from_address"] == from_address
 
 @pytest.mark.asyncio
 async def test_configuration_loading(config):

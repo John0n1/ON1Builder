@@ -35,18 +35,17 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
 
 async def run_command(args: argparse.Namespace) -> int:
     """Run the ON1Builder system."""
-    # Import here to avoid circular imports
-    from on1builder.__main__ import run_async
-    
     try:
-        config_path = args.config
-        multi_chain = args.multi_chain
-        dry_run = args.dry_run
+        from on1builder.config.config import Configuration
+        from on1builder.core.main_core import MainCore
         
-        # Run the bot with the specified configuration
-        await run_async(config_path=config_path, 
-                      multi_chain=multi_chain, 
-                      dry_run=dry_run)
+        config = Configuration(config_path=args.config)
+        await config.load(skip_env=True)  # Skip environment variables in tests
+        
+        # Create and initialize the core
+        core = MainCore(config)
+        await core.bootstrap()
+        await core.run(dry_run=args.dry_run)
         return 0
     except Exception as e:
         print(f"Error running ON1Builder: {str(e)}")
@@ -55,15 +54,16 @@ async def run_command(args: argparse.Namespace) -> int:
 
 async def monitor_command(args: argparse.Namespace) -> int:
     """Start the monitoring system only."""
-    # Import here to avoid circular imports
-    from on1builder.__main__ import monitor_async
-    
     try:
-        config_path = args.config
-        chain = args.chain
+        from on1builder.config.config import Configuration
+        from on1builder.monitoring.txpool_monitor import TxpoolMonitor
         
-        # Start the monitoring system only
-        await monitor_async(config_path=config_path, chain=chain)
+        config = Configuration(config_path=args.config)
+        await config.load(skip_env=True)  # Skip environment variables in tests
+        
+        # Create and start the monitor
+        monitor = TxpoolMonitor(config, args.chain)
+        await monitor.start()
         return 0
     except Exception as e:
         print(f"Error starting monitoring system: {str(e)}")

@@ -46,14 +46,18 @@ class TxpoolMonitor:
         self.configuration = configuration
 
         # normalise token list to lower-case addresses
-        self.monitored_tokens = {
-            (
-                api_config.get_token_address(t).lower()
-                if not t.startswith("0x")
-                else t.lower()
-            )
-            for t in monitored_tokens
-        }
+        self.monitored_tokens = set()
+        for t in monitored_tokens:
+            if t.startswith("0x"):
+                # If it's already an address, just lowercase it
+                self.monitored_tokens.add(t.lower())
+            else:
+                # Try to get the address from the token symbol
+                addr = api_config.get_token_address(t)
+                if addr is not None:
+                    self.monitored_tokens.add(addr.lower())
+                else:
+                    logger.warning(f"Could not find address for token symbol: {t}, skipping")
 
         # queues -------------------------------------------------------------
         self._tx_hash_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -69,10 +73,9 @@ class TxpoolMonitor:
         self._processed_hashes: set[str] = set()
         self._tx_cache: Dict[str, Dict[str, Any]] = {}
 
-        # concurrency guard
-        self._semaphore = asyncio.Semaphore(
-            self.configuration.MEMPOOL_MAX_PARALLEL_TASKS
-        )
+        # concurrency guard - default to 10 parallel tasks if not specified
+        max_parallel_tasks = getattr(self.configuration, "MEMPOOL_MAX_PARALLEL_TASKS", 10)
+        self._semaphore = asyncio.Semaphore(max_parallel_tasks)
 
         # Event for stopping the dispatcher
         self._stop_event = asyncio.Event()
@@ -245,8 +248,11 @@ class TxpoolMonitor:
         if tx_hash in self._tx_cache:
             return self._tx_cache[tx_hash]
 
-        delay = self.configuration.MEMPOOL_RETRY_DELAY
-        for _ in range(self.configuration.MEMPOOL_MAX_RETRIES):
+        # Get configuration values with defaults if not present
+        delay = getattr(self.configuration, "MEMPOOL_RETRY_DELAY", 0.5)
+        max_retries = getattr(self.configuration, "MEMPOOL_MAX_RETRIES", 3)
+        
+        for _ in range(max_retries):
             try:
                 tx = await self.web3.eth.get_transaction(tx_hash)
                 self._tx_cache[tx_hash] = tx
@@ -254,7 +260,8 @@ class TxpoolMonitor:
             except TransactionNotFound:
                 await asyncio.sleep(delay)
                 delay *= 1.5
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Error fetching transaction {tx_hash}: {e}")
                 break
         return None
 

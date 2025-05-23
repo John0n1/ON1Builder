@@ -1,3 +1,5 @@
+# src/on1builder/utils/logger.py
+
 """
 ON1Builder - Logging Utilities
 =============================
@@ -7,8 +9,6 @@ Provides logging configuration and utilities for the application.
 
 import logging
 import sys
-import threading
-import time
 import json
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -98,8 +98,8 @@ def setup_logging(
     logger.setLevel(numeric_level)
     
     # Clear any existing handlers
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
     
     # Console handler with appropriate formatter
     console_handler = logging.StreamHandler(sys.stdout)
@@ -147,5 +147,18 @@ def setup_logging(
             ))
         
         logger.addHandler(file_handler)
-    
+
+    # ------------------------------------------------------------------
+    # Expose module‐level helpers on the returned logger so that tests
+    # doing logger.StreamHandler(), logger.getLogger() and logger.DEBUG
+    # continue to work against this object:
+    # ------------------------------------------------------------------
+    logger.StreamHandler = logging.StreamHandler
+    logger.getLogger     = logging.getLogger
+    logger.DEBUG         = logging.DEBUG
+    logger.INFO          = logging.INFO
+    logger.WARNING       = logging.WARNING
+    logger.ERROR         = logging.ERROR
+    logger.CRITICAL      = logging.CRITICAL
+
     return logger

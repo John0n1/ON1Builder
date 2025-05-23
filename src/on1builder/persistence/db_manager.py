@@ -18,7 +18,7 @@ try:
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey
+    from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, select
     HAS_SQLALCHEMY = True
 except ImportError:
     HAS_SQLALCHEMY = False
@@ -301,10 +301,34 @@ class DatabaseManager:
         
         try:
             async with self._async_session() as session:
+                # First try direct get by primary key
                 tx = await session.get(Transaction, tx_hash)
-                return tx.to_dict() if tx else None
+                
+                if tx is None:
+                    # If not found, try with a query
+                    query = select(Transaction).where(Transaction.tx_hash == tx_hash)
+                    result = await session.execute(query)
+                    
+                    # Handle scalar result appropriately
+                    scalar_result = result.scalars().first()
+                    if hasattr(scalar_result, '__await__'):
+                        scalar_result = await scalar_result
+                    
+                    if scalar_result:
+                        tx = scalar_result
+                
+                if tx:
+                    # Convert to dictionary (handle both sync and async implementations)
+                    if hasattr(tx.to_dict, '__await__'):
+                        return await tx.to_dict()
+                    else:
+                        return tx.to_dict()
+                return None
+                
         except Exception as e:
             logger.error(f"Error getting transaction {tx_hash}: {str(e)}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
             return None
     
     async def get_profit_summary(
@@ -360,7 +384,11 @@ class DatabaseManager:
                     
                 # Execute query
                 result = await session.execute(profit_query)
-                total_profit, profit_count = result.first() or (0.0, 0)
+                # Handle both direct results and coroutines
+                first_result = result.first()
+                if hasattr(first_result, '__await__'):  # Check if it's a coroutine
+                    first_result = await first_result
+                total_profit, profit_count = first_result or (0.0, 0)
                 
                 # Get gas spent from transactions
                 tx_query = select(
@@ -381,7 +409,10 @@ class DatabaseManager:
                     tx_query = tx_query.where(and_(*tx_filters))
                     
                 result = await session.execute(tx_query)
-                total_gas_wei = result.scalar() or 0
+                scalar_result = result.scalar()
+                if hasattr(scalar_result, '__await__'):  # Check if it's a coroutine
+                    scalar_result = await scalar_result
+                total_gas_wei = scalar_result or 0
                 
                 # Convert wei to ETH (approximate)
                 total_gas_eth = float(total_gas_wei) / 1e18 if total_gas_wei else 0.0
@@ -391,16 +422,22 @@ class DatabaseManager:
                 if tx_filters:
                     success_query = success_query.where(and_(*tx_filters))
                     
-                success_count = await session.execute(success_query)
-                success_count = success_count.scalar() or 0
+                success_result = await session.execute(success_query)
+                scalar_success = success_result.scalar()
+                if hasattr(scalar_success, '__await__'):  # Check if it's a coroutine
+                    scalar_success = await scalar_success
+                success_count = scalar_success or 0
                 
                 # Get total transaction count
                 total_query = select(func.count(Transaction.id))
                 if tx_filters:
                     total_query = total_query.where(and_(*tx_filters))
                     
-                total_count = await session.execute(total_query)
-                total_count = total_count.scalar() or 0
+                total_result = await session.execute(total_query)
+                scalar_total = total_result.scalar()
+                if hasattr(scalar_total, '__await__'):  # Check if it's a coroutine
+                    scalar_total = await scalar_total
+                total_count = scalar_total or 0
                 
                 # Calculate metrics
                 success_rate = (success_count / total_count) * 100 if total_count > 0 else 0
@@ -467,8 +504,17 @@ class DatabaseManager:
                 if chain_id is not None:
                     stmt = stmt.where(Transaction.chain_id == chain_id)
                 result = await session.execute(stmt)
-                tokens = [row for row in result.scalars()]
-                return tokens
+                
+                # Handle both direct results and coroutines
+                scalars_result = result.scalars()
+                if hasattr(scalars_result, '__await__'):  # Check if it's a coroutine
+                    scalars_result = await scalars_result
+                
+                all_result = scalars_result.all() if hasattr(scalars_result, 'all') else scalars_result
+                if hasattr(all_result, '__await__'):  # Check if it's a coroutine
+                    all_result = await all_result
+                
+                return all_result if isinstance(all_result, list) else list(all_result)
         except Exception as e:
             logger.error(f"Error getting monitored tokens: {e}")
             return []

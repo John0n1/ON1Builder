@@ -188,7 +188,7 @@ async def run_async(
     from dotenv import load_dotenv
     
     from on1builder.utils.logger import setup_logging
-    from on1builder.config.config import load_config
+    from on1builder.config.config import Configuration, MultiChainConfiguration
     
     # Setup signal handlers for graceful shutdown
     shutdown_event = asyncio.Event()
@@ -205,19 +205,21 @@ async def run_async(
     if os.path.exists(env_file):
         load_dotenv(env_file)
     
-    # Configure logging
-    logger = setup_logging("ON1Builder", log_level=logging.INFO)
+    # Configure logging - Fix the parameter name from logger to level
+    logger = setup_logging("ON1Builder", level=logging.INFO)
     logger.info(f"Starting ON1Builder {'(multi-chain)' if multi_chain else ''}")
     logger.info(f"Configuration file: {config_path}")
     logger.info(f"Dry run: {dry_run}")
     
     try:
-        # Load configuration
-        config = load_config(config_path)
-        
+        # Load configuration using the appropriate class
         if multi_chain:
             # Import here to avoid circular dependencies
             from on1builder.core.multi_chain_core import MultiChainCore
+            
+            # Initialize multi-chain configuration and core
+            config = MultiChainConfiguration()
+            config.CONFIG_FILE = config_path
             
             # Initialize multi-chain core
             core = MultiChainCore(config=config, dry_run=dry_run)
@@ -236,19 +238,21 @@ async def run_async(
             # Import here to avoid circular dependencies
             from on1builder.core.main_core import MainCore
             
-            # Initialize main core
-            core = MainCore(config=config, dry_run=dry_run)
-            await core.initialize()
+            # Initialize configuration and core
+            config = Configuration()
+            config.CONFIG_FILE = config_path
             
-            # Start core operations
-            await core.start()
+            # Initialize main core - Pass config as a positional argument
+            core = MainCore(config)
             
-            # Wait for shutdown signal
-            await shutdown_event.wait()
+            # Set dry run flag if available
+            if hasattr(core, 'set_dry_run'):
+                core.set_dry_run(dry_run)
+                
+
+            await core.run()
             
-            # Perform graceful shutdown
-            logger.info("Shutting down main core...")
-            await core.shutdown()
+
             
     except Exception as e:
         logger.exception(f"Error in ON1Builder: {str(e)}")
@@ -257,11 +261,7 @@ async def run_async(
         logger.info("ON1Builder shutdown complete")
         
     return None
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("Shutting down...")
+
 
 async def monitor_async(
     chain: str,
@@ -281,7 +281,7 @@ async def monitor_async(
     from dotenv import load_dotenv
     
     from on1builder.utils.logger import setup_logging
-    from on1builder.config.config import load_config
+    from on1builder.config.config import Configuration
     from on1builder.monitoring.market_monitor import MarketMonitor
     from on1builder.monitoring.txpool_monitor import TxpoolMonitor
     
@@ -299,19 +299,21 @@ async def monitor_async(
     # Load environment variables
     if os.path.exists(env_file):
         load_dotenv(env_file)
-    
-    # Configure logging
-    logger = setup_logging("ON1Builder-Monitor", log_level=logging.INFO)
+        logging.info(f"Loaded environment from {env_file}")
+        
+    # Configure logging - Make sure we're using level instead of logger
+    logger = setup_logging("ON1Builder-Monitor", level=logging.INFO)
     logger.info(f"Starting ON1Builder monitor for chain: {chain}")
     logger.info(f"Configuration file: {config_path}")
     
     try:
-        # Load configuration
-        config = load_config(config_path)
-        chain_config = config.get('chains', {}).get(chain)
+        # Load configuration using Configuration class
+        config = Configuration()
+        config.CONFIG_FILE = config_path
+        chain_config = config.get_chain_config(chain)
         
         if not chain_config:
-            logger.error(f"Chain '{chain}' not found in configuration")
+            logging.error(f"Chain '{chain}' not found in configuration")
             return
         
         # Initialize market monitor
@@ -359,12 +361,11 @@ async def monitor_async(
 
 def main() -> int:
     """Main entry point for the application."""
-    # Directly call the async runner for CLI entry
-    run_async(
+    asyncio.run(run_async(
         config_path="configs/chains/config.yaml",
         multi_chain=False,
         env_file=".env"
-    )
+    ))
     return 0
 
 

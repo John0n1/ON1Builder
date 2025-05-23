@@ -36,4 +36,9 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+data/logs/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+test_data
 

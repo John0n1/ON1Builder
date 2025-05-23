@@ -15,8 +15,8 @@ from on1builder.config.config import Configuration
 @pytest.fixture
 def config():
     config = Configuration()
-    config.HTTP_ENDPOINT = "http://localhost:8545"
-    config.WEBSOCKET_ENDPOINT = "ws://localhost:8546"
+    config.HTTP_ENDPOINT = "HTTPS://ethereum-rpc.publicnode.com"
+    config.WEBSOCKET_ENDPOINT = "wss://ethereum-rpc.publicnode.com"
     config.CONNECTION_RETRY_COUNT = 3
     config.CONNECTION_RETRY_DELAY = 0.1  # short delay for tests
     config.WALLET_KEY = "0x" + "1" * 64  # Dummy private key
