@@ -1,6 +1,6 @@
 # ON1Builder 
 
-#### ON1BUILDER is a high-performance, secure, and reliable multi-chain blockchain transaction framework.  
+#### ON1BUILDER is a high-performance, multi-chain blockchain transaction framework.  
 
 #### It specializes in the construction, signing, simulation, and dispatch of MEV-style transactions across multiple blockchains, leveraging flash loans to eliminate upfront capital requirements.
 
