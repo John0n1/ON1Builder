@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ON1Builder Installation Guide</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+        }
+        p, li {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>ON1Builder Installation Guide</h1>
+    <p>This guide provides detailed instructions for installing ON1Builder in different environments and deployment scenarios.</p>
+
+    <h2>Prerequisites</h2>
+    <p>Before installing ON1Builder, ensure your system meets the following requirements:</p>
+
+    <h3>System Requirements</h3>
+    <ul>
+        <li><strong>CPU</strong>: 4+ cores (8+ recommended for production)</li>
+        <li><strong>RAM</strong>: 8+ GB (16+ GB recommended for production)</li>
+        <li><strong>Storage</strong>: SSD with at least 100GB free space</li>
+        <li><strong>Network</strong>: Stable internet connection with low latency</li>
+    </ul>
+
+    <h3>Software Requirements</h3>
+    <ul>
+        <li><strong>Operating System</strong>: Linux (Ubuntu 20.04+ recommended), macOS, or Windows with WSL2</li>
+        <li><strong>Python</strong>: Version 3.12 or higher</li>
+        <li><strong>Docker</strong>: Latest version (for containerized deployment)</li>
+        <li><strong>Docker Compose</strong>: Latest version (for multi-container orchestration)</li>
+        <li><strong>Git</strong>: For cloning the repository</li>
+    </ul>
+
+    <h2>Installation Methods</h2>
+    <p>ON1Builder can be installed and deployed in multiple ways:</p>
+    <ol>
+        <li><a href="#local-development-installation">Local Development Installation</a></li>
+        <li><a href="#production-installation">Production Installation</a></li>
+        <li><a href="#docker-installation">Docker Installation</a></li>
+        <li><a href="#multi-chain-installation">Multi-Chain Installation</a></li>
+    </ol>
+
+    <h2 id="local-development-installation">Local Development Installation</h2>
+    <p>For development and testing purposes:</p>
+
+    <h3>1. Clone the Repository</h3>
+    <pre><code>
+git clone https://github.com/John0n1/ON1Builder.git
+cd ON1Builder
+    </code></pre>
+
+    <h3>2. Set Up Environment</h3>
+    <pre><code>
+# Copy the template environment file
+cp template.env .env
+
+# Edit the .env file with your configuration
+nano .env
+    </code></pre>
+    <p>Configure the necessary environment variables:</p>
+    <ul>
+        <li>API keys for price data sources</li>
+        <li>Blockchain RPC endpoints</li>
+        <li>Wallet information</li>
+    </ul>
+
+    <h3>3. Install Dependencies Using Poetry (Recommended)</h3>
+    <pre><code>
+# Install poetry if not already installed
+pip install poetry
+
+# Install dependencies using the provided script
+./setup_dev.sh
+
+# Activate the virtual environment
+poetry shell
+    </code></pre>
+
+    <h3>4. Verify Installation</h3>
+    <pre><code>
+# Run the connection test
+python -m on1builder test-connection --config configs/chains/config.yaml
+    </code></pre>
+
+    <h2 id="production-installation">Production Installation</h2>
+    <p>For production environments:</p>
+
+    <h3>1. Clone the Repository</h3>
+    <pre><code>
+git clone https://github.com/John0n1/ON1Builder.git
+cd ON1Builder
+    </code></pre>
+
+    <h3>2. Set Up Environment</h3>
+    <pre><code>
+# Copy the template environment file
+cp template.env .env
+
+# Edit the .env file with your production configuration
+nano .env
+    </code></pre>
+
+    <h3>3. Set Correct Permissions</h3>
+    <pre><code>
+# Make scripts executable
+chmod +x infra/bash/*.sh
+
+# Set proper permissions for config files
+chmod 600 .env
+    </code></pre>
+
+    <h3>4. Run the Deployment Helper</h3>
+    <pre><code>
+./infra/bash/deploy_helper.sh
+    </code></pre>
+    <p>Select the appropriate deployment option from the interactive menu.</p>
+
+    <h2 id="docker-installation">Docker Installation</h2>
+    <p>For containerized deployment:</p>
+
+    <h3>1. Clone the Repository</h3>
+    <pre><code>
+git clone https://github.com/John0n1/ON1Builder.git
+cd ON1Builder
+    </code></pre>
+
+    <h3>2. Set Up Environment</h3>
+    <pre><code>
+# Copy the template environment file
+cp template.env .env
+
+# Edit the .env file with your configuration
+nano .env
+    </code></pre>
+
+    <h3>3. Build and Start the Docker Container</h3>
+    <pre><code>
+# Build the Docker image
+docker build -t on1builder:latest .
+
+# Run the container
+docker run -d --name on1builder \
+  --env-file .env \
+  -v $(pwd)/configs:/app/configs \
+  -v $(pwd)/data:/app/data \
+  -p 5001:5001 \
+  on1builder:latest
+    </code></pre>
+
+    <h3>4. Verify the Installation</h3>
+    <pre><code>
+# Check container logs
+docker logs on1builder
+    </code></pre>
+
+    <h2 id="multi-chain-installation">Multi-Chain Installation</h2>
+    <p>For running ON1Builder across multiple blockchains:</p>
+
+    <h3>1. Follow the Standard Installation Steps</h3>
+    <p>Complete either the <a href="#production-installation">Production Installation</a> or <a href="#docker-installation">Docker Installation</a> steps.</p>
+
+    <h3>2. Configure Multi-Chain Settings</h3>
+    <pre><code>
+# Edit the multi-chain configuration file
+nano configs/chains/config_multi_chain.yaml
+    </code></pre>
+    <p>Add the configuration for each blockchain you want to monitor.</p>
+
+    <h3>3. Deploy the Multi-Chain Setup</h3>
+    <pre><code>
+# Using the deployment helper
+./infra/bash/deploy_helper.sh
+
+# Select option for Multi-Chain deployment
+    </code></pre>
+    <p>Alternatively, deploy directly:</p>
+    <pre><code>
+./infra/bash/deploy_prod_multi_chain.sh
+    </code></pre>
+
+    <h2>Security Recommendations</h2>
+    <ol>
+        <li><strong>Private Key Management</strong>:
+            <ul>
+                <li>Use environment variables for private keys</li>
+                <li>Consider using a secret management system like HashiCorp Vault</li>
+            </ul>
+        </li>
+        <li><strong>Network Security</strong>:
+            <ul>
+                <li>Run behind a firewall</li>
+                <li>Use VPN for remote access</li>
+                <li>Set up SSH key authentication</li>
+            </ul>
+        </li>
+        <li><strong>Monitoring</strong>:
+            <ul>
+                <li>Set up alert notifications</li>
+                <li>Monitor system resources</li>
+                <li>Implement log rotation</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Troubleshooting Installation Issues</h2>
+
+    <h3>Common Issues</h3>
+    <ol>
+        <li><strong>Dependency Installation Errors</strong>:
+            <pre><code>
+pip install -r requirements.txt --no-cache-dir
+            </code></pre>
+        </li>
+        <li><strong>Permission Denied Errors</strong>:
+            <pre><code>
+chmod +x *.sh
+            </code></pre>
+        </li>
+        <li><strong>Docker Network Issues</strong>:
+            <pre><code>
+docker network inspect bridge
+            </code></pre>
+        </li>
+    </ol>
+    <p>For more troubleshooting help, see the <a href="troubleshooting.html">Troubleshooting Guide</a>.</p>
+
+    <h2>Next Steps</h2>
+    <p>After successful installation:</p>
+    <ol>
+        <li><a href="configuration.html">Configure your system</a></li>
+        <li><a href="monitoring.html">Set up monitoring</a></li>
+        <li><a href="running.html">Run ON1Builder</a></li>
+    </ol>
+    <p>For detailed API configuration or custom development, refer to the <a href="../reference/configuration_reference.html">Configuration Reference</a>.</p>
+</body>
+</html>

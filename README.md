@@ -47,6 +47,20 @@ python -m on1builder run --config configs/chains/config.yaml
 python -m on1builder run --config configs/chains/config_multi_chain.yaml
 ```
 
+### Converting Markdown to HTML
+
+ON1Builder includes a script to convert all `.md` files in the `docs` directory to HTML format.
+
+1. Ensure you have the `markdown2` library installed:
+   ```bash
+   pip install markdown2
+   ```
+
+2. Run the conversion script:
+   ```bash
+   python scripts/convert_md_to_html.py
+   ```
+
 ## Documentation
 
 For complete documentation, visit our [Documentation Center](docs/index.md).

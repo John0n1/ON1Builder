@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Reference</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+        }
+        p, li {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>API Reference</h1>
+    <p>This document provides a comprehensive reference for the ON1Builder API, including both the programmatic API for extending the framework and the REST API for external integrations.</p>
+
+    <h2>API Architecture Overview</h2>
+    <pre><code class="language-mermaid">
+flowchart TB
+    subgraph External["External Systems"]
+        Client["Client Applications"]
+        Monitoring["Monitoring Tools"]
+        Automation["Automation Services"]
+    end
+    
+    subgraph RESTAPI["REST API Layer"]
+        Auth["Authentication<br>& Authorization"]
+        Router["API Router"]
+        
+        subgraph Endpoints["API Endpoints"]
+            Status["Status Endpoints"]
+            Management["Management Endpoints"]
+            Data["Data Endpoints"]
+            Config["Configuration Endpoints"]
+        end
+    end
+    
+    subgraph Core["ON1Builder Core"]
+        MainCore["Main Core"]
+        Workers["Chain Workers"]
+        TxSystem["Transaction System"]
+        Safety["Safety System"]
+    end
+    
+    External --> Auth
+    Auth --> Router
+    Router --> Endpoints
+    Endpoints --> Core
+    
+    style External fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style RESTAPI fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style Endpoints fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style Core fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style Auth fill:#fbb,stroke:#333,stroke-width:1px
+    style Router fill:#bbf,stroke:#333,stroke-width:1px
+    style MainCore fill:#bfb,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <h2>REST API</h2>
+    <p>ON1Builder exposes a REST API that can be used to monitor and control the application.</p>
+
+    <h3>Base URL</h3>
+    <p>The API is available at:</p>
+    <pre><code>
+http://your-server:8080/api/v1
+    </code></pre>
+    <p>By default, the API runs on port 8080, but this can be configured in your configuration file:</p>
+    <pre><code>
+API_PORT: 8080
+API_ENABLE: true
+    </code></pre>
+
+    <h3>Authentication</h3>
+    <p>To secure the API, authentication can be enabled:</p>
+    <pre><code>
+API_ENABLE_AUTH: true
+API_AUTH_TOKEN: "your-secure-token"
+    </code></pre>
+    <p>When authentication is enabled, include the token in the <code>Authorization</code> header:</p>
+    <pre><code>
+Authorization: Bearer your-secure-token
+    </code></pre>
+
+    <h3>Endpoints</h3>
+    <pre><code class="language-mermaid">
+classDiagram
+    class SystemEndpoints {
+        GET /status
+        GET /metrics
+        GET /health
+        POST /control/shutdown
+        POST /control/restart
+    }
+    
+    class ChainEndpoints {
+        GET /chains
+        GET /chains/{chain_id}/status
+        POST /chains/{chain_id}/enable
+        POST /chains/{chain_id}/disable
+    }
+    
+    class TransactionEndpoints {
+        GET /transactions
+        GET /transactions/{tx_hash}
+        POST /transactions/simulate
+        POST /transactions/execute
+    }
+    
+    class ConfigurationEndpoints {
+        GET /config
+        GET /config/{section}
+        PUT /config/{section}
+        POST /config/reload
+    }
+    
+    SystemEndpoints --|> APIBase : extends
+    ChainEndpoints --|> APIBase : extends
+    TransactionEndpoints --|> APIBase : extends
+    ConfigurationEndpoints --|> APIBase : extends
+    </code></pre>
+
+    <h4>System Status</h4>
+    <pre><code>
+GET /status
+    </code></pre>
+    <p>Returns the overall system status:</p>
+    <pre><code>
+{
+  "status": "running",
+  "uptime": 3600,
+  "version": "1.0.0",
+  "chains": [
+    {
+      "chain_id": 1,
+      "name": "Ethereum Mainnet",
+      "status": "connected",
+      "block_height": 16123456
+    },
+    {
+      "chain_id": 137,
+      "name": "Polygon Mainnet",
+      "status": "connected",
+      "block_height": 45678901
+    }
+  ]
+}
+    </code></pre>
+
+    <h4>Chain Status</h4>
+    <pre><code>
+GET /chains/{chain_id}/status
+    </code></pre>
+    <p>Returns status information for a specific chain:</p>
+    <pre><code>
+{
+  "chain_id": 1,
+  "name": "Ethereum Mainnet",
+  "status": "connected",
+  "block_height": 16123456,
+  "gas_price": "25.5",
+  "gas_price_unit": "gwei",
+  "wallet_balance": "1.234",
+  "wallet_balance_unit": "ETH",
+  "transactions_today": 15,
+  "successful_transactions": 14,
+  "failed_transactions": 1
+}
+    </code></pre>
+
+    <h4>Transactions</h4>
+    <pre><code>
+GET /transactions
+    </code></pre>
+    <p>Returns a list of recent transactions:</p>
+    <pre><code>
+{
+  "transactions": [
+    {
+      "tx_hash": "0x1234...",
+      "chain_id": 1,
+      "status": "confirmed",
+      "block_number": 16123456,
+      "timestamp": "2023-06-15T12:34:56Z",
+      "from": "0xabcd...",
+      "to": "0xefgh...",
+      "value": "0.1",
+      "value_unit": "ETH",
+      "gas_used": 150000,
+      "gas_price": "25.5",
+      "gas_price_unit": "gwei",
+      "strategy": "flash_loan"
+    },
+    // ...more transactions...
+  ],
+  "pagination": {
+    "page": 1,
+    "total_pages": 5,
+    "total_items": 100,
+    "items_per_page": 20
+  }
+}
+    </code></pre>
+    <p>Query parameters:</p>
+    <ul>
+        <li><code>page</code>: Page number (default: 1)</li>
+        <li><code>per_page</code>: Items per page (default: 20, max: 100)</li>
+        <li><code>chain_id</code>: Filter by chain ID</li>
+        <li><code>status</code>: Filter by status (pending, confirmed, failed)</li>
+        <li><code>from</code>: Filter by start timestamp (ISO 8601)</li>
+        <li><code>to</code>: Filter by end timestamp (ISO 8601)</li>
+    </ul>
+
+    <h4>Transaction Details</h4>
+    <pre><code>
+GET /transactions/{tx_hash}
+    </code></pre>
+    <p>Returns detailed information about a specific transaction:</p>
+    <pre><code>
+{
+  "tx_hash": "0x1234...",
+  "chain_id": 1,
+  "status": "confirmed",
+  "block_number": 16123456,
+  "timestamp": "2023-06-15T12:34:56Z",
+  "from": "0xabcd...",
+  "to": "0xefgh...",
+  "value": "0.1",
+  "value_unit": "ETH",
+  "gas_used": 150000,
+  "gas_price": "25.5",
+  "gas_price_unit": "gwei",
+  "strategy": "flash_loan",
+  "profit": "0.05",
+  "profit_unit": "ETH",
+  "input_data": "0x...",
+  "logs": [
+    // Transaction logs
+  ],
+  "receipt": {
+    // Full transaction receipt
+  }
+}
+    </code></pre>
+
+    <h4>Metrics</h4>
+    <pre><code>
+GET /metrics
+    </code></pre>
+    <p>Returns system metrics in a format compatible with Prometheus:</p>
+    <pre><code>
+# HELP on1builder_transactions_total Total number of transactions
+# TYPE on1builder_transactions_total counter
+on1builder_transactions_total{chain_id="1"} 150
+on1builder_transactions_total{chain_id="137"} 75
+
+# HELP on1builder_gas_price_gwei Current gas price in Gwei
+# TYPE on1builder_gas_price_gwei gauge
+on1builder_gas_price_gwei{chain_id="1"} 25.5
+on1builder_gas_price_gwei{chain_id="137"} 10.2
+
+# ...more metrics...
+    </code></pre>
+
+    <h4>Control Endpoints</h4>
+    <pre><code>
+POST /control/start
+    </code></pre>
+    <p>Start the system:</p>
+    <pre><code>
+{
+  "success": true,
+  "message": "System started",
+  "timestamp": "2023-06-15T12:34:56Z"
+}
+    </code></pre>
+
+    <pre><code>
+POST /control/stop
+    </code></pre>
+    <p>Stop the system:</p>
+    <pre><code>
+{
+  "success": true,
+  "message": "System stopped",
+  "timestamp": "2023-06-15T12:34:56Z"
+}
+    </code></pre>
+
+    <pre><code>
+POST /control/restart
+    </code></pre>
+    <p>Restart the system:</p>
+    <pre><code>
+{
+  "success": true,
+  "message": "System restarted",
+  "timestamp": "2023-06-15T12:34:56Z"
+}
+    </code></pre>
+
+    <h4>Configuration</h4>
+    <pre><code>
+GET /config
+    </code></pre>
+    <p>Get the current configuration (sensitive data redacted):</p>
+    <pre><code>
+{
+  "chain_id": 1,
+  "chain_name": "Ethereum Mainnet",
+  "http_endpoint": "https://mainnet.infura.io/v3/***",
+  "websocket_endpoint": "wss://mainnet.infura.io/ws/v3/***",
+  "wallet_address": "0xabcd...",
+  "max_gas_price_gwei": 100,
+  "slippage_default": 0.05,
+  // ...more configuration...
+}
+    </code></pre>
+
+    <pre><code>
+PUT /config
+    </code></pre>
+    <p>Update configuration (requires authentication):</p>
+    <pre><code>
+{
+  "success": true,
+  "message": "Configuration updated",
+  "timestamp": "2023-06-15T12:34:56Z",
+  "requires_restart": true
+}
+    </code></pre>
+
+    <h2>Programmatic API</h2>
+    <p>ON1Builder provides a programmatic API that can be used to extend the framework, create custom strategies, or integrate with other systems.</p>
+    <pre><code class="language-mermaid">
+classDiagram
+    class MainCore {
+        +Config config
+        +start()
+        +stop()
+        +get_status()
+        +execute_strategy()
+    }
+    
+    class MultiChainCore {
+        +Dict chain_workers
+        +start()
+        +stop()
+        +get_chain_worker()
+        +create_chain_worker()
+    }
+    
+    class ChainWorker {
+        +ChainConfig config
+        +start()
+        +stop()
+        +connect()
+        +execute_strategy()
+        +monitor_blocks()
+    }
+    
+    class TransactionCore {
+        +build_transaction()
+        +estimate_gas()
+        +simulate_transaction()
+        +execute_transaction()
+        +get_transaction_status()
+    }
+    
+    class SafetyNet {
+        +check_transaction()
+        +validate_profitability()
+        +check_gas_limits()
+        +simulate_transaction()
+    }
+    
+    class Strategy {
+        <<interface>>
+        +execute()
+        +validate()
+        +calculate_profit()
+    }
+    
+    MultiChainCore --|> MainCore : extends
+    MainCore o-- ChainWorker : manages
+    ChainWorker o-- TransactionCore : uses
+    ChainWorker o-- SafetyNet : uses
+    ChainWorker o-- Strategy : executes
+    TransactionCore --> SafetyNet : checks with
+    </code></pre>
+
+    <h3>Core Classes</h3>
+
+    <h4>MainCore</h4>
+    <p>The main application core that coordinates all components.</p>
+    <pre><code>
+from on1builder.core import MainCore
+
+# Initialize core
+core = MainCore(config_path="config.yaml")
+
+# Start and stop
+await core.start()
+await core.stop()
+
+# Get status
+status = await core.get_status()
+
+# Execute strategy
+result = await core.execute_strategy(strategy_name, strategy_params)
+    </code></pre>
+
+    <h4>MultiChainCore</h4>
+    <p>Extended core for multi-chain operations.</p>
+    <pre><code>
+from on1builder.core import MultiChainCore
+
+# Initialize multi-chain core
+core = MultiChainCore(config_path="config_multi_chain.yaml")
+
+# Get chain-specific worker
+eth_worker = core.get_chain_worker(chain_id=1)
+
+# Execute on specific chain
+result = await eth_worker.execute_strategy(strategy_name, strategy_params)
+    </code></pre>
+
+    <h4>TransactionCore</h4>
+    <p>Handles transaction building, signing, and execution.</p>
+    <pre><code>
+from on1builder.core import TransactionCore
+
+# Create transaction
+tx = await tx_core.build_transaction(
+    to_address="0x...",
+    value=0.1,  # ETH
+    data="0x...",
+    gas_price_strategy="fast"
+)
+
+# Simulate transaction
+simulation = await tx_core.simulate_transaction(tx)
+
+# Send transaction
+receipt = await tx_core.send_transaction(tx)
+
+# Get transaction status
+status = await tx_core.get_transaction_status(tx_hash)
+    </code></pre>
+
+    <h3>Strategy Development</h3>
+    <p>Custom strategies can be created by inheriting from the <code>Strategy</code> base class:</p>
+    <pre><code>
+from on1builder.strategies import Strategy
+
+class MyCustomStrategy(Strategy):
+    name = "my_custom_strategy"
+    description = "My custom trading strategy"
+    
+    def __init__(self, config, tx_core, market_monitor):
+        super().__init__(config, tx_core, market_monitor)
+        # Initialize strategy-specific components
+        
+    async def find_opportunities(self):
+        # Logic to find opportunities
+        opportunities = []
+        # ... analyze market conditions ...
+        return opportunities
+        
+    async def execute(self, opportunity):
+        # Execute the strategy
+        # ... build and send transactions ...
+        return result
+    </code></pre>
+    <p>Register your custom strategy:</p>
+    <pre><code>
+from on1builder.strategies import register_strategy
+from my_strategies import MyCustomStrategy
+
+register_strategy(MyCustomStrategy)
+    </code></pre>
+
+    <h3>Event Handling</h3>
+    <p>Subscribe to system events:</p>
+    <pre><code>
+from on1builder.events import EventBus
+
+# Subscribe to block events
+async def on_new_block(block):
+    print(f"New block: {block['number']}")
+    
+EventBus.subscribe("new_block", on_new_block)
+
+# Subscribe to transaction events
+async def on_transaction(tx):
+    print(f"Transaction: {tx['hash']}")
+    
+EventBus.subscribe("transaction", on_transaction)
+
+# Publish custom events
+await EventBus.publish("custom_event", {"data": "value"})
+    </code></pre>
+
+    <h3>Market Monitor</h3>
+    <p>Access market data:</p>
+    <pre><code>
+from on1builder.monitoring import MarketMonitor
+
+# Get token price
+price = await market_monitor.get_token_price("ETH", "USD")
+
+# Get token pair price
+pair_price = await market_monitor.get_pair_price("ETH", "USDT")
+
+# Get historical prices
+historical = await market_monitor.get_historical_prices("ETH", "USD", days=7)
+
+# Subscribe to price updates
+async def on_price_update(price_data):
+    print(f"New ETH price: ${price_data['price']}")
+    
+await market_monitor.subscribe_price_updates("ETH", "USD", on_price_update)
+    </code></pre>
+
+    <h3>Utilities</h3>
+    <p>Various utility functions:</p>
+    <pre><code>
+from on1builder.utils import (
+    convert_to_wei,
+    convert_from_wei,
+    calculate_gas_cost,
+    estimate_profit,
+    validate_address
+)
+
+# Convert ETH to Wei
+wei_amount = convert_to_wei(1.5)  # 1.5 ETH to Wei
+
+# Calculate gas cost
+gas_cost = calculate_gas_cost(
+    gas_used=150000,
+    gas_price_gwei=25.5
+)  # in ETH
+
+# Estimate profit
+profit = estimate_profit(
+    revenue=0.2,  # ETH
+    gas_cost=0.05,  # ETH
+    slippage=0.01  # 1%
+)
+
+# Validate Ethereum address
+is_valid = validate_address("0x...")
+    </code></pre>
+
+    <h2>WebSocket API</h2>
+    <p>For real-time updates, ON1Builder also provides a WebSocket API:</p>
+    <pre><code>
+ws://your-server:8080/ws
+    </code></pre>
+
+    <h3>Authentication</h3>
+    <p>When authentication is enabled, connect with a token:</p>
+    <pre><code>
+ws://your-server:8080/ws?token=your-secure-token
+    </code></pre>
+
+    <h3>Available Events</h3>
+    <p>Subscribe to specific events:</p>
+    <pre><code>
+{
+  "action": "subscribe",
+  "channels": ["blocks", "transactions", "metrics"]
+}
+    </code></pre>
+    <p>Example block event:</p>
+    <pre><code>
+{
+  "event": "block",
+  "data": {
+    "chain_id": 1,
+    "block_number": 16123456,
+    "timestamp": "2023-06-15T12:34:56Z",
+    "transactions": 150,
+    "gas_used": 12500000,
+    "gas_limit": 30000000
+  }
+}
+    </code></pre>
+    <p>Example transaction event:</p>
+    <pre><code>
+{
+  "event": "transaction",
+  "data": {
+    "tx_hash": "0x1234...",
+    "chain_id": 1,
+    "status": "confirmed",
+    "block_number": 16123456,
+    "timestamp": "2023-06-15T12:34:56Z",
+    "from": "0xabcd...",
+    "to": "0xefgh...",
+    "value": "0.1",
+    "value_unit": "ETH",
+    "gas_used": 150000,
+    "gas_price": "25.5",
+    "gas_price_unit": "gwei"
+  }
+}
+    </code></pre>
+    <p>Example metrics event:</p>
+    <pre><code>
+{
+  "event": "metrics",
+  "data": {
+    "timestamp": "2023-06-15T12:34:56Z",
+    "system": {
+      "cpu_usage": 25.5,
+      "memory_usage": 1024000000,
+      "disk_usage": 35.0
+    },
+    "chains": [
+      {
+        "chain_id": 1,
+        "block_height": 16123456,
+        "gas_price": "25.5",
+        "wallet_balance": "1.234"
+      }
+    ],
+    "transactions": {
+      "total": 150,
+      "today": 15,
+      "successful": 140,
+      "failed": 10
+    },
+    "profit": {
+      "total": "5.678",
+      "today": "0.123",
+      "unit": "ETH"
+    }
+  }
+}
+    </code></pre>
+
+    <h2>Error Handling</h2>
+    <p>All API endpoints return standard HTTP status codes:</p>
+    <ul>
+        <li><code>200 OK</code>: Request was successful</li>
+        <li><code>400 Bad Request</code>: Invalid request parameters</li>
+        <li><code>401 Unauthorized</code>: Authentication required</li>
+        <li><code>403 Forbidden</code>: Insufficient permissions</li>
+        <li><code>404 Not Found</code>: Resource not found</li>
+        <li><code>500 Internal Server Error</code>: Server error</li>
+    </ul>
+    <p>Error responses include additional details:</p>
+    <pre><code>
+{
+  "error": true,
+  "code": "INVALID_PARAMETER",
+  "message": "Invalid chain ID",
+  "details": {
+    "parameter": "chain_id",
+    "value": "invalid",
+    "expected": "integer"
+  },
+  "timestamp": "2023-06-15T12:34:56Z"
+}
+    </code></pre>
+
+    <h2>Rate Limiting</h2>
+    <p>To prevent abuse, rate limiting is applied to API endpoints:</p>
+    <pre><code>
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1623760496
+    </code></pre>
+    <p>When rate limits are exceeded, a <code>429 Too Many Requests</code> status code is returned.</p>
+
+    <h2>Versioning</h2>
+    <p>The API is versioned to ensure backward compatibility:</p>
+    <pre><code>
+/api/v1/... - Current stable API
+/api/v2/... - Next generation API (when available)
+    </code></pre>
+
+    <h2>Conclusion</h2>
+    <p>The ON1Builder API provides comprehensive access to the system's functionality, allowing for monitoring, control, and integration with external systems. The programmatic API enables customization and extension of the framework's capabilities.</p>
+
+    <p>Next Steps:</p>
+    <ul>
+        <li>Explore the <a href="architecture.html">Architecture Overview</a> for a high-level understanding</li>
+        <li>Learn about all available <a href="configuration_reference.html">Configuration Options</a></li>
+        <li>Understand the <a href="components.html">Components</a> in detail</li>
+        <li>Try the <a href="../examples/single_chain_example.html">Single Chain Example</a> to get started</li>
+        <li>Return to the <a href="../index.html">Main Documentation</a></li>
+    </ul>
+</body>
+</html>

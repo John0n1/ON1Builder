@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running ON1Builder</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+        }
+        p, li {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>Running ON1Builder</h1>
+    <p>This guide covers the various ways to run ON1Builder, including command-line options, running modes, and production deployment.</p>
+
+    <h2>Running Modes</h2>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    Start([Start ON1Builder]) --> Config[Load Configuration]
+    Config --> ModeSelect{Select Running Mode}
+    
+    ModeSelect -->|Single Chain| SingleChain[Initialize Single Chain Mode]
+    ModeSelect -->|Multi Chain| MultiChain[Initialize Multi Chain Mode]
+    ModeSelect -->|Development| DevMode[Initialize Development Mode]
+    ModeSelect -->|Production| ProdMode[Initialize Production Mode]
+    
+    SingleChain --> Connect[Connect to Blockchain]
+    MultiChain --> ConnectMulti[Connect to Multiple Blockchains]
+    DevMode --> EnableDebug[Enable Debug Features]
+    ProdMode --> EnableSecurity[Enable Security Features]
+    
+    Connect --> Run[Run Core System]
+    ConnectMulti --> Run
+    EnableDebug --> Run
+    EnableSecurity --> Run
+    
+    Run --> Monitor[Monitor System]
+    Monitor --> End([System Running])
+    
+    style Start fill:#bbf,stroke:#333,stroke-width:2px
+    style End fill:#bbf,stroke:#333,stroke-width:2px
+    style Config fill:#bfb,stroke:#333,stroke-width:1px
+    style ModeSelect fill:#fbb,stroke:#333,stroke-width:1px
+    style Run fill:#fbf,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <ol>
+        <li><strong>Single-Chain Mode</strong>: Running on a single blockchain</li>
+        <li><strong>Multi-Chain Mode</strong>: Running on multiple blockchains simultaneously</li>
+        <li><strong>Development Mode</strong>: For testing and development</li>
+        <li><strong>Production Mode</strong>: For secure, reliable production operation</li>
+    </ol>
+
+    <h2>Prerequisites</h2>
+    <p>Before running ON1Builder, ensure you have:</p>
+    <ol>
+        <li>Completed the <a href="installation.html">installation process</a></li>
+        <li>Created a <a href="configuration.html">configuration file</a></li>
+        <li>Set up your wallet and obtained the necessary API keys</li>
+    </ol>
+
+    <h2>Basic Command Line Usage</h2>
+    <p>The basic command to run ON1Builder is:</p>
+
+    <pre><code>
+python -m on1builder run --config CONFIG_PATH [OPTIONS]
+    </code></pre>
+
+    <p>Where:</p>
+    <ul>
+        <li><code>CONFIG_PATH</code> is the path to your configuration YAML file</li>
+        <li><code>[OPTIONS]</code> are additional command-line parameters</li>
+    </ul>
+
+    <pre><code class="language-mermaid">
+sequenceDiagram
+    actor User
+    participant CLI as Command Line Interface
+    participant Config as Configuration Loader
+    participant Core as ON1Builder Core
+    participant Chain as Chain Interface
+    
+    User->>CLI: on1builder run --config path/to/config.yaml
+    activate CLI
+    CLI->>Config: Load configuration file
+    activate Config
+    Config-->>CLI: Configuration loaded
+    deactivate Config
+    
+    CLI->>Core: Initialize core with config
+    activate Core
+    Core->>Chain: Connect to blockchain(s)
+    activate Chain
+    Chain-->>Core: Connection established
+    
+    Core->>Core: Start monitoring loop
+    
+    Note over User,Chain: System is now running
+    
+    User->>CLI: Ctrl+C (Interrupt)
+    CLI->>Core: Signal shutdown
+    Core->>Chain: Close connections
+    deactivate Chain
+    Core-->>CLI: Shutdown complete
+    deactivate Core
+    CLI-->>User: Process terminated
+    deactivate CLI
+    </code></pre>
+
+    <h3>Common Command Line Options</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Option</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>--config</code></td>
+                <td>Path to configuration file</td>
+            </tr>
+            <tr>
+                <td><code>--debug</code></td>
+                <td>Enable debug logging</td>
+            </tr>
+            <tr>
+                <td><code>--dry-run</code></td>
+                <td>Simulate transactions without execution</td>
+            </tr>
+            <tr>
+                <td><code>--chain-id</code></td>
+                <td>Only run on specified chain ID (for multi-chain configs)</td>
+            </tr>
+            <tr>
+                <td><code>--log-level</code></td>
+                <td>Set logging level (DEBUG, INFO, WARNING, ERROR)</td>
+            </tr>
+            <tr>
+                <td><code>--help</code></td>
+                <td>Show help message and exit</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Running in Single-Chain Mode</h2>
+    <p>To run ON1Builder on a single blockchain:</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/config.yaml
+    </code></pre>
+
+    <p>This will:</p>
+    <ol>
+        <li>Load the specified configuration</li>
+        <li>Connect to the blockchain</li>
+        <li>Start monitoring for opportunities</li>
+        <li>Execute transactions according to your configuration</li>
+    </ol>
+
+    <h2>Running in Multi-Chain Mode</h2>
+    <p>To run ON1Builder across multiple blockchains:</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/config_multi_chain.yaml
+    </code></pre>
+
+    <p>This will start separate workers for each chain defined in your multi-chain configuration.</p>
+
+    <h2>Development and Testing</h2>
+
+    <h3>Dry Run Mode</h3>
+    <p>To run in dry-run mode (simulating but not executing transactions):</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/config.yaml --dry-run
+    </code></pre>
+
+    <h3>Debug Mode</h3>
+    <p>To enable more verbose logging:</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/config.yaml --debug
+    </code></pre>
+
+    <h3>Testing a Connection</h3>
+    <p>To test that your blockchain connection is working without starting the full system:</p>
+
+    <pre><code>
+python -m on1builder test-connection --config configs/chains/config.yaml
+    </code></pre>
+
+    <h3>Running in Testnet Mode</h3>
+    <p>To run on a testnet, use a configuration file with testnet settings:</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/testnet_config.yaml
+    </code></pre>
+
+    <h2>Production Deployment</h2>
+    <p>For production environments, we recommend using Docker for reliable operation.</p>
+
+    <h3>Using Docker</h3>
+    <p>Start the application using Docker Compose:</p>
+
+    <pre><code>
+# Start in detached mode
+docker-compose -f docker/compose/docker-compose.prod.yml up -d
+
+# View logs
+docker-compose -f docker/compose/docker-compose.prod.yml logs -f
+
+# Stop the application
+docker-compose -f docker/compose/docker-compose.prod.yml down
+    </code></pre>
+
+    <h3>Using the Deployment Helper</h3>
+    <p>The project includes a deployment helper script:</p>
+
+    <pre><code>
+# Interactive deployment helper
+./infra/bash/deploy_helper.sh
+    </code></pre>
+
+    <p>This script will guide you through deployment options including:</p>
+    <ul>
+        <li>Single-chain or multi-chain deployment</li>
+        <li>Configuration validation</li>
+        <li>Starting and stopping the application</li>
+        <li>Viewing logs and monitoring data</li>
+    </ul>
+
+    <h2>Monitoring Running Instances</h2>
+    <p>While ON1Builder is running, you can:</p>
+    <ol>
+        <li>Check logs in <code>data/logs/</code></li>
+        <li>View Prometheus metrics at <code>http://localhost:9090</code> (if enabled)</li>
+        <li>Access Grafana dashboards at <code>http://localhost:3000</code> (if configured)</li>
+    </ol>
+
+    <p>For more information on monitoring, see the <a href="monitoring.html">Monitoring Guide</a>.</p>
+
+    <h2>Command Line Interface Reference</h2>
+    <p>ON1Builder includes a comprehensive CLI with the following commands:</p>
+
+    <h3>Main Commands</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Command</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>run</code></td>
+                <td>Run the main application</td>
+            </tr>
+            <tr>
+                <td><code>test-connection</code></td>
+                <td>Test blockchain connection</td>
+            </tr>
+            <tr>
+                <td><code>validate-config</code></td>
+                <td>Validate a configuration file</td>
+            </tr>
+            <tr>
+                <td><code>version</code></td>
+                <td>Show version information</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Run Command Options</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Option</th>
+                <th>Description</th>
+                <th>Default</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>--config</code></td>
+                <td>Path to configuration file</td>
+                <td>Required</td>
+            </tr>
+            <tr>
+                <td><code>--debug</code></td>
+                <td>Enable debug logging</td>
+                <td>False</td>
+            </tr>
+            <tr>
+                <td><code>--dry-run</code></td>
+                <td>Simulate without execution</td>
+                <td>False</td>
+            </tr>
+            <tr>
+                <td><code>--chain-id</code></td>
+                <td>Only run on specified chain ID</td>
+                <td>All chains</td>
+            </tr>
+            <tr>
+                <td><code>--log-level</code></td>
+                <td>Set logging level</td>
+                <td>INFO</td>
+            </tr>
+            <tr>
+                <td><code>--log-file</code></td>
+                <td>Path to log file</td>
+                <td><code>data/logs/on1builder.log</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Examples</h3>
+    <p>Test a configuration file:</p>
+
+    <pre><code>
+python -m on1builder validate-config --config configs/chains/my_config.yaml
+    </code></pre>
+
+    <p>Run with custom log file:</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/config.yaml --log-file custom_log.log
+    </code></pre>
+
+    <p>Run only on Ethereum Mainnet in a multi-chain configuration:</p>
+
+    <pre><code>
+python -m on1builder run --config configs/chains/config_multi_chain.yaml --chain-id 1
+    </code></pre>
+
+    <h2>Stopping and Restarting</h2>
+    <p>To gracefully stop a running instance:</p>
+    <ol>
+        <li>If running in the foreground: Press <code>Ctrl+C</code></li>
+        <li>If running in Docker: <code>docker-compose -f docker/compose/docker-compose.prod.yml down</code></li>
+        <li>For emergency shutdown: <code>./infra/bash/emergency_shutdown.sh</code></li>
+    </ol>
+
+    <p>To restart:</p>
+    <ol>
+        <li>Simply run the application again with the same command</li>
+        <li>For Docker: <code>docker-compose -f docker/compose/docker-compose.prod.yml up -d</code></li>
+    </ol>
+
+    <h2>Next Steps</h2>
+    <p>Now that you know how to run ON1Builder, you might want to:</p>
+    <ol>
+        <li>Learn how to <a href="monitoring.html">monitor your running instance</a></li>
+        <li>Troubleshoot <a href="troubleshooting.html">common issues</a></li>
+        <li>Explore <a href="../reference/configuration_reference.html">advanced configurations</a></li>
+    </ol>
+</body>
+</html>

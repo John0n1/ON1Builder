@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ON1Builder Configuration Guide</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+        }
+        p, li {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>ON1Builder Configuration Guide</h1>
+    <p>This guide covers the configuration options for ON1Builder, explaining how to structure your configuration files and what each setting does.</p>
+
+    <h2>Configuration Files</h2>
+    <p>ON1Builder uses YAML files for configuration. The main configuration files are:</p>
+    <ul>
+        <li><code>configs/chains/config.yaml</code> - Single-chain configuration</li>
+        <li><code>configs/chains/config_multi_chain.yaml</code> - Multi-chain configuration</li>
+        <li><code>configs/chains/example_config.yaml</code> - Example with commented settings</li>
+    </ul>
+    <p>Configuration is supplemented by environment variables, typically stored in a <code>.env</code> file in the project root.</p>
+
+    <h2>Configuration Structure</h2>
+    <p>The configuration is organized into several sections:</p>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    subgraph ConfigurationFile["Configuration File"]
+        ChainSettings["Chain Settings"]
+        WalletSettings["Wallet Settings"]
+        SafetyParameters["Safety Parameters"]
+        MonitoringSettings["Monitoring Settings"]
+        StrategySettings["Strategy Settings"]
+    end
+    
+    subgraph EnvFile[".env File"]
+        Secrets["Secrets & Keys"]
+        EnvOverrides["Environment Overrides"]
+    end
+    
+    ConfigurationFile --> ON1Builder["ON1Builder System"]
+    EnvFile --> ON1Builder
+    
+    style ConfigurationFile fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style EnvFile fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style ChainSettings fill:#bfb,stroke:#333,stroke-width:1px
+    style WalletSettings fill:#bbf,stroke:#333,stroke-width:1px
+    style SafetyParameters fill:#fbb,stroke:#333,stroke-width:1px
+    style MonitoringSettings fill:#fbf,stroke:#333,stroke-width:1px
+    style StrategySettings fill:#bff,stroke:#333,stroke-width:1px
+    style Secrets fill:#fbb,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <ol>
+        <li><strong>Chain Settings</strong> - Blockchain-specific settings</li>
+        <li><strong>Wallet Settings</strong> - Wallet and private key configuration</li>
+        <li><strong>Safety Parameters</strong> - Risk management and safety settings</li>
+        <li><strong>Monitoring Settings</strong> - Prometheus and alerting configuration</li>
+        <li><strong>Strategy Settings</strong> - Strategy-specific parameters</li>
+    </ol>
+
+    <h2>Basic Configuration Example</h2>
+    <p>Here's a minimal configuration example for a single chain:</p>
+
+    <pre><code>
+# Chain information
+CHAIN_ID: "1"
+CHAIN_NAME: "Ethereum Mainnet"
+HTTP_ENDPOINT: "https://mainnet.infura.io/v3/YOUR_INFURA_KEY"
+WEBSOCKET_ENDPOINT: "wss://mainnet.infura.io/ws/v3/YOUR_INFURA_KEY"
+
+# Wallet information
+WALLET_ADDRESS: "0xYourEthereumWalletAddress"
+WALLET_KEY: "${WALLET_KEY}"  # Referenced from .env file
+
+# Safety parameters
+MAX_GAS_PRICE_GWEI: 100
+MIN_PROFIT: 0.001
+SLIPPAGE_DEFAULT: 0.05
+
+# Monitoring
+ENABLE_PROMETHEUS: true
+PROMETHEUS_PORT: 9090
+ALERT_EMAIL: "alerts@example.com"
+    </code></pre>
+
+    <h2>Parameter Relationships</h2>
+    <p>The following diagram shows how different configuration parameters relate to and affect each other:</p>
+
+    <pre><code class="language-mermaid">
+flowchart LR
+    subgraph ChainConfig["Chain Configuration"]
+        CHAIN_ID --> HTTP_ENDPOINT
+        CHAIN_ID --> WEBSOCKET_ENDPOINT
+        CHAIN_NAME
+    end
+    
+    subgraph TransactionConfig["Transaction Configuration"]
+        MAX_GAS_PRICE_GWEI
+        GAS_LIMIT_MULTIPLIER
+        NONCE_MANAGEMENT_STRATEGY
+    end
+    
+    subgraph SafetyConfig["Safety Configuration"]
+        MIN_PROFIT
+        SLIPPAGE_DEFAULT
+        MAX_TRANSACTION_ATTEMPTS
+        SIMULATION_REQUIRED
+    end
+    
+    subgraph WalletConfig["Wallet Configuration"]
+        WALLET_ADDRESS
+        WALLET_KEY
+    end
+    
+    subgraph MonitoringConfig["Monitoring Configuration"]
+        ENABLE_PROMETHEUS
+        PROMETHEUS_PORT
+        LOG_LEVEL
+        ALERT_EMAIL
+    end
+    
+    ChainConfig --> TransactionConfig
+    WalletConfig --> TransactionConfig
+    TransactionConfig --> SafetyConfig
+    SafetyConfig --> MonitoringConfig
+    
+    style ChainConfig fill:#bbf,stroke:#333,stroke-width:1px
+    style TransactionConfig fill:#bfb,stroke:#333,stroke-width:1px
+    style SafetyConfig fill:#fbb,stroke:#333,stroke-width:1px
+    style WalletConfig fill:#fbf,stroke:#333,stroke-width:1px
+    style MonitoringConfig fill:#bff,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <h2>Environment Variables</h2>
+    <p>Sensitive information like private keys should be stored in the <code>.env</code> file:</p>
+
+    <pre><code>
+# API Keys
+INFURA_PROJECT_ID=your_infura_project_id
+ETHERSCAN_API_KEY=your_etherscan_api_key
+COINGECKO_API_KEY=your_coingecko_api_key
+
+# Wallet Information
+WALLET_KEY=your_private_key_without_0x_prefix
+
+# Other Settings
+DEBUG=false
+    </code></pre>
+
+    <h2>Chain-Specific Configuration</h2>
+
+    <h3>Chain Information</h3>
+    <p>These settings identify the blockchain and provide connection details:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Setting</th>
+                <th>Description</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>CHAIN_ID</code></td>
+                <td>Chain ID as a string</td>
+                <td>"1" for Ethereum Mainnet</td>
+            </tr>
+            <tr>
+                <td><code>CHAIN_NAME</code></td>
+                <td>Human-readable chain name</td>
+                <td>"Ethereum Mainnet"</td>
+            </tr>
+            <tr>
+                <td><code>HTTP_ENDPOINT</code></td>
+                <td>HTTP RPC endpoint URL</td>
+                <td>"https://mainnet.infura.io/v3/YOUR_KEY"</td>
+            </tr>
+            <tr>
+                <td><code>WEBSOCKET_ENDPOINT</code></td>
+                <td>WebSocket endpoint for real-time data</td>
+                <td>"wss://mainnet.infura.io/ws/v3/YOUR_KEY"</td>
+            </tr>
+            <tr>
+                <td><code>IPC_ENDPOINT</code></td>
+                <td>Optional IPC endpoint path</td>
+                <td>"/path/to/geth.ipc"</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Wallet Settings</h3>
+    <p>Wallet configuration for transaction signing:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Setting</th>
+                <th>Description</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>WALLET_ADDRESS</code></td>
+                <td>Public wallet address</td>
+                <td>"0x1234..."</td>
+            </tr>
+            <tr>
+                <td><code>WALLET_KEY</code></td>
+                <td>Private key (preferably from .env)</td>
+                <td>"${WALLET_KEY}"</td>
+            </tr>
+            <tr>
+                <td><code>MIN_BALANCE</code></td>
+                <td>Minimum balance to maintain (ETH)</td>
+                <td>0.1</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Token Addresses</h3>
+    <p>Configure the addresses of important tokens:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Setting</th>
+                <th>Description</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>WETH_ADDRESS</code></td>
+                <td>Wrapped ETH address</td>
+                <td>"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"</td>
+            </tr>
+            <tr>
+                <td><code>USDC_ADDRESS</code></td>
+                <td>USDC token address</td>
+                <td>"0xA0b86991c6218b36c1d19D4a2e9eb0ce3606eb48"</td>
+            </tr>
+            <tr>
+                <td><code>USDT_ADDRESS</code></td>
+                <td>USDT token address</td>
+                <td>"0xdAC17F958D2ee523a2206206994597C13D831ec7"</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Safety Parameters</h2>
+    <p>These settings help manage risk and ensure profitability:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Setting</th>
+                <th>Description</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>MAX_GAS_PRICE_GWEI</code></td>
+                <td>Maximum gas price to use</td>
+                <td>100</td>
+            </tr>
+            <tr>
+                <td><code>MIN_PROFIT</code></td>
+                <td>Minimum profit threshold in ETH</td>
+                <td>0.001</td>
+            </tr>
+            <tr>
+                <td><code>SLIPPAGE_DEFAULT</code></td>
+                <td>Default slippage tolerance (0.1 = 10%)</td>
+                <td>0.05</td>
+            </tr>
+            <tr>
+                <td><code>AGGRESSIVE_FRONT_RUN_MIN_VALUE_ETH</code></td>
+                <td>Minimum value for aggressive strategies</td>
+                <td>0.02</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Monitoring Configuration</h2>
+    <p>Settings for system monitoring and alerting:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Setting</th>
+                <th>Description</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>ENABLE_PROMETHEUS</code></td>
+                <td>Enable Prometheus metrics</td>
+                <td>true</td>
+            </tr>
+            <tr>
+                <td><code>PROMETHEUS_PORT</code></td>
+                <td>Port for Prometheus metrics</td>
+                <td>9090</td>
+            </tr>
+            <tr>
+                <td><code>ENABLE_SLACK_ALERTS</code></td>
+                <td>Enable Slack alerting</td>
+                <td>true</td>
+            </tr>
+            <tr>
+                <td><code>SLACK_WEBHOOK_URL</code></td>
+                <td>Slack webhook URL</td>
+                <td>"https://hooks.slack.com/services/..."</td>
+            </tr>
+            <tr>
+                <td><code>ENABLE_EMAIL_ALERTS</code></td>
+                <td>Enable email alerting</td>
+                <td>true</td>
+            </tr>
+            <tr>
+                <td><code>ALERT_EMAIL</code></td>
+                <td>Email address for alerts</td>
+                <td>"alerts@example.com"</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Advanced Configuration</h2>
+
+    <h3>Multi-Chain Configuration</h3>
+    <p>For running on multiple chains simultaneously, use a structure like:</p>
+
+    <pre><code>
+# Global settings that apply to all chains
+global:
+  ENABLE_PROMETHEUS: true
+  PROMETHEUS_PORT: 9090
+  MIN_PROFIT: 0.001
+  # Other global settings...
+
+# Chain-specific settings
+chains:
+  - CHAIN_ID: "1"
+    CHAIN_NAME: "Ethereum Mainnet"
+    HTTP_ENDPOINT: "https://mainnet.infura.io/v3/YOUR_KEY"
+    WEBSOCKET_ENDPOINT: "wss://mainnet.infura.io/ws/v3/YOUR_KEY"
+    WALLET_ADDRESS: "0xYourMainnetAddress"
+    # Other Ethereum-specific settings...
+
+  - CHAIN_ID: "137"
+    CHAIN_NAME: "Polygon Mainnet"
+    HTTP_ENDPOINT: "https://polygon-rpc.com"
+    WEBSOCKET_ENDPOINT: "wss://polygon-rpc.com/ws"
+    WALLET_ADDRESS: "0xYourPolygonAddress"
+    # Other Polygon-specific settings...
+    </code></pre>
+
+    <h3>Custom Strategy Configuration</h3>
+    <p>For configuring specific strategies:</p>
+
+    <pre><code>
+# Strategy settings
+STRATEGIES:
+  arbitrage:
+    ENABLED: true
+    MIN_PROFIT_THRESHOLD: 0.002
+    MAX_SLIPPAGE: 0.02
+    TOKENS:
+      - "0xToken1Address"
+      - "0xToken2Address"
+  
+  liquidation:
+    ENABLED: false
+    # Liquidation-specific settings...
+    </code></pre>
+
+    <h2>Configuration Validation</h2>
+    <p>ON1Builder validates your configuration at startup. If there are any issues, detailed error messages will help you identify and fix problems.</p>
+    <p>To validate a configuration file without running the system:</p>
+
+    <pre><code>
+python -m on1builder validate-config --config configs/chains/my_config.yaml
+    </code></pre>
+
+    <h2>Next Steps</h2>
+    <p>Now that you understand how to configure ON1Builder, you can:</p>
+    <ol>
+        <li>Customize your configuration for your specific needs</li>
+        <li>Proceed to the <a href="running.html">Running Guide</a> to start using ON1Builder</li>
+        <li>Review the <a href="../reference/configuration_reference.html">Configuration Reference</a> for a complete list of all configuration options</li>
+    </ol>
+</body>
+</html>

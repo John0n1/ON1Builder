@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Overview</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+        }
+        p, li {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>Architecture Overview</h1>
+    <p>This document provides a comprehensive overview of the ON1Builder architecture, including how components interact and the system's workflow.</p>
+
+    <h2>High-Level Architecture</h2>
+    <p>ON1Builder follows a modular architecture designed for high performance, reliability, and extensibility across multiple blockchains.</p>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    subgraph ON1Builder
+        CoreSystem["Core System"]
+        Monitoring["Monitoring System"]
+        ChainWorkers["Chain Workers"]
+        SafetyNet["Safety Net"]
+        BlockchainInterface["Blockchain Interface"]
+        
+        CoreSystem <--> ChainWorkers
+        ChainWorkers --> SafetyNet
+        SafetyNet <--> BlockchainInterface
+        Monitoring --> CoreSystem
+        Monitoring --> ChainWorkers
+        
+        subgraph CoreComponents
+            direction LR
+            MainCore["MainCore"]
+            MultiChainCore["MultiChainCore"]
+            TransactionCore["TransactionCore"]
+            NonceCore["NonceCore"]
+            
+            MainCore --- MultiChainCore
+            MultiChainCore --- TransactionCore
+            TransactionCore --- NonceCore
+        end
+        
+        CoreSystem --- CoreComponents
+    end
+    
+    Blockchain[(Blockchain Networks)]
+    BlockchainInterface <--> Blockchain
+    </code></pre>
+
+    <h2>Core Components</h2>
+
+    <h3>MainCore</h3>
+    <p>The `MainCore` is the central component that bootstraps and coordinates all other components. It:</p>
+    <ul>
+        <li>Manages the AsyncIO event loop</li>
+        <li>Initializes all components</li>
+        <li>Handles startup and shutdown sequences</li>
+        <li>Maintains the application lifecycle</li>
+    </ul>
+
+    <h3>MultiChainCore</h3>
+    <p>For multi-chain deployments, the `MultiChainCore` extends `MainCore` to manage parallel operations across multiple blockchains. It:</p>
+    <ul>
+        <li>Creates and manages blockchain-specific workers</li>
+        <li>Coordinates cross-chain operations</li>
+        <li>Provides unified interfaces for interacting with multiple chains</li>
+    </ul>
+
+    <h3>ChainWorker</h3>
+    <p>Each `ChainWorker` handles blockchain-specific operations for a single chain. It:</p>
+    <ul>
+        <li>Connects to blockchain nodes</li>
+        <li>Monitors blocks and transactions</li>
+        <li>Executes blockchain-specific strategies</li>
+        <li>Reports metrics and status</li>
+    </ul>
+
+    <h3>TransactionCore</h3>
+    <p>Handles all transaction-related operations:</p>
+    <ul>
+        <li>Building transaction objects</li>
+        <li>Signing transactions with wallet keys</li>
+        <li>Estimating gas and costs</li>
+        <li>Simulating transactions before execution</li>
+        <li>Submitting transactions to the network</li>
+        <li>Tracking transaction status</li>
+    </ul>
+
+    <h3>NonceCore</h3>
+    <p>Manages transaction nonces to ensure proper transaction ordering:</p>
+    <ul>
+        <li>Tracks current nonce values</li>
+        <li>Prevents nonce conflicts</li>
+        <li>Handles nonce recovery in error cases</li>
+    </ul>
+
+    <h3>Safety Net</h3>
+    <p>Implements safeguards to protect against risks:</p>
+    <ul>
+        <li>Transaction validation before execution</li>
+        <li>Profitability checks</li>
+        <li>Gas price limits and controls</li>
+        <li>Error handling and recovery procedures</li>
+    </ul>
+
+    <h3>Monitoring</h3>
+    <p>Provides comprehensive monitoring capabilities:</p>
+    <ul>
+        <li>Logging all system activities</li>
+        <li>Prometheus metrics</li>
+        <li>Health check endpoints</li>
+        <li>Alerting through multiple channels</li>
+    </ul>
+
+    <h2>Data Flow</h2>
+
+    <pre><code class="language-mermaid">
+sequenceDiagram
+    participant Config as Configuration
+    participant Core as MainCore
+    participant Chain as ChainWorker
+    participant TX as TransactionCore
+    participant Safety as SafetyNet
+    participant Blockchain as Blockchain Network
+    participant Monitor as Monitoring System
+
+    Note over Config,Monitor: Initialization Phase
+    Config->>Core: Load configuration
+    Core->>Chain: Initialize workers
+    Chain->>Blockchain: Establish connections
+    Core->>Monitor: Setup monitoring
+
+    Note over Config,Monitor: Operation Phase
+    Blockchain->>Chain: Blockchain events
+    Chain->>Chain: Identify opportunities
+    Chain->>TX: Request transaction build
+    TX->>TX: Build and simulate transaction
+    TX->>Safety: Perform safety checks
+    alt Is Safe and Profitable
+        Safety->>TX: Approve transaction
+        TX->>Blockchain: Execute transaction
+        Blockchain-->>TX: Transaction result
+        TX->>Monitor: Log result
+    else Failed Checks
+        Safety->>TX: Reject transaction
+        TX->>Monitor: Log rejection reason
+    end
+
+    Note over Config,Monitor: Monitoring (Continuous)
+    Chain->>Monitor: Update metrics
+    TX->>Monitor: Track transaction status
+    Monitor->>Monitor: Trigger alerts if needed
+    </code></pre>
+
+    <ol>
+        <li><strong>Initialization</strong>:
+            <ul>
+                <li>Configuration loaded</li>
+                <li>Connections established to blockchains</li>
+                <li>Components initialized</li>
+            </ul>
+        </li>
+        <li><strong>Operation</strong>:
+            <ul>
+                <li>Blockchain events monitored</li>
+                <li>Opportunities identified by strategy components</li>
+                <li>Transactions built and simulated by TransactionCore</li>
+                <li>Safety checks performed by SafetyNet</li>
+                <li>Profitable transactions executed</li>
+                <li>Results tracked and recorded</li>
+            </ul>
+        </li>
+        <li><strong>Monitoring</strong>:
+            <ul>
+                <li>All activities logged</li>
+                <li>Metrics updated in real-time</li>
+                <li>Alerts triggered based on conditions</li>
+                <li>Health status maintained</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>System Workflows</h2>
+
+    <h3>Transaction Workflow</h3>
+
+    <pre><code class="language-mermaid">
+flowchart LR
+    A[Opportunity Detection] --> B[Transaction Creation]
+    B --> C[Safety Checks]
+    C --> D[Transaction Execution]
+    D --> E[Transaction Monitoring]
+    E --> F[Result Tracking]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style C fill:#bbf,stroke:#333,stroke-width:2px
+    style D fill:#bfb,stroke:#333,stroke-width:2px
+    style F fill:#fbf,stroke:#333,stroke-width:2px
+    </code></pre>
+
+    <h3>Multi-Chain Workflow</h3>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    Main[MultiChainCore] --> Workers
+    
+    subgraph Workers
+        direction LR
+        C1[Chain 1 Worker] 
+        C2[Chain 2 Worker]
+        C3[Chain N Worker]
+    end
+    
+    C1 --> B1[(Blockchain 1)]
+    C2 --> B2[(Blockchain 2)]
+    C3 --> B3[(Blockchain N)]
+    
+    style Main fill:#f9f,stroke:#333,stroke-width:2px
+    style Workers fill:#dfd,stroke:#333,stroke-width:1px
+    style B1 fill:#bbf,stroke:#333,stroke-width:2px
+    style B2 fill:#bbf,stroke:#333,stroke-width:2px
+    style B3 fill:#bbf,stroke:#333,stroke-width:2px
+    </code></pre>
+
+    <h2>Deployment Architecture</h2>
+    <p>ON1Builder supports multiple deployment configurations:</p>
+
+    <h3>Single-Node Deployment</h3>
+    <p>All components run on a single server or container.</p>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    subgraph Server
+        Core["ON1Builder Core"]
+        Monitor["Monitoring<br/>(Prometheus, Grafana)"]
+        
+        Core <--> Monitor
+    end
+    
+    style Server fill:#f5f5f5,stroke:#333,stroke-width:1px
+    style Core fill:#bbf,stroke:#333,stroke-width:2px
+    style Monitor fill:#bfb,stroke:#333,stroke-width:2px
+    </code></pre>
+
+    <h3>Distributed Deployment</h3>
+    <p>Components distributed across multiple servers:</p>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    subgraph ControlNode["Control Node"]
+        Manager["ON1Builder Manager"]
+    end
+    
+    subgraph MonitorNode["Monitoring Node"]
+        Prometheus["Prometheus"]
+        Grafana["Grafana"]
+        Prometheus --- Grafana
+    end
+    
+    subgraph WorkerNodes["Worker Nodes"]
+        Worker1["Worker 1<br/>(Chain A)"]
+        Worker2["Worker 2<br/>(Chain B)"]
+    end
+    
+    Manager <--> Prometheus
+    Manager <--> Worker1
+    Manager <--> Worker2
+    Worker1 --> Prometheus
+    Worker2 --> Prometheus
+    
+    style ControlNode fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style MonitorNode fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style WorkerNodes fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style Manager fill:#bbf,stroke:#333,stroke-width:2px
+    style Prometheus fill:#bfb,stroke:#333,stroke-width:2px
+    style Worker1 fill:#fbb,stroke:#333,stroke-width:2px
+    style Worker2 fill:#fbb,stroke:#333,stroke-width:2px
+    </code></pre>
+
+    <h2>Security Architecture</h2>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    subgraph NetworkSecurity["Network Isolation Layer"]
+        VPN["VPN/Private Network"]
+        Firewall["Firewall Rules"]
+        AccessControl["API Access Controls"]
+    end
+    
+    subgraph SecretManagement["Secret Management"]
+        Vault["HashiCorp Vault"]
+        EnvVar["Environment Variables"]
+        KeyRotation["Credential Rotation"]
+    end
+    
+    subgraph TxSecurity["Transaction Security"]
+        Simulation["Transaction Simulation"]
+        GasLimits["Gas Price Limits"]
+        ProfitChecks["Profitability Checks"]
+        SlippageProtection["Slippage Protection"]
+    end
+    
+    subgraph AuditMonitor["Auditing & Monitoring"]
+        Logging["Secure Logging"]
+        Alerts["Security Alerts"]
+        AuditTrail["Audit Trail"]
+    end
+    
+    NetworkSecurity --> SecretManagement
+    SecretManagement --> TxSecurity
+    TxSecurity --> AuditMonitor
+    
+    style NetworkSecurity fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style SecretManagement fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style TxSecurity fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style AuditMonitor fill:#f9f9f9,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <p>Security is implemented at multiple levels:</p>
+    <ol>
+        <li><strong>Network Isolation</strong>:
+            <ul>
+                <li>VPN or private network for inter-component communication</li>
+                <li>Restricted access to API endpoints</li>
+            </ul>
+        </li>
+        <li><strong>Secret Management</strong>:
+            <ul>
+                <li>Integration with HashiCorp Vault for secure secrets</li>
+                <li>Environment variable isolation</li>
+                <li>No hardcoded credentials</li>
+            </ul>
+        </li>
+        <li><strong>Access Controls</strong>:
+            <ul>
+                <li>Role-based access to system components</li>
+                <li>API authentication and authorization</li>
+                <li>Audit logging of all operations</li>
+            </ul>
+        </li>
+        <li><strong>Transaction Protection</strong>:
+            <ul>
+                <li>Simulation before execution</li>
+                <li>Gas price limitations</li>
+                <li>Profit requirements</li>
+                <li>Slippage protection</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Disaster Recovery</h2>
+
+    <pre><code class="language-mermaid">
+flowchart LR
+    subgraph Normal["Normal Operation"]
+        Monitoring["Continuous Monitoring"]
+        Backup["Automated Backups"]
+    end
+    
+    subgraph Incident["Incident Occurs"]
+        Detection["Issue Detection"]
+        Assessment["Impact Assessment"]
+        Classification["Severity Classification"]
+    end
+    
+    subgraph Recovery["Recovery Process"]
+        Containment["Containment"]
+        Restoration["Service Restoration"]
+        RootCause["Root Cause Analysis"]
+    end
+    
+    subgraph PostRecovery["Post-Recovery"]
+        Improvement["Process Improvement"]
+        Documentation["Incident Documentation"]
+        Prevention["Preventative Measures"]
+    end
+    
+    Normal -- "Incident Detected" --> Incident
+    Incident -- "Recovery Plan Activated" --> Recovery
+    Recovery -- "Services Restored" --> PostRecovery
+    PostRecovery -- "Cycle Continues" --> Normal
+    
+    style Normal fill:#bfb,stroke:#333,stroke-width:1px
+    style Incident fill:#fbb,stroke:#333,stroke-width:1px
+    style Recovery fill:#bbf,stroke:#333,stroke-width:1px
+    style PostRecovery fill:#fbf,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <p>The system includes disaster recovery capabilities:</p>
+    <ol>
+        <li><strong>Automatic backup</strong> of configuration and state</li>
+        <li><strong>Graceful degradation</strong> during partial failures</li>
+        <li><strong>Self-healing</strong> capabilities for common issues</li>
+        <li><strong>Rollback procedures</strong> for failed deployments</li>
+    </ol>
+
+    <h2>Extensibility</h2>
+
+    <pre><code class="language-mermaid">
+flowchart TB
+    Core["ON1Builder Core"]
+    
+    subgraph StrategyExtensions["Strategy Extensions"]
+        S1["Custom Strategy 1"]
+        S2["Custom Strategy 2"] 
+        S3["Custom Strategy 3"]
+    end
+    
+    subgraph ChainAdapters["Chain Adapters"]
+        C1["Ethereum Adapter"]
+        C2["Polygon Adapter"]
+        C3["Custom Chain Adapter"]
+    end
+    
+    subgraph IntegrationAPIs["Integration APIs"]
+        A1["REST API"]
+        A2["WebSocket API"]
+        A3["gRPC API"]
+    end
+    
+    subgraph CustomMonitors["Custom Monitors"]
+        M1["Performance Monitor"]
+        M2["Security Monitor"]
+        M3["Custom Monitor"]
+    end
+    
+    Core --- StrategyExtensions
+    Core --- ChainAdapters
+    Core --- IntegrationAPIs
+    Core --- CustomMonitors
+    
+    style Core fill:#f96,stroke:#333,stroke-width:2px
+    style StrategyExtensions fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style ChainAdapters fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style IntegrationAPIs fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style CustomMonitors fill:#f9f9f9,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <p>ON1Builder is designed to be extensible:</p>
+    <ol>
+        <li><strong>Plugin Architecture</strong> for adding new strategies</li>
+        <li><strong>Chain Adapters</strong> for supporting additional blockchains</li>
+        <li><strong>API Interfaces</strong> for integration with external systems</li>
+        <li><strong>Custom Monitors</strong> for specific monitoring needs</li>
+    </ol>
+
+    <h2>Conclusion</h2>
+    <p>The ON1Builder architecture provides a robust, scalable, and secure framework for executing blockchain transactions across multiple chains. Its modular design allows for easy maintenance, extension, and customization while maintaining high performance and reliability.</p>
+
+    <p><strong>Next Steps:</strong></p>
+    <ul>
+        <li>Explore the <a href="api.html">API Reference</a> for integrating with ON1Builder</li>
+        <li>Learn about all available <a href="configuration_reference.html">Configuration Options</a></li>
+        <li>Understand the <a href="components.html">Components</a> in detail</li>
+        <li>Try the <a href="../examples/single_chain_example.html">Single Chain Example</a> to get started</li>
+        <li>Return to the <a href="../index.html">Main Documentation</a></li>
+    </ul>
+</body>
+</html>

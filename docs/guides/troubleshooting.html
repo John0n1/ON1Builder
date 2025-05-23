@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ON1Builder Troubleshooting Guide</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+        }
+        p, li {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <h1>ON1Builder Troubleshooting Guide</h1>
+    <p>This guide will help you diagnose and resolve common issues you might encounter while running ON1Builder.</p>
+
+    <h2>Troubleshooting Decision Flow</h2>
+    <p>Use this flowchart to quickly diagnose and navigate to the appropriate section for your issue:</p>
+
+    <pre><code class="language-mermaid">
+flowchart TD
+    Start([Start Troubleshooting]) --> Running{Is ON1Builder<br/>running?}
+    
+    Running -->|No| StartupIssue{Startup Issue}
+    Running -->|Yes| RunningIssue{System Running<br/>But Has Issues}
+    
+    StartupIssue -->|Config Error| ConfigIssues[Configuration Issues]
+    StartupIssue -->|Connection Error| ConnectionIssues[Connection Issues]
+    StartupIssue -->|Dependency Error| DependencyIssues[Installation & Dependency Issues]
+    
+    RunningIssue -->|Not Executing<br/>Transactions| TxIssues[Transaction Issues]
+    RunningIssue -->|Slow Performance| PerfIssues[Performance Issues]
+    RunningIssue -->|No Alerts/Metrics| MonitorIssues[Monitoring Issues]
+    RunningIssue -->|Database Problems| DBIssues[Database Issues]
+    RunningIssue -->|Security Concerns| SecurityIssues[Security Issues]
+    
+    ConfigIssues --> Solutions[Find Solution<br/>in Relevant Section]
+    ConnectionIssues --> Solutions
+    DependencyIssues --> Solutions
+    TxIssues --> Solutions
+    PerfIssues --> Solutions
+    MonitorIssues --> Solutions
+    DBIssues --> Solutions
+    SecurityIssues --> Solutions
+    
+    style Start fill:#bbf,stroke:#333,stroke-width:2px
+    style Solutions fill:#bfb,stroke:#333,stroke-width:2px
+    style ConfigIssues fill:#fbb,stroke:#333,stroke-width:1px
+    style ConnectionIssues fill:#fbb,stroke:#333,stroke-width:1px
+    style TxIssues fill:#fbb,stroke:#333,stroke-width:1px
+    style PerfIssues fill:#fbb,stroke:#333,stroke-width:1px
+    </code></pre>
+
+    <h2>Common Issues</h2>
+    <p>Below are the most common issues and their solutions, organized by category:</p>
+    <ol>
+        <li><a href="#connection-issues">Connection Issues</a></li>
+        <li><a href="#configuration-issues">Configuration Issues</a></li>
+        <li><a href="#transaction-issues">Transaction Issues</a></li>
+        <li><a href="#performance-issues">Performance Issues</a></li>
+        <li><a href="#monitoring-issues">Monitoring Issues</a></li>
+        <li><a href="#database-issues">Database Issues</a></li>
+        <li><a href="#security-issues">Security Issues</a></li>
+    </ol>
+
+    <h2 id="connection-issues">Connection Issues</h2>
+
+    <h3>Unable to Connect to Blockchain</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Error messages like "Failed to connect to the endpoint"</li>
+        <li>System not receiving blockchain updates</li>
+    </ul>
+    <p><strong>Possible Causes:</strong></p>
+    <ul>
+        <li>Incorrect RPC endpoints</li>
+        <li>API rate limiting</li>
+        <li>Network connectivity issues</li>
+        <li>Node provider downtime</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Verify your endpoints:</strong></li>
+        <pre><code>
+# Test HTTP endpoint
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' YOUR_HTTP_ENDPOINT
+        </code></pre>
+        <li><strong>Check API rate limits:</strong></li>
+        <ul>
+            <li>Review your node provider's documentation for rate limits</li>
+            <li>Consider upgrading your plan or using multiple providers</li>
+        </ul>
+        <li><strong>Use backup endpoints:</strong></li>
+        <pre><code>
+# Configure backup endpoints in your config file
+HTTP_ENDPOINT: "https://mainnet.infura.io/v3/YOUR_KEY"
+BACKUP_HTTP_ENDPOINTS:
+  - "https://eth-mainnet.alchemyapi.io/v2/YOUR_KEY"
+  - "https://rpc.ankr.com/eth"
+        </code></pre>
+        <li><strong>Enable connection resilience:</strong></li>
+        <pre><code>
+# Add retry configuration
+CONNECTION_RETRIES: 5
+RETRY_DELAY_SECONDS: 2
+AUTO_RECONNECT: true
+        </code></pre>
+    </ol>
+
+    <h3>WebSocket Disconnections</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Frequent "WebSocket disconnected" errors in logs</li>
+        <li>Missing real-time events</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Configure WebSocket heartbeats:</strong></li>
+        <pre><code>
+WS_HEARTBEAT_INTERVAL: 30  # Send heartbeat every 30 seconds
+        </code></pre>
+        <li><strong>Enable auto-reconnection:</strong></li>
+        <pre><code>
+WS_AUTO_RECONNECT: true
+WS_MAX_RECONNECT_ATTEMPTS: 10
+        </code></pre>
+    </ol>
+
+    <h2 id="configuration-issues">Configuration Issues</h2>
+
+    <h3>Configuration Validation Errors</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Error messages during startup about invalid configuration</li>
+        <li>System refusing to start</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Validate your configuration:</strong></li>
+        <pre><code>
+python -m on1builder validate-config --config your_config.yaml
+        </code></pre>
+        <li><strong>Check for common mistakes:</strong></li>
+        <ul>
+            <li>Missing required fields</li>
+            <li>Incorrect data types</li>
+            <li>Invalid addresses or endpoints</li>
+            <li>Environment variables not properly set in .env file</li>
+        </ul>
+        <li><strong>Reference working examples:</strong></li>
+        <ul>
+            <li>Compare with example configs in <code>configs/chains/example_config.yaml</code></li>
+        </ul>
+    </ol>
+
+    <h3>Missing Environment Variables</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Error messages like "Missing required environment variable"</li>
+        <li>Values showing as "${ENV_VAR}" in logs</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Verify your .env file:</strong></li>
+        <ul>
+            <li>Ensure the file exists and has correct permissions</li>
+            <li>Check for typos in variable names</li>
+        </ul>
+        <li><strong>Manually export variables:</strong></li>
+        <pre><code>
+export WALLET_KEY=your_private_key
+        </code></pre>
+        <li><strong>Debug environment loading:</strong></li>
+        <pre><code>
+python -m on1builder debug-env --config your_config.yaml
+        </code></pre>
+    </ol>
+
+    <h2 id="transaction-issues">Transaction Issues</h2>
+
+    <h3>Transactions Failing</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>High rate of failed transactions in logs</li>
+        <li>Error messages related to transactions</li>
+    </ul>
+    <p><strong>Possible Causes:</strong></p>
+    <ul>
+        <li>Insufficient funds</li>
+        <li>Gas price too low</li>
+        <li>Contract reverts</li>
+        <li>Slippage issues</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Check your wallet balance:</strong></li>
+        <pre><code>
+python -m on1builder wallet-balance --address YOUR_WALLET_ADDRESS
+        </code></pre>
+        <li><strong>Review gas settings:</strong></li>
+        <pre><code>
+# Adjust gas settings in config
+MAX_GAS_PRICE_GWEI: 150  # Increase maximum gas price
+GAS_PRICE_MULTIPLIER: 1.2  # Use 120% of recommended gas price
+        </code></pre>
+        <li><strong>Increase slippage tolerance for volatile markets:</strong></li>
+        <pre><code>
+SLIPPAGE_DEFAULT: 0.05  # 5% slippage tolerance
+        </code></pre>
+        <li><strong>Enable simulation before execution:</strong></li>
+        <pre><code>
+SIMULATE_TRANSACTIONS: true
+        </code></pre>
+    </ol>
+
+    <h3>Nonce Errors</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>"Nonce too low" or "Nonce too high" errors</li>
+        <li>Transactions stuck pending</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Reset your nonce tracking:</strong></li>
+        <pre><code>
+python -m on1builder reset-nonce --address YOUR_WALLET_ADDRESS
+        </code></pre>
+        <li><strong>Enable automatic nonce management:</strong></li>
+        <pre><code>
+AUTO_NONCE_MANAGEMENT: true
+        </code></pre>
+        <li><strong>Clear pending transactions:</strong></li>
+        <pre><code>
+python -m on1builder clear-pending-tx --address YOUR_WALLET_ADDRESS
+        </code></pre>
+    </ol>
+
+    <h2 id="performance-issues">Performance Issues</h2>
+
+    <h3>High CPU or Memory Usage</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>System becoming slow or unresponsive</li>
+        <li>Out of memory errors</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Optimize subscription settings:</strong></li>
+        <pre><code>
+# Subscribe only to necessary events
+SUBSCRIBE_NEW_BLOCKS: true
+SUBSCRIBE_PENDING_TX: false  # Disable if not needed
+        </code></pre>
+        <li><strong>Adjust polling intervals:</strong></li>
+        <pre><code>
+BLOCK_POLLING_INTERVAL_MS: 5000  # Increase polling interval
+        </code></pre>
+        <li><strong>Monitor resource usage:</strong></li>
+        <pre><code>
+# Run with resource monitoring
+python -m on1builder run --config your_config.yaml --monitor-resources
+        </code></pre>
+        <li><strong>Limit concurrent operations:</strong></li>
+        <pre><code>
+MAX_CONCURRENT_REQUESTS: 10
+        </code></pre>
+    </ol>
+
+    <h3>Slow Transaction Processing</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Long delays between opportunity detection and execution</li>
+        <li>Missed opportunities</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Optimize gas settings for faster inclusion:</strong></li>
+        <pre><code>
+GAS_PRICE_STRATEGY: "fast"
+PRIORITY_FEE_GWEI: 2
+        </code></pre>
+        <li><strong>Use a more responsive node provider</strong></li>
+        <li><strong>Enable performance logging for analysis:</strong></li>
+        <pre><code>
+PERFORMANCE_LOGGING: true
+        </code></pre>
+    </ol>
+
+    <h2 id="monitoring-issues">Monitoring Issues</h2>
+
+    <h3>Prometheus Metrics Not Available</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Cannot access metrics endpoint</li>
+        <li>Grafana dashboards show no data</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Check Prometheus configuration:</strong></li>
+        <pre><code>
+# Verify metrics endpoint is accessible
+curl http://localhost:9090/metrics
+        </code></pre>
+        <li><strong>Ensure Prometheus is correctly configured:</strong></li>
+        <ul>
+            <li>Check prometheus.yml file</li>
+            <li>Verify scrape configurations</li>
+        </ul>
+        <li><strong>Enable verbose metrics logging:</strong></li>
+        <pre><code>
+METRICS_DEBUG: true
+        </code></pre>
+    </ol>
+
+    <h3>Missing or Incomplete Logs</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Cannot find expected log entries</li>
+        <li>Logs lack details needed for debugging</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Increase log verbosity:</strong></li>
+        <pre><code>
+LOG_LEVEL: "DEBUG"
+        </code></pre>
+        <li><strong>Check log file permissions:</strong></li>
+        <pre><code>
+chmod 755 data/logs/
+        </code></pre>
+        <li><strong>Use structured logging for better filtering:</strong></li>
+        <pre><code>
+LOG_FORMAT: "json"
+        </code></pre>
+    </ol>
+
+    <h2 id="database-issues">Database Issues</h2>
+
+    <h3>Database Connection Errors</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Errors about failed database connections</li>
+        <li>Features requiring persistence not working</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Check database configuration:</strong></li>
+        <pre><code>
+DB_TYPE: "sqlite"  # or "postgresql"
+DB_PATH: "data/db/on1builder.db"  # for SQLite
+# For PostgreSQL
+# DB_HOST: "localhost"
+# DB_PORT: 5432
+# DB_NAME: "on1builder"
+# DB_USER: "on1builder"
+# DB_PASSWORD: "${DB_PASSWORD}"
+        </code></pre>
+        <li><strong>Verify database existence and permissions:</strong></li>
+        <pre><code>
+# For SQLite
+ls -la data/db/
+# For PostgreSQL
+psql -h localhost -U on1builder -d on1builder -c "SELECT 1"
+        </code></pre>
+        <li><strong>Initialize database manually:</strong></li>
+        <pre><code>
+python -m on1builder init-db --config your_config.yaml
+        </code></pre>
+    </ol>
+
+    <h2 id="security-issues">Security Issues</h2>
+
+    <h3>Private Key Exposed</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Warnings about insecure private key storage</li>
+        <li>Unexpected transactions from your account</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Use environment variables for private keys:</strong></li>
+        <pre><code>
+WALLET_KEY: "${WALLET_KEY}"  # Store actual key in .env file
+        </code></pre>
+        <li><strong>Set proper permissions on .env file:</strong></li>
+        <pre><code>
+chmod 600 .env
+        </code></pre>
+        <li><strong>Consider using a hardware wallet for production:</strong></li>
+        <pre><code>
+USE_HARDWARE_WALLET: true
+HARDWARE_WALLET_TYPE: "ledger"
+        </code></pre>
+    </ol>
+
+    <h3>Unauthorized Access Attempts</h3>
+    <p><strong>Symptoms:</strong></p>
+    <ul>
+        <li>Unusual access patterns in logs</li>
+        <li>Unexpected API calls</li>
+    </ul>
+    <p><strong>Solutions:</strong></p>
+    <ol>
+        <li><strong>Enable security logging:</strong></li>
+        <pre><code>
+SECURITY_LOGGING: true
+        </code></pre>
+        <li><strong>Restrict API access:</strong></li>
+        <pre><code>
+API_ENABLE_AUTH: true
+API_ALLOWED_IPS: ["127.0.0.1", "10.0.0.0/24"]
+        </code></pre>
+        <li><strong>Use proper network security:</strong></li>
+        <ul>
+            <li>Run behind a firewall</li>
+            <li>Use VPN for remote access</li>
+        </ul>
+    </ol>
+
+    <h2>Diagnostic Tools</h2>
+    <p>ON1Builder includes several diagnostic tools to help troubleshoot issues:</p>
+
+    <h3>Connection Tester</h3>
+    <p>Test your blockchain connection:</p>
+    <pre><code>
+python -m on1builder test-connection --endpoint YOUR_HTTP_ENDPOINT
+    </code></pre>
+
+    <h3>Configuration Validator</h3>
+    <p>Validate your configuration file:</p>
+    <pre><code>
+python -m on1builder validate-config --config your_config.yaml
+    </code></pre>
+
+    <h3>System Diagnostics</h3>
+    <p>Run a complete system diagnostic:</p>
+    <pre><code>
+python -m on1builder diagnostics --config your_config.yaml
+    </code></pre>
+
+    <h3>Log Analyzer</h3>
+    <p>Analyze logs for patterns and issues:</p>
+    <pre><code>
+python -m on1builder analyze-logs --log-file data/logs/on1builder.log
+    </code></pre>
+
+    <h2>Getting Additional Help</h2>
+    <p>If you're unable to resolve an issue using this guide:</p>
+    <ol>
+        <li><strong>Check the GitHub Issues:</strong></li>
+        <ul>
+            <li>Search for similar issues on the <a href="https://github.com/John0n1/ON1Builder/issues">GitHub repository</a></li>
+        </ul>
+        <li><strong>Collect Diagnostic Information:</strong></li>
+        <pre><code>
+python -m on1builder collect-diagnostics --output diagnostic_report.zip
+        </code></pre>
+        <li><strong>Contact Support:</strong></li>
+        <ul>
+            <li>Open a new issue on GitHub with your diagnostic report</li>
+            <li>Include detailed steps to reproduce the issue</li>
+            <li>Share your configuration file (with sensitive information removed)</li>
+        </ul>
+    </ol>
+
+    <h2>Next Steps</h2>
+    <p>After resolving your issues, consider:</p>
+    <ol>
+        <li>Review the <a href="configuration.html">Configuration Guide</a> to optimize your settings</li>
+        <li>Set up proper <a href="monitoring.html">Monitoring</a> to detect issues early</li>
+        <li>Implement <a href="../reference/best_practices.html">best practices</a> for stable operation</li>
+    </ol>
+</body>
+</html>
