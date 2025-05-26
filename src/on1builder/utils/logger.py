@@ -1,5 +1,4 @@
 # src/on1builder/utils/logger.py
-
 """
 ON1Builder - Logging Utilities
 =============================
@@ -16,6 +15,7 @@ from pathlib import Path
 # Use colorlog if available, otherwise fallback to standard logging
 try:
     import colorlog
+
     HAVE_COLORLOG = True
 except ImportError:
     HAVE_COLORLOG = False
@@ -51,12 +51,12 @@ class JsonFormatter(logging.Formatter):
         if extra_data:
             log_entry.update(extra_data)
 
-        log_entry["component"] = getattr(
-            record, "component", None) or extra_data.get(
-            "component", "N/A")
-        log_entry["tx_hash"] = getattr(
-            record, "tx_hash", None) or extra_data.get(
-            "tx_hash", None)
+        log_entry["component"] = getattr(record, "component", None) or extra_data.get(
+            "component", "N/A"
+        )
+        log_entry["tx_hash"] = getattr(record, "tx_hash", None) or extra_data.get(
+            "tx_hash", None
+        )
 
         if log_entry["component"] == "N/A" and "component" in log_entry:
             del log_entry["component"]
@@ -72,39 +72,39 @@ def setup_logging(
     log_dir: Optional[str] = None,
     use_json: Optional[bool] = None,
 ) -> logging.Logger:
-    """
-    Sets up logging with either colorized console output or JSON formatted output.
-    
+    """Sets up logging with either colorized console output or JSON formatted
+    output.
+
     Args:
         name: Logger name
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_dir: Directory to store log files, if None only console logging is used
         use_json: Whether to use JSON logging format, overrides global setting
-    
+
     Returns:
         Configured logger instance
     """
     # Use parameter if provided, otherwise fall back to global setting
     use_json_logging = use_json if use_json is not None else USE_JSON_LOGGING
-    
+
     # Determine numeric level from string or int
     if isinstance(level, int):
         numeric_level = level
     else:
         numeric_level = getattr(logging, str(level).upper(), logging.INFO)
-    
+
     # Create logger
     logger = logging.getLogger(name)
     logger.setLevel(numeric_level)
-    
+
     # Clear any existing handlers
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
-    
+
     # Console handler with appropriate formatter
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(numeric_level)
-    
+
     if use_json_logging:
         formatter = JsonFormatter()
     elif HAVE_COLORLOG:
@@ -112,40 +112,40 @@ def setup_logging(
             "%(log_color)s%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             log_colors={
-                'DEBUG': 'cyan',
-                'INFO': 'green',
-                'WARNING': 'yellow',
-                'ERROR': 'red',
-                'CRITICAL': 'red,bg_white',
-            }
+                "DEBUG": "cyan",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "red,bg_white",
+            },
         )
     else:
         formatter = logging.Formatter(
             "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
+            datefmt="%Y-%m-%d %H:%M:%S",
         )
-    
+
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    
+
     # Add file handler if log_dir provided
     if log_dir:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
-        
-        file_handler = logging.FileHandler(
-            log_path / f"{name.lower()}.log"
-        )
+
+        file_handler = logging.FileHandler(log_path / f"{name.lower()}.log")
         file_handler.setLevel(numeric_level)
-        
+
         if use_json_logging:
             file_handler.setFormatter(JsonFormatter())
         else:
-            file_handler.setFormatter(logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S"
-            ))
-        
+            file_handler.setFormatter(
+                logging.Formatter(
+                    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+            )
+
         logger.addHandler(file_handler)
 
     # ------------------------------------------------------------------
@@ -154,11 +154,11 @@ def setup_logging(
     # continue to work against this object:
     # ------------------------------------------------------------------
     logger.StreamHandler = logging.StreamHandler
-    logger.getLogger     = logging.getLogger
-    logger.DEBUG         = logging.DEBUG
-    logger.INFO          = logging.INFO
-    logger.WARNING       = logging.WARNING
-    logger.ERROR         = logging.ERROR
-    logger.CRITICAL      = logging.CRITICAL
+    logger.getLogger = logging.getLogger
+    logger.DEBUG = logging.DEBUG
+    logger.INFO = logging.INFO
+    logger.WARNING = logging.WARNING
+    logger.ERROR = logging.ERROR
+    logger.CRITICAL = logging.CRITICAL
 
     return logger

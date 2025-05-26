@@ -14,30 +14,51 @@ development:
   # -------------------------------------------------------------------------
   # Web3 connectivity (Goerli example)
   # -------------------------------------------------------------------------
-  WEBSOCKET_ENDPOINT: yourWebSocketURL
-  HTTP_ENDPOINT:     yourHTTPURL
-  IPC_ENDPOINT:        path/to/ipc                    
-  INFURA_PROJECT_ID:   "ProjectID"   
-  WEB3_MAX_RETRIES:    5
-  WEB3_RETRY_DELAY:    2
+  HTTP_ENDPOINT: "http://123.123.123:8545"  # Replace with your Goerli node URL
+  WEBSOCKET_ENDPOINT: "ws://123.123.123:8545"  # Replace with your Goerli node URL
+  BACKUP_HTTP_ENDPOINTS:
+    - "http://backup1:8545"
+    - "http://backup2:8545"  # Optional backup endpoints
+  IPC_ENDPOINT: "/path/to/geth.ipc"  # Optional IPC path
+
+  # L2 Networks (Uncomment / and set the endpoints if needed)
+  BASE_HTTP_ENDPOINT: "http://base-node:8545"
+  BASE_WEBSOCKET_ENDPOINT: "ws://base-node:8545"
+  BSC_HTTP_ENDPOINT: "http://bsc-node:8545"
+  BSC_WEBSOCKET_ENDPOINT: "ws://bsc-node:8545"
+  POLYGON_HTTP_ENDPOINT: "http://polygon-node:8545" 
+  POLYGON_WEBSOCKET_ENDPOINT: "ws://polygon-node:8545"
+  ARBITRUM_HTTP_ENDPOINT: "http://arbitrum-node:8545"
+  ARBITRUM_WEBSOCKET_ENDPOINT: "ws://arbitrum-node:8545"
+  OPTIMISM_HTTP_ENDPOINT: "http://optimism-node:8545"
+  OPTIMISM_WEBSOCKET_ENDPOINT: "ws://optimism-node:8545"
+  C-CHAIN_HTTP_ENDPOINT: "http://cchain-node:8545"
+  C-CHAIN_WEBSOCKET_ENDPOINT: "ws://cchain-node:8545"
+  P-CHAIN_HTTP_ENDPOINT: "http://pchain-node:8545"
+  X-CHAIN_HTTP_ENDPOINT: "http://xchain-node:8545"
+  SUI_HTTP_ENDPOINT: "http://sui-node:8545"
+  SUI_WEBSOCKET_ENDPOINT: "ws://sui-node:8545"
+  SOLANA_HTTP_ENDPOINT: "http://solana-node:8545"
+  SOLANA_WEBSOCKET_ENDPOINT: "ws://solana-node:8545"
+  SOLANA_YELLOWSTONE_GRPC_ENDPOINT: "http://solana-yellowstone-node:8545" 
 
   # -------------------------------------------------------------------------
   # Wallet / account
   # -------------------------------------------------------------------------
   WALLET_ADDRESS:      "0xblablaBlaBlaBlaBlaBlaBlaBlaBlaBlaBla"  # Goerli example
-  WALLET_KEY:          "Private_key"     # keep in .env for safety
+  WALLET_KEY:          "Private_key"     # keep in .env for safety 
   MIN_BALANCE:         0.005                  # ETH – dev wallets are small
 
   # -------------------------------------------------------------------------
   # Contract addresses (Goerli test-net versions)
   # -------------------------------------------------------------------------
-  WETH_ADDRESS:             "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6"
-  USDC_ADDRESS:             "0x07865c6e87b9f70255377e024ace6630c1eaa37f"
-  USDT_ADDRESS:             "0x0000000000000000000000000000000000000000"  # none on goerli
-  UNISWAP_ADDRESS:          "0x9A2BB41Bb4231F6505cA37C59b4dc0c0E1d2bFa8"
-  SUSHISWAP_ADDRESS:        ""
-  AAVE_POOL_ADDRESS:        "0x4F01AeD16D97E3aB5ab2B501154DC9bb0F1A5A2C"
-  AAVE_FLASHLOAN_ADDRESS:   "0xDfE521292EcE2A4f44242EfBb1dD6E1C354937ef"
+  WETH_ADDRESS: "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6"
+  USDC_ADDRESS: "0x07865c6e87b9f70255377e024ace6630c1eaa37f"
+  USDT_ADDRESS: "0x0000000000000000000000000000000000000000"  # none on goerli
+  UNISWAP_ADDRESS: "0x9A2BB41Bb4231F6505cA37C59b4dc0c0E1d2bFa8"
+  SUSHISWAP_ADDRESS: ""
+  AAVE_POOL_ADDRESS: "0x4F01AeD16D97E3aB5ab2B501154DC9bb0F1A5A2C"
+  AAVE_FLASHLOAN_ADDRESS: "0xDfE521292EcE2A4f44242EfBb1dD6E1C354937ef"
   GAS_PRICE_ORACLE_ADDRESS: ""
 
   # -------------------------------------------------------------------------

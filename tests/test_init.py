@@ -2,6 +2,7 @@
 
 import unittest
 
+
 class TestInit(unittest.TestCase):
     def test_import(self):
         try:
@@ -9,5 +10,6 @@ class TestInit(unittest.TestCase):
         except ImportError:
             self.fail("Failed to import on1builder.utils")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

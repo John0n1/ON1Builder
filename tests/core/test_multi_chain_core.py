@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Tests for the MultiChainCore class.
-"""
+"""Tests for the MultiChainCore class."""
 
-from on1builder.core.multi_chain_core import MultiChainCore
-from on1builder.config.config import MultiChainConfiguration
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-import sys
-import os
 import asyncio
+import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from on1builder.config.config import MultiChainConfiguration
+from on1builder.core.multi_chain_core import MultiChainCore
 
 # Add the project root to the path so we can import the modules
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 # Import after path setup
 
@@ -77,9 +78,11 @@ async def test_initialize(multi_chain_core):
         },
     ]
     multi_chain_core.chains_config = valid_chains
-    
+
     # Mock the ChainWorker.initialize method
-    with patch("on1builder.engines.chain_worker.ChainWorker.initialize", new_callable=AsyncMock) as mock_initialize:
+    with patch(
+        "on1builder.engines.chain_worker.ChainWorker.initialize", new_callable=AsyncMock
+    ) as mock_initialize:
         # Set the return value to True
         mock_initialize.return_value = True
 
@@ -94,6 +97,7 @@ async def test_initialize(multi_chain_core):
 
         # Check that the workers were created
         assert len(multi_chain_core.workers) == 2
+
 
 @pytest.mark.asyncio
 async def test_initialize_failure(multi_chain_core):
@@ -112,9 +116,11 @@ async def test_initialize_failure(multi_chain_core):
         },
     ]
     multi_chain_core.chains_config = valid_chains
-    
+
     # Mock the ChainWorker.initialize method
-    with patch("on1builder.engines.chain_worker.ChainWorker.initialize", new_callable=AsyncMock) as mock_initialize:
+    with patch(
+        "on1builder.engines.chain_worker.ChainWorker.initialize", new_callable=AsyncMock
+    ) as mock_initialize:
         # Set the return value to False
         mock_initialize.return_value = False
 
@@ -135,9 +141,13 @@ async def test_initialize_failure(multi_chain_core):
 async def test_run(multi_chain_core):
     """Test the run method."""
     # Mock the ChainWorker.start method
-    with patch("on1builder.engines.chain_worker.ChainWorker.start", new_callable=AsyncMock) as mock_start:
+    with patch(
+        "on1builder.engines.chain_worker.ChainWorker.start", new_callable=AsyncMock
+    ):
         # Mock the _update_metrics method
-        with patch.object(multi_chain_core, "_update_metrics", new_callable=AsyncMock) as mock_update_metrics:
+        with patch.object(
+            multi_chain_core, "_update_metrics", new_callable=AsyncMock
+        ):
             # Add some workers
             multi_chain_core.workers = {
                 "1": MagicMock(),
@@ -162,7 +172,7 @@ async def test_run(multi_chain_core):
             # Wait for the task to complete
             try:
                 await asyncio.wait_for(task, timeout=1)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 # This is expected as we're cancelling the task
                 pass
 
@@ -234,7 +244,7 @@ async def test_update_metrics(multi_chain_core):
     # Wait for the task to complete
     try:
         await asyncio.wait_for(task, timeout=1)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
+    except (TimeoutError, asyncio.CancelledError):
         # This is expected as we're cancelling the task
         pass
 
@@ -244,7 +254,7 @@ async def test_update_metrics(multi_chain_core):
     multi_chain_core.metrics["total_transactions"] = 30
     multi_chain_core.metrics["total_profit_eth"] = 0.08
     multi_chain_core.metrics["total_gas_spent_eth"] = 0.03
-    
+
     assert multi_chain_core.metrics["total_transactions"] == 30
     assert multi_chain_core.metrics["total_profit_eth"] == 0.08
     assert multi_chain_core.metrics["total_gas_spent_eth"] == 0.03
@@ -269,7 +279,7 @@ def test_get_metrics(multi_chain_core):
     multi_chain_core.workers["11155111"].get_metrics.return_value = {
         "chain_id": "11155111",
         "chain_name": "Sepolia Testnet",
-        "transactions": 20, 
+        "transactions": 20,
         "profit_eth": 0.03,
         "gas_spent_eth": 0.01,
     }
@@ -292,6 +302,6 @@ def test_get_metrics(multi_chain_core):
     assert metrics == multi_chain_core.metrics
     # Make sure it's a copy not the same object
     assert metrics is not multi_chain_core.metrics
-    
+
     # Based on the implementation, get_metrics() just returns a copy of multi_chain_core.metrics
     # and doesn't include individual chain metrics, so we don't need to check those

@@ -35,9 +35,9 @@ from on1builder.config.config import *
 from on1builder.engines import *
 from on1builder.monitoring import *
 from on1builder.utils import *
-from on1builder.persistence import * 
-from on1builder.config import * 
-from on1builder.cli import * 
+from on1builder.persistence import *
+from on1builder.config import *
+from on1builder.cli import *
 
 __all__ = [
     "ON1Builder",
@@ -45,5 +45,5 @@ __all__ = [
     "ON1BuilderEngine",
     "ON1BuilderMonitoring",
     "ON1BuilderPersistence",
-    "ON1BuilderCLI"
+    "ON1BuilderCLI",
 ]

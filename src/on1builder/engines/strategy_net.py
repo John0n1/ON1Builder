@@ -60,7 +60,8 @@ class StrategyConfiguration:
 
 
 class StrategyNet:
-    """Chooses & executes the best strategy via lightweight reinforcement learning."""
+    """Chooses & executes the best strategy via lightweight reinforcement
+    learning."""
 
     _WEIGHT_FILE = Path("strategy_weights.json")
     _SAVE_EVERY = 25  # save to disk every N updates to limit IO
@@ -110,7 +111,8 @@ class StrategyNet:
             stype: StrategyPerformanceMetrics() for stype in self.strategy_types
         }
         self.weights: Dict[str, np.ndarray] = {
-            stype: np.ones(len(funcs), dtype=float) for stype, funcs in self._registry.items()
+            stype: np.ones(len(funcs), dtype=float)
+            for stype, funcs in self._registry.items()
         }
 
         self.cfg = StrategyConfiguration()
@@ -140,7 +142,8 @@ class StrategyNet:
             try:
                 data = json.loads(self._WEIGHT_FILE.read_text())
                 for stype, arr in data.items():
-                    if stype in self.weights and len(arr) == len(self.weights[stype]):
+                    if stype in self.weights and len(
+                            arr) == len(self.weights[stype]):
                         self.weights[stype] = np.array(arr, dtype=float)
             except Exception as exc:
                 logger.warning("Failed to load strategy weights: %s", exc)
@@ -149,13 +152,18 @@ class StrategyNet:
         """Save strategy weights to disk if changed."""
         try:
             current_weights_json = json.dumps(self.weights, sort_keys=True)
-            
+
             # Only save if weights have changed
-            if not hasattr(self, '_last_saved_weights') or self._last_saved_weights != current_weights_json:
-                with open(self._WEIGHT_FILE, 'w') as f:
+            if (
+                not hasattr(self, "_last_saved_weights")
+                or self._last_saved_weights != current_weights_json
+            ):
+                with open(self._WEIGHT_FILE, "w") as f:
                     f.write(current_weights_json)
                 self._last_saved_weights = current_weights_json
-                logger.debug(f"Saved updated strategy weights to {self._WEIGHT_FILE}")
+                logger.debug(
+                    f"Saved updated strategy weights to {
+                        self._WEIGHT_FILE}")
         except Exception as e:
             logger.error(f"Failed to save strategy weights: {e}")
 
@@ -168,7 +176,9 @@ class StrategyNet:
     ) -> List[Callable[[Dict[str, Any]], asyncio.Future]]:
         return self._registry.get(strategy_type, [])
 
-    async def execute_best_strategy(self, target_tx: Dict[str, Any], strategy_type: str) -> bool:
+    async def execute_best_strategy(
+        self, target_tx: Dict[str, Any], strategy_type: str
+    ) -> bool:
         strategies = self.get_strategies(strategy_type)
         if not strategies:
             logger.debug("No strategies registered for type %s", strategy_type)
@@ -183,7 +193,9 @@ class StrategyNet:
         exec_time = time.perf_counter() - start_ts
         profit = self.txc.current_profit - before_profit
 
-        await self._update_after_run(strategy_type, strategy.__name__, success, profit, exec_time)
+        await self._update_after_run(
+            strategy_type, strategy.__name__, success, profit, exec_time
+        )
         return success
 
     # ------------------------------------------------------------------ #
@@ -195,10 +207,13 @@ class StrategyNet:
         strategies: List[Callable[[Dict[str, Any]], asyncio.Future]],
         strategy_type: str,
     ) -> Callable[[Dict[str, Any]], asyncio.Future]:
-        """ε-greedy selection over soft-maxed weights."""
+        """Ε-greedy selection over soft-maxed weights."""
         if random.random() < self.cfg.exploration_rate:
             choice = random.choice(strategies)
-            logger.debug("Exploration chose %s (%s)", choice.__name__, strategy_type)
+            logger.debug(
+                "Exploration chose %s (%s)",
+                choice.__name__,
+                strategy_type)
             return choice
 
         w = self.weights[strategy_type]
@@ -226,7 +241,8 @@ class StrategyNet:
         m = self.metrics[stype]
         m.total_executions += 1
         m.avg_execution_time = (
-            m.avg_execution_time * self.cfg.decay_factor + exec_time * (1 - self.cfg.decay_factor)
+            m.avg_execution_time * self.cfg.decay_factor
+            + exec_time * (1 - self.cfg.decay_factor)
         )
 
         if success:
@@ -260,7 +276,8 @@ class StrategyNet:
     # internals                                                          #
     # ------------------------------------------------------------------ #
 
-    def _calc_reward(self, success: bool, profit: Decimal, exec_time: float) -> float:
+    def _calc_reward(self, success: bool, profit: Decimal,
+                     exec_time: float) -> float:
         """
         A simple reward:
           +profit (ETH) if success
@@ -278,9 +295,8 @@ class StrategyNet:
         return -1
 
     async def is_healthy(self) -> bool:
-        """
-        Check if the strategy net system is healthy.
-        
+        """Check if the strategy net system is healthy.
+
         Returns:
             True if the system is in a healthy state, False otherwise
         """
@@ -289,20 +305,20 @@ class StrategyNet:
             if not self.txc or not self.safety_net:
                 logger.warning("Required dependencies are not available")
                 return False
-                
+
             # Check if strategy registry is populated
             if not self._registry:
                 logger.warning("No strategies are loaded")
                 return False
-                
+
             # Check if at least one strategy list is non-empty
             for stype, funcs in self._registry.items():
                 if funcs:
                     return True
-                    
+
             logger.warning("No enabled strategies found")
             return False
-            
+
         except Exception as e:
             logger.error(f"Strategy net health check failed: {str(e)}")
             return False

@@ -1,5 +1,4 @@
-"""
-Strategy execution engines for ON1Builder.
+"""Strategy execution engines for ON1Builder.
 
 This module contains the engines that execute trading strategies.
 """

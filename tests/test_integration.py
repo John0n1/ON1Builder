@@ -1,24 +1,23 @@
 import os
 import sys
+
 import pytest
-import asyncio
-from pathlib import Path
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from on1builder.config.config import Configuration, MultiChainConfiguration
 
 # Test imports - these should work with our improved code
-from on1builder.integrations.abi_registry import ABIRegistry, get_registry
-from on1builder.config.config import Configuration
-from on1builder.core.multi_chain_core import MultiChainCore
-from on1builder.config.config import MultiChainConfiguration
-from on1builder.persistence.db_manager import DatabaseManager, get_db_manager
+from on1builder.integrations.abi_registry import ABIRegistry
+from on1builder.persistence.db_manager import DatabaseManager
 from on1builder.utils.logger import setup_logging
 
 # Set up logging for tests
 logger = setup_logging("TestIntegration", level="DEBUG")
 
 import pytest_asyncio  # Import asyncio fixture support
+
 
 @pytest_asyncio.fixture
 async def config():
@@ -27,6 +26,7 @@ async def config():
     await config.load()
     return config
 
+
 @pytest_asyncio.fixture
 async def multi_chain_config():
     """Create a test multi-chain configuration."""
@@ -34,33 +34,35 @@ async def multi_chain_config():
     await config.load()
     return config
 
+
 @pytest_asyncio.fixture
 async def abi_registry():
     """Create a test ABI registry."""
     # Create a new registry with reset state
     registry = ABIRegistry()
-    
+
     # Reset shared state to avoid test interference
     ABIRegistry._GLOBAL_ABIS = {}
     ABIRegistry._GLOBAL_SIG_MAP = {}
     ABIRegistry._GLOBAL_SELECTOR_MAP = {}
     ABIRegistry._FILE_HASH = {}
     ABIRegistry._initialized = False
-    
+
     # Add minimal ERC20 data for health check
-    ABIRegistry._GLOBAL_ABIS['erc20'] = [
+    ABIRegistry._GLOBAL_ABIS["erc20"] = [
         {
-            "name": "transfer", 
-            "type": "function", 
+            "name": "transfer",
+            "type": "function",
             "inputs": [
-                {"name": "to", "type": "address"}, 
-                {"name": "value", "type": "uint256"}
-            ]
+                {"name": "to", "type": "address"},
+                {"name": "value", "type": "uint256"},
+            ],
         }
     ]
     ABIRegistry._initialized = True
-    
+
     return registry
+
 
 @pytest_asyncio.fixture
 async def db_manager(config):
@@ -71,17 +73,19 @@ async def db_manager(config):
     yield manager
     await manager.close()
 
+
 @pytest.mark.asyncio
 async def test_registry_initialization(abi_registry):
     """Test that the ABI registry initializes correctly."""
     assert abi_registry is not None
     assert await abi_registry.is_healthy()
-    
+
+
 @pytest.mark.asyncio
 async def test_db_manager_initialization(db_manager):
     """Test that the database manager initializes correctly."""
     assert db_manager is not None
-    
+
     # Test saving a transaction
     tx_hash = "0x123456"
     chain_id = 1
@@ -93,7 +97,7 @@ async def test_db_manager_initialization(db_manager):
     block_number = 123456
     status = True
     data = '{"note": "test transaction"}'
-    
+
     # Using the save_transaction method that exists in the db_manager
     result = await db_manager.save_transaction(
         tx_hash=tx_hash,
@@ -105,12 +109,12 @@ async def test_db_manager_initialization(db_manager):
         gas_used=gas_used,
         block_number=block_number,
         status=status,
-        data=data
+        data=data,
     )
-    
+
     # Result should be the transaction ID or None if error occurred
     assert result is not None
-    
+
     # Test retrieving the transaction
     retrieved_tx = await db_manager.get_transaction(tx_hash)
     assert retrieved_tx is not None
@@ -118,15 +122,17 @@ async def test_db_manager_initialization(db_manager):
     assert retrieved_tx["chain_id"] == chain_id
     assert retrieved_tx["from_address"] == from_address
 
+
 @pytest.mark.asyncio
 async def test_configuration_loading(config):
     """Test that the configuration loads correctly."""
     assert config is not None
     assert hasattr(config, "BASE_PATH")
-    
+
+
 @pytest.mark.asyncio
 async def test_multi_chain_config_loading(multi_chain_config):
     """Test that the multi-chain configuration loads correctly."""
     assert multi_chain_config is not None
     chains = multi_chain_config.get_chains()
-    assert isinstance(chains, list) 
+    assert isinstance(chains, list)

@@ -1,9 +1,8 @@
 # txpool_monitor.py
-"""
-ON1Builder – TxpoolMonitor
+"""ON1Builder – TxpoolMonitor.
 
-Monitors the Ethereum mempool trough pending transaction filters or block polling.
-Surfaces profitable transactions for StrategyNet
+Monitors the Ethereum mempool trough pending transaction filters or
+block polling. Surfaces profitable transactions for StrategyNet
 """
 
 from __future__ import annotations
@@ -57,7 +56,9 @@ class TxpoolMonitor:
                 if addr is not None:
                     self.monitored_tokens.add(addr.lower())
                 else:
-                    logger.warning(f"Could not find address for token symbol: {t}, skipping")
+                    logger.warning(
+                        f"Could not find address for token symbol: {t}, skipping"
+                    )
 
         # queues -------------------------------------------------------------
         self._tx_hash_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -74,7 +75,9 @@ class TxpoolMonitor:
         self._tx_cache: Dict[str, Dict[str, Any]] = {}
 
         # concurrency guard - default to 10 parallel tasks if not specified
-        max_parallel_tasks = getattr(self.configuration, "MEMPOOL_MAX_PARALLEL_TASKS", 10)
+        max_parallel_tasks = getattr(
+            self.configuration, "MEMPOOL_MAX_PARALLEL_TASKS", 10
+        )
         self._semaphore = asyncio.Semaphore(max_parallel_tasks)
 
         # Event for stopping the dispatcher
@@ -114,8 +117,8 @@ class TxpoolMonitor:
                 self._collect_hashes(),
                 name="MM_collect_hashes"),
             asyncio.create_task(
-                self._analysis_dispatcher(),
-                name="MM_analysis_dispatcher"),
+                self._analysis_dispatcher(), name="MM_analysis_dispatcher"
+            ),
         ]
         logger.info(
             "TxpoolMonitor: started %d background tasks", len(
@@ -139,8 +142,8 @@ class TxpoolMonitor:
     # ---------- collectors --------------------------------------------------
 
     async def _collect_hashes(self) -> None:
-        """Collect tx-hashes either via `eth_newPendingTransactionFilter`
-        or by block-polling fallback."""
+        """Collect tx-hashes either via `eth_newPendingTransactionFilter` or by
+        block-polling fallback."""
         try:
             try:
                 filter_obj = await self.web3.eth.filter("pending")
@@ -202,17 +205,17 @@ class TxpoolMonitor:
                 if self._tx_hash_queue.empty():
                     await asyncio.sleep(0.1)
                     continue
-                    
+
                 tx_hash = await self._tx_hash_queue.get()
-                
+
                 # Process transaction in a separate task to avoid blocking
                 asyncio.create_task(self._process_transaction_safe(tx_hash))
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Error in transaction analysis dispatcher: {e}")
-                
+
     async def _process_transaction_safe(self, tx_hash: str) -> None:
         """Process a transaction with error handling."""
         try:
@@ -251,7 +254,7 @@ class TxpoolMonitor:
         # Get configuration values with defaults if not present
         delay = getattr(self.configuration, "MEMPOOL_RETRY_DELAY", 0.5)
         max_retries = getattr(self.configuration, "MEMPOOL_MAX_RETRIES", 3)
-        
+
         for _ in range(max_retries):
             try:
                 tx = await self.web3.eth.get_transaction(tx_hash)
@@ -269,7 +272,9 @@ class TxpoolMonitor:
 
     def _calc_priority(self, tx: Dict[str, Any]) -> int:
         """Lower integer == higher priority for PriorityQueue.
-        We negate gas-price so that higher gas = lower integer."""
+
+        We negate gas-price so that higher gas = lower integer.
+        """
         gp_legacy = tx.get("gasPrice", 0) or 0
         gp_1559 = tx.get("maxFeePerGas", 0) or 0
         effective_gp = max(gp_legacy, gp_1559)
@@ -278,8 +283,11 @@ class TxpoolMonitor:
     async def _is_profitable(
         self, tx_hash: str, tx: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Very lightweight profitability heuristic – just enough to
-        surface to StrategyNet.  Heavy simulation lives elsewhere."""
+        """Very lightweight profitability heuristic – just enough to surface to
+        StrategyNet.
+
+        Heavy simulation lives elsewhere.
+        """
         to_addr = (tx.get("to") or "").lower()
         if to_addr not in self.monitored_tokens:
             return None
@@ -313,9 +321,8 @@ class TxpoolMonitor:
         return None
 
     async def is_healthy(self) -> bool:
-        """
-        Check if the txpool monitoring system is healthy.
-        
+        """Check if the txpool monitoring system is healthy.
+
         Returns:
             True if the system is in a healthy state, False otherwise
         """
@@ -324,7 +331,7 @@ class TxpoolMonitor:
             if not await self.web3.is_connected():
                 logger.warning("Web3 connection is down")
                 return False
-                
+
             # Check if we can access the txpool
             if self.use_txpool_api:
                 try:
@@ -333,69 +340,77 @@ class TxpoolMonitor:
                 except Exception as e:
                     logger.warning(f"Cannot access txpool API: {str(e)}")
                     # Not critical as we can fall back to block polling
-                    
+
             # Check if required components are healthy
-            if self.safety_net and hasattr(self.safety_net, 'is_healthy'):
+            if self.safety_net and hasattr(self.safety_net, "is_healthy"):
                 if not await self.safety_net.is_healthy():
                     logger.warning("Safety net is unhealthy")
                     return False
-                    
+
             # Check if we can process new transactions
             if self._stop_event.is_set():
                 logger.warning("Monitoring has been stopped")
                 return False
-                
+
             return True
         except Exception as e:
             logger.error(f"Txpool monitor health check failed: {str(e)}")
             return False
 
     async def _handle_new_transactions(self, txs: List[Any]) -> None:
-        """
-        Process a batch of new transactions from the mempool.
-        
+        """Process a batch of new transactions from the mempool.
+
         Args:
             txs: List of transaction data dictionaries or hashes for testing
         """
         if not txs:
             return
-            
+
         logger.debug(f"Processing {len(txs)} new transactions")
-        
+
         # Process each transaction
         for tx_item in txs:
             # Handle string (transaction hash) for testing purposes
             if isinstance(tx_item, str):
                 tx_hash = tx_item
                 # Create minimal dummy tx_data for testing
-                tx_data = {"hash": tx_hash, "value": 1, "gas": self.min_gas + 1}
+                tx_data = {
+                    "hash": tx_hash,
+                    "value": 1,
+                    "gas": self.min_gas + 1}
             else:
                 # Regular case with dictionary
                 tx_data = tx_item
                 tx_hash = tx_data.get("hash")
-                
+
             if not tx_hash:
                 continue
-                
+
             # Skip if we've already seen this transaction
             if tx_hash in self.processed_txs:
                 continue
-                
+
             # Mark as processed
             self.processed_txs.add(tx_hash)
-            
+
             # For testing with mocked _process_transaction
             await self._process_transaction(tx_hash)
-            
-            # Queue for analysis if potentially interesting (in production code)
-            to_address = tx_data.get("to", "").lower() if isinstance(tx_data, dict) else ""
+
+            # Queue for analysis if potentially interesting (in production
+            # code)
+            to_address = (
+                tx_data.get(
+                    "to", "").lower() if isinstance(
+                    tx_data, dict) else ""
+            )
             if to_address in self.monitored_tokens:
                 await self._queue_transaction(tx_hash, tx_data)
-    
-    async def _queue_transaction(self, tx_hash: str, tx_data: Dict[str, Any] = None) -> None:
-        """
-        Queue a transaction for further analysis.
-        
+
+    async def _queue_transaction(
+        self, tx_hash: str, tx_data: Dict[str, Any] = None
+    ) -> None:
+        """Queue a transaction for further analysis.
+
         Args:
             tx_hash: Transaction hash
             tx_data: Transaction data (optional for testing)
@@ -407,17 +422,17 @@ class TxpoolMonitor:
             # Call the process transaction directly for test compatibility
             await self._process_transaction(tx_hash)
             return
-            
+
         # Basic filtering before detailed analysis
         if tx_data.get("gas", 0) < self.min_gas:
             return
-            
+
         if tx_data.get("value", 0) <= 0:
             return
-            
+
         # Queue for analysis
         logger.debug(f"Queueing transaction {tx_hash} for analysis")
-        
+
         # Avoid queue overload
         if len(self.tx_queue) >= self.max_queue_size:
             # Remove oldest
@@ -425,84 +440,97 @@ class TxpoolMonitor:
                 self.tx_queue.pop(0)
             except IndexError:
                 pass
-                
+
         # Add to queue
         self.tx_queue.append((tx_hash, tx_data))
-        
+
         # Signal the processing task
         if self.queue_event:
             self.queue_event.set()
-    
+
     async def _monitor_memory(self) -> None:
+        """Monitor and control memory usage of the txpool monitoring.
+
+        This periodically cleans up caches and processed transaction
+        lists to prevent memory leaks during long-running operation.
         """
-        Monitor and control memory usage of the txpool monitoring.
-        
-        This periodically cleans up caches and processed transaction lists
-        to prevent memory leaks during long-running operation.
-        """
-        memory_check_interval = self.configuration.get("MEMORY_CHECK_INTERVAL", 300)  # 5 minutes
+        self.configuration.get(
+            "MEMORY_CHECK_INTERVAL", 300
+        )  # 5 minutes
         max_cache_size = self.configuration.get("MAX_TXPOOL_CACHE_SIZE", 10000)
-        
+
         # Get current memory usage
         mem = psutil.virtual_memory()
         memory_pct = mem.percent
         logger.debug(f"Current memory usage: {memory_pct}%")
-        
+
         # If memory usage is high, clean up cache more aggressively
         if memory_pct > 80:  # Above 80% memory usage
-            logger.warning(f"High memory usage detected: {memory_pct}%, cleaning caches")
+            logger.warning(
+                f"High memory usage detected: {memory_pct}%, cleaning caches"
+            )
             self.processed_txs.clear()
             self._tx_cache.clear()
         else:
             # Clean up processed transactions list if it gets too large
             if len(self.processed_txs) > max_cache_size:
-                logger.info(f"Cleaning up txpool cache (size: {len(self.processed_txs)})")
+                logger.info(
+                    f"Cleaning up txpool cache (size: {len(self.processed_txs)})"
+                )
                 # Keep only the most recent transactions
-                self.processed_txs = set(list(self.processed_txs)[-max_cache_size:])
-                
+                self.processed_txs = set(
+                    list(self.processed_txs)[-max_cache_size:])
+
             # Log memory usage statistics
-            logger.debug(f"TxpoolMonitor memory stats: {len(self.processed_txs)} processed txs, {len(self.tx_queue)} queued")
-    
+            logger.debug(
+                f"TxpoolMonitor memory stats: {
+                    len(
+                        self.processed_txs)} processed txs, {
+                    len(
+                        self.tx_queue)} queued"
+            )
+
     async def get_dynamic_gas_price(self) -> float:
-        """
-        Get the current dynamic gas price for transactions.
-        Uses a direct calculation for testing, and SafetyNet in production.
-        
+        """Get the current dynamic gas price for transactions. Uses a direct
+        calculation for testing, and SafetyNet in production.
+
         Returns:
             Gas price in Gwei
         """
         try:
             # For testing - use direct web3 call
-            latest_block = await self.web3.eth.get_block('latest')
-            if 'baseFeePerGas' in latest_block:
+            latest_block = await self.web3.eth.get_block("latest")
+            if "baseFeePerGas" in latest_block:
                 # EIP-1559 compatible chain
-                base_fee = latest_block['baseFeePerGas']
+                base_fee = latest_block["baseFeePerGas"]
                 priority_fee = 1000000000  # 1 Gwei
                 max_fee = base_fee * 2 + priority_fee
-                return float(self.web3.from_wei(max_fee, 'gwei'))
+                return float(self.web3.from_wei(max_fee, "gwei"))
             else:
                 # Legacy gas price
                 gas_price = await self.web3.eth.gas_price
-                return float(self.web3.from_wei(gas_price, 'gwei'))
+                return float(self.web3.from_wei(gas_price, "gwei"))
         except Exception as e:
             logger.error(f"Error calculating dynamic gas price: {str(e)}")
             # Fallback to safety net method
             try:
                 return await self.safety_net.get_dynamic_gas_price()
             except Exception as e:
-                logger.error(f"Error getting dynamic gas price from SafetyNet: {e}")
+                logger.error(
+                    f"Error getting dynamic gas price from SafetyNet: {e}")
                 # Fallback to default maximum
                 return float(self.configuration.get("MAX_GAS_PRICE_GWEI", 100))
 
     async def _process_transaction(self, tx_hash_or_data: Any) -> None:
-        """
-        Process a transaction for analysis. This method is used by the testing framework.
-        In production, _process_transaction_safe is used instead.
-        
+        """Process a transaction for analysis. This method is used by the
+        testing framework. In production, _process_transaction_safe is used
+        instead.
+
         Args:
             tx_hash_or_data: Either a transaction hash or transaction data object
         """
-        # This is a wrapper for testing purposes that matches the expected interface in tests
+        # This is a wrapper for testing purposes that matches the expected
+        # interface in tests
         try:
             # If it's a hash, pass it directly
             if isinstance(tx_hash_or_data, str):
@@ -512,6 +540,9 @@ class TxpoolMonitor:
                 await self._analyse_transaction(tx_hash_or_data["hash"])
             # Otherwise, just log that we can't process this
             else:
-                logger.warning(f"Cannot process transaction of type {type(tx_hash_or_data)}")
+                logger.warning(
+                    f"Cannot process transaction of type {
+                        type(tx_hash_or_data)}"
+                )
         except Exception as e:
             logger.error(f"Error in _process_transaction: {e}")

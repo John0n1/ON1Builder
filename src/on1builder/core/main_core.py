@@ -1,5 +1,4 @@
 # src/on1builder/core/main_core.py
-
 """
 ON1Builder – MainCore
 =====================
@@ -10,35 +9,20 @@ and exposes `.run()`, `.stop()`, and `.connect()` for callers (CLI, Flask UI, te
 from __future__ import annotations
 
 import asyncio
-import os
-import random
+import inspect
 import tracemalloc
 import time
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-# Import these only if available
 try:
-    import async_timeout
     from eth_account import Account
     from web3 import AsyncWeb3
-    from web3.eth import AsyncEth
     from web3.middleware import ExtraDataToPOAMiddleware
     from web3.providers import AsyncHTTPProvider, WebSocketProvider, IPCProvider
     HAS_WEB3 = True
 except ImportError:
     HAS_WEB3 = False
-    class Account:
-        pass
-    class AsyncWeb3:
-        pass
-    class AsyncHTTPProvider:
-        pass
-    class WebSocketProvider:
-        pass
-    class IPCProvider:
-        pass
-    class ExtraDataToPOAMiddleware:
-        pass
+
 
 from on1builder.config.config import Configuration
 from on1builder.config.config import APIConfig
@@ -53,15 +37,8 @@ from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 if TYPE_CHECKING:
     from on1builder.monitoring.market_monitor import MarketMonitor
     from on1builder.monitoring.txpool_monitor import TxpoolMonitor
-else:
-    try:
-        from on1builder.monitoring.market_monitor import MarketMonitor
-        from on1builder.monitoring.txpool_monitor import TxpoolMonitor
-    except ImportError:
-        class MarketMonitor:
-            pass
-        class TxpoolMonitor:
-            pass
+pass
+
 
 logger = setup_logging("MainCore", level="DEBUG")
 
@@ -71,6 +48,7 @@ _POA_CHAINS: set[int] = {99, 100, 77, 7766, 56, 11155111}
 
 class MainCore:
     """High-level conductor that owns all sub-components and the main loop."""
+
     logger = logger
 
     def __init__(self, configuration: Configuration) -> None:
@@ -81,8 +59,8 @@ class MainCore:
         self.account: Optional[Account] = None
 
         self._bg: List[asyncio.Task[Any]] = []
-        self._running_evt = asyncio.Event()          # signaled by run()
-        self._stop_evt = asyncio.Event()             # set by stop()
+        self._running_evt = asyncio.Event()  # signaled by run()
+        self._stop_evt = asyncio.Event()  # set by stop()
 
         # component registry
         self.components: Dict[str, Any] = {}
@@ -98,10 +76,14 @@ class MainCore:
     # -------------------------------------------------------------------
 
     async def connect(self) -> bool:
+        """Establish a Web3 connection.
+
+        Returns True if connected, False otherwise. Supports both sync
+        and async _connect_web3 for testing.
         """
-        Establish a Web3 connection. Returns True if connected, False otherwise.
-        """
-        web3 = await self._connect_web3()
+        # Call _connect_web3, await if necessary
+        conn = self._connect_web3()
+        web3 = await conn if inspect.isawaitable(conn) else conn
         if not web3:
             return False
 
@@ -116,14 +98,73 @@ class MainCore:
             return True
         return False
 
+    async def connect_websocket(self) -> bool:
+        """Establish a Web3 connection via WebSocket. Returns True if
+        connected, False otherwise.
+
+        This method implements reconnection logic with retries according
+        to the configuration.
+        """
+        if not HAS_WEB3:
+            logger.error("Web3.py is not installed")
+            return False
+
+        if (
+            not hasattr(self.cfg, "WEBSOCKET_ENDPOINT")
+            or not self.cfg.WEBSOCKET_ENDPOINT
+        ):
+            logger.warning("No WebSocket endpoint configured")
+            return False
+
+        retry_count = getattr(self.cfg, "CONNECTION_RETRY_COUNT", 3)
+        retry_delay = getattr(self.cfg, "CONNECTION_RETRY_DELAY", 1.0)
+
+        for attempt in range(retry_count + 1):  # +1 because we count from 0
+            try:
+                provider = WebSocketProvider(self.cfg.WEBSOCKET_ENDPOINT)
+                web3 = AsyncWeb3(provider)
+
+                # Verify connection by making a call
+                await web3.eth.chain_id
+
+                # Apply POA middleware if needed
+                chain_id = await web3.eth.chain_id
+                if chain_id in _POA_CHAINS:
+                    web3.middleware_onion.inject(
+                        ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(
+                        f"Applied PoA middleware for chain ID {chain_id}")
+
+                # Connection successful
+                self.web3 = web3
+                logger.info(
+                    f"Connected to WebSocket endpoint: {
+                        self.cfg.WEBSOCKET_ENDPOINT}"
+                )
+                return True
+
+            except Exception as e:
+                if attempt < retry_count:
+                    logger.warning(
+                        f"WebSocket connection attempt {
+                            attempt + 1}/{
+                            retry_count + 1} failed: {e}"
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.error(
+                        f"All WebSocket connection attempts failed: {e}")
+                    return False
+
+        return False
+
     # -------------------------------------------------------------------
     # run / stop
     # -------------------------------------------------------------------
 
     async def run(self) -> None:
-        """
-        Construct components and start high-level tasks – blocks until stop().
-        """
+        """Construct components and start high-level tasks – blocks until
+        stop()."""
         await self._bootstrap()
         self._running_evt.set()
 
@@ -131,22 +172,23 @@ class MainCore:
 
         # txpool_monitor task
         if "txpool_monitor" in self.components:
-            self._bg.append(asyncio.create_task(
-                self.components["txpool_monitor"].start_monitoring(),
-                name="MM_run"
-            ))
+            self._bg.append(
+                asyncio.create_task(
+                    self.components["txpool_monitor"].start_monitoring(), name="MM_run"
+                )
+            )
 
         # transaction processor
-        self._bg.append(asyncio.create_task(
-            self._tx_processor(),
-            name="TX_proc"
-        ))
+        self._bg.append(
+            asyncio.create_task(
+                self._tx_processor(),
+                name="TX_proc"))
 
         # heartbeat
-        self._bg.append(asyncio.create_task(
-            self._heartbeat(),
-            name="Heartbeat"
-        ))
+        self._bg.append(
+            asyncio.create_task(
+                self._heartbeat(),
+                name="Heartbeat"))
 
         try:
             await asyncio.shield(self._stop_evt.wait())
@@ -157,9 +199,7 @@ class MainCore:
             logger.info("MainCore run() finished")
 
     async def stop(self) -> None:
-        """
-        Graceful tear-down; idempotent.
-        """
+        """Graceful tear-down; idempotent."""
         if self._stop_evt.is_set():
             return
         self._stop_evt.set()
@@ -181,7 +221,11 @@ class MainCore:
                 logger.error(f"Error during task shutdown: {e}")
 
         # Disconnect web3 provider if available
-        if self.web3 and hasattr(self.web3, "provider") and hasattr(self.web3.provider, "disconnect"):
+        if (
+            self.web3
+            and hasattr(self.web3, "provider")
+            and hasattr(self.web3.provider, "disconnect")
+        ):
             try:
                 await self.web3.provider.disconnect()
             except Exception as e:
@@ -189,7 +233,7 @@ class MainCore:
 
         # Stop all components
         for name, component in self.components.items():
-            if hasattr(component, 'stop') and callable(component.stop):
+            if hasattr(component, "stop") and callable(component.stop):
                 try:
                     await component.stop()
                     logger.debug(f"Component {name} stopped")
@@ -281,48 +325,62 @@ class MainCore:
 
         # Try HTTP endpoint first
         try:
-            if hasattr(self.cfg, 'HTTP_ENDPOINT') and self.cfg.HTTP_ENDPOINT:
+            if hasattr(self.cfg, "HTTP_ENDPOINT") and self.cfg.HTTP_ENDPOINT:
                 provider = AsyncHTTPProvider(self.cfg.HTTP_ENDPOINT)
                 web3 = AsyncWeb3(provider)
                 await web3.eth.chain_id
-                logger.info(f"Connected to HTTP endpoint: {self.cfg.HTTP_ENDPOINT}")
+                logger.info(
+                    f"Connected to HTTP endpoint: {
+                        self.cfg.HTTP_ENDPOINT}")
 
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(
+                        ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(
+                        f"Applied PoA middleware for chain ID {chain_id}")
                 return web3
         except Exception as e:
             logger.warning(f"Failed to connect to HTTP endpoint: {e}")
 
         # Try WebSocket endpoint
         try:
-            if hasattr(self.cfg, 'WEBSOCKET_ENDPOINT') and self.cfg.WEBSOCKET_ENDPOINT:
+            if hasattr(self.cfg,
+                       "WEBSOCKET_ENDPOINT") and self.cfg.WEBSOCKET_ENDPOINT:
                 provider = WebSocketProvider(self.cfg.WEBSOCKET_ENDPOINT)
                 web3 = AsyncWeb3(provider)
                 await web3.eth.chain_id
-                logger.info(f"Connected to WebSocket endpoint: {self.cfg.WEBSOCKET_ENDPOINT}")
+                logger.info(
+                    f"Connected to WebSocket endpoint: {
+                        self.cfg.WEBSOCKET_ENDPOINT}"
+                )
 
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(
+                        ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(
+                        f"Applied PoA middleware for chain ID {chain_id}")
                 return web3
         except Exception as e:
             logger.warning(f"Failed to connect to WebSocket endpoint: {e}")
 
         # Try IPC endpoint
         try:
-            if hasattr(self.cfg, 'IPC_ENDPOINT') and self.cfg.IPC_ENDPOINT:
+            if hasattr(self.cfg, "IPC_ENDPOINT") and self.cfg.IPC_ENDPOINT:
                 provider = IPCProvider(self.cfg.IPC_ENDPOINT)
                 web3 = AsyncWeb3(provider)
                 await web3.eth.chain_id
-                logger.info(f"Connected to IPC endpoint: {self.cfg.IPC_ENDPOINT}")
+                logger.info(
+                    f"Connected to IPC endpoint: {
+                        self.cfg.IPC_ENDPOINT}")
 
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(
+                        ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(
+                        f"Applied PoA middleware for chain ID {chain_id}")
                 return web3
         except Exception as e:
             logger.warning(f"Failed to connect to IPC endpoint: {e}")
@@ -337,13 +395,14 @@ class MainCore:
             return None
 
         try:
-            if hasattr(self.cfg, 'WALLET_KEY') and self.cfg.WALLET_KEY:
+            if hasattr(self.cfg, "WALLET_KEY") and self.cfg.WALLET_KEY:
                 return Account.from_key(self.cfg.WALLET_KEY)
-            elif hasattr(self.cfg, 'MNEMONIC') and self.cfg.MNEMONIC:
+            elif hasattr(self.cfg, "MNEMONIC") and self.cfg.MNEMONIC:
                 logger.error("Mnemonic support not implemented")
                 return None
             else:
-                logger.error("No WALLET_KEY or MNEMONIC provided in configuration")
+                logger.error(
+                    "No WALLET_KEY or MNEMONIC provided in configuration")
                 return None
         except Exception as e:
             logger.error(f"Failed to create account: {e}")
@@ -351,7 +410,8 @@ class MainCore:
 
     async def _create_nonce_core(self) -> NonceCore:
         """Create and initialize NonceCore."""
-        nonce_core = NonceCore(self.web3, self.account)
+        # Pass configuration instead of account to match NonceCore signature
+        nonce_core = NonceCore(self.web3, self.cfg)
         await nonce_core.initialize()
         return nonce_core
 
@@ -370,7 +430,7 @@ class MainCore:
             self.cfg,
             self.components["nonce_core"],
             self.components["safety_net"],
-            chain_id=chain_id
+            chain_id=chain_id,
         )
         await tx_core.initialize()
         return tx_core
@@ -384,9 +444,7 @@ class MainCore:
     async def _create_txpool_monitor(self) -> TxpoolMonitor:
         """Create and initialize TxpoolMonitor."""
         txpool_monitor = TxpoolMonitor(
-            self.web3,
-            self.cfg,
-            self.components["market_monitor"]
+            self.web3, self.cfg, self.components["market_monitor"]
         )
         await txpool_monitor.initialize()
         return txpool_monitor
@@ -398,7 +456,7 @@ class MainCore:
             self.cfg,
             self.components["transaction_core"],
             self.components["safety_net"],
-            self.components["market_monitor"]
+            self.components["market_monitor"],
         )
         await strategy_net.initialize()
         return strategy_net
@@ -409,9 +467,10 @@ class MainCore:
 
     async def _heartbeat(self) -> None:
         """Periodic health check and memory usage reporting."""
-        interval = getattr(self.cfg, 'HEARTBEAT_INTERVAL', 60)
-        memory_report_interval = getattr(self.cfg, 'MEMORY_REPORT_INTERVAL', 300)
-        health_check_interval = getattr(self.cfg, 'HEALTH_CHECK_INTERVAL', 10)
+        interval = getattr(self.cfg, "HEARTBEAT_INTERVAL", 60)
+        memory_report_interval = getattr(
+            self.cfg, "MEMORY_REPORT_INTERVAL", 300)
+        health_check_interval = getattr(self.cfg, "HEALTH_CHECK_INTERVAL", 10)
 
         last_memory_report = 0
         last_health_check = 0
@@ -439,10 +498,11 @@ class MainCore:
 
     async def _tx_processor(self) -> None:
         """Process pending transactions (placeholder workload)."""
-        interval = getattr(self.cfg, 'TX_PROCESSOR_INTERVAL', 5)
+        interval = getattr(self.cfg, "TX_PROCESSOR_INTERVAL", 5)
         while not self._stop_evt.is_set():
             try:
-                logger.debug("Transaction processor checking for new transactions")
+                logger.debug(
+                    "Transaction processor checking for new transactions")
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 logger.info("Transaction processor task cancelled")
@@ -455,11 +515,14 @@ class MainCore:
         """Check health of all components."""
         for name, component in self.components.items():
             try:
-                if hasattr(component, 'check_health') and callable(component.check_health):
+                if hasattr(component, "check_health") and callable(
+                    component.check_health
+                ):
                     health_status = await component.check_health()
                     self.component_health[name] = health_status
                     if not health_status:
-                        logger.warning(f"Component {name} reports unhealthy state")
+                        logger.warning(
+                            f"Component {name} reports unhealthy state")
                 else:
                     self.component_health[name] = True
             except Exception as e:
@@ -474,7 +537,8 @@ class MainCore:
 
         try:
             current_snapshot = tracemalloc.take_snapshot()
-            top_stats = current_snapshot.compare_to(self._mem_snapshot, 'lineno')
+            top_stats = current_snapshot.compare_to(
+                self._mem_snapshot, "lineno")
             logger.info("Top 10 memory usage differences:")
             for stat in top_stats[:10]:
                 logger.info(str(stat))
