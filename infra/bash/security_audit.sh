@@ -55,7 +55,7 @@ check_dir_perms() {
 
 check_dir_perms "$PROJECT_DIR/config" "700" "Config directory"
 check_dir_perms "$PROJECT_DIR/data" "755" "Data directory"
-check_dir_perms "$PROJECT_DIR/data/abi" "755" "ABI directory"
+check_dir_perms "$PROJECT_DIR/resources/abi" "755" "ABI directory"
 check_dir_perms "$PROJECT_DIR/data/ml" "755" "ML directory"
 check_dir_perms "$PROJECT_DIR/deploy" "755" "Deploy directory"
 check_dir_perms "$PROJECT_DIR/src/on1builder" "755" "Python package directory"

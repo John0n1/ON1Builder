@@ -194,8 +194,8 @@ ON1Builder uses the following order of precedence for configuration values:
 | `UNISWAP_ABI` | string | "abi/uniswap_abi.json" | Uniswap router ABI file path |
 | `SUSHISWAP_ABI` | string | "abi/sushiswap_abi.json" | SushiSwap router ABI file path |
 | `ERC20_SIGNATURES` | string | "abi/erc20_signatures.json" | ERC20 function signatures file path |
-| `TOKEN_ADDRESSES` | string | "data/token_addresses.json" | Token addresses file path |
-| `TOKEN_SYMBOLS` | string | "data/token_symbols.json" | Token symbols file path |
+| `TOKEN_ADDRESSES` | string | "resources/tokens/chainid-1/symbol2address.json" | Token addresses file path |
+| `TOKEN_SYMBOLS` | string | "resources/tokens/chainid-1/address2symbol.json" | Token symbols file path |
 
 ## Monitoring Configuration
 

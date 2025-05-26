@@ -551,7 +551,7 @@ For example, to optimize token selection, you could modify the `_load_token_list
 def _load_token_list(self) -> List[Dict[str, Any]]:
     """Load the list of tokens to consider for the third vertex of the triangle."""
     # Load tokens from a file
-    with open(self.config.get("TOKEN_LIST_PATH", "data/token_list.json"), "r") as f:
+    with open(self.config.get("TOKEN_LIST_PATH", "resources/tokens/chainid-1/address2symbol.json.json"), "r") as f:
         tokens = json.load(f)
     
     # Filter tokens by minimum liquidity

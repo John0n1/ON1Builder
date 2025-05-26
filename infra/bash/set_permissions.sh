@@ -61,7 +61,7 @@ set_dir_permissions "${PROJECT_DIR}/deploy" "755" "Deploy directory"
 # Set permissions on data directory
 echo "Setting permissions on data directories..."
 set_dir_permissions "${PROJECT_DIR}/data" "755" "Data directory" "create"
-set_dir_permissions "${PROJECT_DIR}/data/abi" "755" "ABI directory" "create"
+set_dir_permissions "${PROJECT_DIR}/resources/abi" "755" "ABI directory" "create"
 set_dir_permissions "${PROJECT_DIR}/data/ml" "755" "ML directory" "create"
 set_dir_permissions "${PROJECT_DIR}/data/logs" "755" "Logs directory" "create"
 
@@ -94,7 +94,7 @@ find "${PROJECT_DIR}/data" -type f -not -path "*/logs/*" -exec chmod 644 {} \;
 
 # Set permissions on ABI files
 echo "Setting permissions on ABI files..."
-find "${PROJECT_DIR}/data/abi" -type f -name "*.json" -exec chmod 644 {} \;
+find "${PROJECT_DIR}/resources/abi" -type f -name "*.json" -exec chmod 644 {} \;
 
 # Verify permissions were set correctly
 echo "============================================================"

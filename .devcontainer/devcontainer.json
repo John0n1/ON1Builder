@@ -12,43 +12,37 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "postCreateCommand": "pip install -r requirements.txt && pre-commit install",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspace",
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/src"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-toolsai.jupyter",
-        "ms-python.black-formatter",
-        "ms-python.flake8",
-        "ms-python.isort",
-        "GitHub.copilot",
-        "eamodio.gitlens",
-        "ms-azuretools.vscode-docker",
-        "JuanBlanco.solidity",
-        "tintinweb.solidity-visual-auditor",
-        "ms-vscode.makefile-tools"
-      ],
-      "settings": {
-        "python.formatting.provider": "black",
-        "python.linting.flake8Enabled": true,
-        "python.linting.enabled": true,
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.organizeImports": true
-        },
-        "files.trimTrailingWhitespace": true,
-        "files.insertFinalNewline": true,
-        "solidity.formatter": "prettier",
-        "solidity.linter": "solhint"
-      }
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "github.copilot"
+      ]
     }
   },
-  "remoteUser": "vscode",
-  "workspaceFolder": "/workspaces/ON1Builder",
+  "portsAttributes": {
+    "8000": {
+      "label": "ON1Builder Server",
+      "onAutoForward": "notify"
+    }
+  },
+  "forwardPorts": [8000],
+  "shutdownAction": "stopCompose",
   "mounts": [
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+    "source=${localWorkspaceFolder}/.devcontainer/docker-compose.yml,target=/workspace/docker-compose.yml,type=bind,consistency=cached"
   ],
-  "containerEnv": {
-    "PYTHONPATH": "${containerWorkspaceFolder}"
-  }
+  "overrideCommand": false,
+  "remoteEnv": {
+    "PYTHONPATH": "/workspace/src",
+    "DJANGO_SETTINGS_MODULE": "on1builder.settings.dev"
+  },
+  "onCreateCommand": "git config --global user.name 'ON1Builder Dev Container' && git config --global user.email"
 }

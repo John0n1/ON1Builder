@@ -1,4 +1,4 @@
-# transaction_core.py
+# /src/on1builder/core/transaction_core.py
 """
 ON1Builder – TransactionCore
 ============================
@@ -8,26 +8,31 @@ transactions, and execute various strategies such as front-running, back-running
 """
 
 from __future__ import annotations
-
 import asyncio
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import logging
 import time
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, Callable
 
-from web3 import AsyncWeb3
-from web3.exceptions import ContractLogicError, TransactionNotFound
-from eth_account import Account
+# Import web3 and eth_account for runtime use
+try:
+    from web3 import AsyncWeb3
+    from eth_account import Account
+    from eth_account.datastructures import SignedTransaction
+except ImportError:
+    # For development/testing when dependencies might not be available
+    AsyncWeb3 = Any
+    Account = Any
+    SignedTransaction = Any
 
-from on1builder.integrations.abi_registry import ABIRegistry
-from on1builder.config.config import APIConfig, Configuration
-from on1builder.core.nonce_core import NonceCore
-from on1builder.engines.safety_net import SafetyNet
-from on1builder.utils.logger import setup_logging
-
-# Use TYPE_CHECKING to prevent circular imports at runtime
+# Use TYPE_CHECKING for circular import prevention
 if TYPE_CHECKING:
-    from on1builder.monitoring.market_monitor import MarketMonitor
-    from on1builder.monitoring.txpool_monitor import TxpoolMonitor
+    from on1builder.config.config import Configuration
+    from on1builder.core.nonce_core import NonceCore
+    from on1builder.engines.safety_net import SafetyNet
+
+from on1builder.utils.logger import setup_logging
+from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 
 logger = setup_logging("TransactionCore", level="DEBUG")
 
@@ -38,623 +43,671 @@ class TransactionCore:
 
     DEFAULT_GAS_LIMIT: int = 100_000
     ETH_TRANSFER_GAS: int = 21_000
-    GAS_RETRY_BUMP: float = 1.15        # +15 % per retry
-
-    # --------------------------------------------------------------------- #
-    # life-cycle                                                            #
-    # --------------------------------------------------------------------- #
+    GAS_RETRY_BUMP: float = 1.15  # +15% per retry
 
     def __init__(
         self,
-        web3: AsyncWeb3,
-        account: Account,
-        configuration: Configuration,
-        api_config: Optional[APIConfig] = None,
-        market_monitor: Optional['MarketMonitor'] = None,
-        txpool_monitor: Optional['TxpoolMonitor'] = None,
-        nonce_core: Optional[NonceCore] = None,
-        safety_net: Optional[SafetyNet] = None,
-        gas_price_multiplier: float = 1.10,
+        web3: 'AsyncWeb3',
+        account: 'Account',
+        configuration: 'Configuration',
+        nonce_core: Optional['NonceCore'] = None,
+        safety_net: Optional['SafetyNet'] = None,
+        chain_id: int = 1,
     ) -> None:
-        """Initialize transaction core."""
-        self.web3 = web3
-        self.account = account
-        self.config = configuration
-        self.api_config = api_config
-        self.market_monitor = market_monitor
-        self.txpool_monitor = txpool_monitor
-        self.nonce_core = nonce_core
-        self._safety_net = safety_net
-        self.gas_price_multiplier = gas_price_multiplier
+        """Initialize the TransactionCore.
         
-        # Contracts
-        self.weth_contract = None
-        self.usdc_contract = None
-        self.usdt_contract = None
-        self.uniswap_contract = None
-        self.sushiswap_contract = None
-        self.aave_pool_contract = None
-        self.aave_flashloan_contract = None
-        self.gas_price_oracle_contract = None
-        self.abi_registry = ABIRegistry()
+        Args:
+            web3: AsyncWeb3 instance for blockchain interaction
+            account: Ethereum account
+            configuration: Configuration for the bot
+            nonce_core: Nonce management system (optional)
+            safety_net: Safety checks system (optional)
+            chain_id: Ethereum chain ID (default: 1 for mainnet)
+        """
+        self.web3 = web3
+        self.chain_id = chain_id
+        self.account = account
+        self.address = getattr(account, 'address', '0x0000000000000000000000000000000000000000')
+        self.configuration = configuration
+        self.nonce_core = nonce_core
+        self.safety_net = safety_net
+        
+        # Transaction tracking
+        self._pending_txs: Dict[str, Dict[str, Any]] = {}
+        
+        logger.debug(f"TransactionCore initialized for chain ID {chain_id}")
 
-        # runtime state -----------------------------------------------------
-        self.erc20_abi: List[Dict[str, Any]] = []
-        self.flashloan_abi: List[Dict[str, Any]] = []
-
-        # NEW: global running profit counter read by StrategyNet
-        self.current_profit: Decimal = Decimal("0")
-
-    # --------------------------------------------------------------------- #
-    # init helpers                                                          #
-    # --------------------------------------------------------------------- #
-
-    async def initialize(self) -> None:
-        await self._load_abis()
-        await self._initialize_contracts()
-        logger.info("TransactionCore initialised.")
-
-    async def _load_abis(self) -> None:
-        await self.abi_registry.initialize(self.config.BASE_PATH)
-        self.erc20_abi = self.abi_registry.get_abi("erc20") or []
-        self.flashloan_abi = self.abi_registry.get_abi("aave_flashloan") or []
-        self.aave_pool_abi = self.abi_registry.get_abi("aave") or []
-        self.uniswap_abi = self.abi_registry.get_abi("uniswap") or []
-        self.sushiswap_abi = self.abi_registry.get_abi("sushiswap") or []
-
-    async def _initialize_contracts(self) -> None:
-        self.aave_flashloan = self.web3.eth.contract(
-            address=self.web3.to_checksum_address(self.config.AAVE_FLASHLOAN_ADDRESS),
-            abi=self.flashloan_abi,
-        )
-        self.aave_pool = self.web3.eth.contract(
-            address=self.web3.to_checksum_address(self.config.AAVE_POOL_ADDRESS),
-            abi=self.aave_pool_abi,
-        )
-
-        # validate
-        for c in (self.aave_flashloan, self.aave_pool):
-            await self._validate_contract(c)
-
-        if self.uniswap_abi and self.config.UNISWAP_ADDRESS:
-            self.uniswap_router = self.web3.eth.contract(
-                address=self.web3.to_checksum_address(self.config.UNISWAP_ADDRESS),
-                abi=self.uniswap_abi,
-            )
-            await self._validate_contract(self.uniswap_router)
-
-        if self.sushiswap_abi and self.config.SUSHISWAP_ADDRESS:
-            self.sushiswap_router = self.web3.eth.contract(
-                address=self.web3.to_checksum_address(self.config.SUSHISWAP_ADDRESS),
-                abi=self.sushiswap_abi,
-            )
-            await self._validate_contract(self.sushiswap_router)
-
-    async def _validate_contract(self, contract: Any) -> None:
-        code = await self.web3.eth.get_code(contract.address)
-        if not code or code == b"":
-            raise ValueError(f"No contract code at {contract.address}")
-
-    # --------------------------------------------------------------------- #
-    # tx building helpers                                                   #
-    # --------------------------------------------------------------------- #
-
+    async def initialize(self):
+        """Initialize the TransactionCore with necessary components."""
+        logger.info("Initializing TransactionCore...")
+        # Add any additional initialization logic here
+        return True
+        
     async def build_transaction(
         self,
-        function_call: Any,
+        function_call: Union[Callable, Any],
         additional_params: Optional[Dict[str, Any]] = None,
+        to_address: Optional[str] = None,
+        value: int = 0,
+        data: str = "",
+        gas_limit: Optional[int] = None,
+        gas_price: Optional[int] = None,
+        nonce: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Builds a tx, picking correct gas-model and nonce."""
-        additional_params = additional_params or {}
-        chain_id = await self.web3.eth.chain_id
-        latest = await self.web3.eth.get_block("latest")
-        supports_1559 = "baseFeePerGas" in latest
-
-        nonce = await self.nonce_core.get_nonce()
-
-        params: Dict[str, Any] = {
-            "chainId": chain_id,
-            "nonce": nonce,
-            "from": self.account.address,
-            "gas": self.DEFAULT_GAS_LIMIT,
-        }
-
-        if supports_1559:
-            base = latest["baseFeePerGas"]
-            priority = await self.web3.eth.max_priority_fee
-            params.update(
-                {
-                    "maxFeePerGas": int(base * 2),
-                    "maxPriorityFeePerGas": int(priority),
-                }
-            )
-        else:
-            dyn_gas_gwei = await self._safety_net.get_dynamic_gas_price()
-            params["gasPrice"] = int(
-                self.web3.to_wei(dyn_gas_gwei * self.gas_price_multiplier, "gwei")
-            )
-
-        tx = function_call.build_transaction(params)
-        tx.update(additional_params)
-
-        estimated = await self.estimate_gas(tx)
-        tx["gas"] = max(int(estimated * 1.1), self.DEFAULT_GAS_LIMIT)
-
-        # ensure mutually-exclusive gas fields
-        is_1559 = "maxFeePerGas" in tx
-        tx = {k: v for k, v in tx.items() if k not in {"gasPrice", "maxFeePerGas", "maxPriorityFeePerGas"}}
-        if is_1559:
-            tx["maxFeePerGas"] = params["maxFeePerGas"]
-            tx["maxPriorityFeePerGas"] = params["maxPriorityFeePerGas"]
-        else:
-            tx["gasPrice"] = params["gasPrice"]
-
-        return tx
-
-    async def estimate_gas(self, tx: Dict[str, Any]) -> int:
-        try:
-            return await self.web3.eth.estimate_gas(tx)
-        except (ContractLogicError, TransactionNotFound):
-            return self.DEFAULT_GAS_LIMIT
-        except Exception as exc:
-            logger.debug("estimate_gas failed (%s) – using fallback", exc)
-            return self.DEFAULT_GAS_LIMIT
-
-    # --------------------------------------------------------------------- #
-    # sign / send helpers                                                   #
-    # --------------------------------------------------------------------- #
-
-    async def sign_transaction(self, tx: Dict[str, Any]) -> bytes:
-        clean = self._clean_tx(tx)
-        if "chainId" not in clean:
-            clean["chainId"] = await self.web3.eth.chain_id
-        signed = self.web3.eth.account.sign_transaction(clean, private_key=self.account.key)
-        return signed.rawTransaction
-
-    async def send_signed(self, raw: bytes, nonce_used: Optional[int] = None) -> str:
-        tx_hash = await self.web3.eth.send_raw_transaction(raw)
-        # update nonce-cache immediately; keep tracker alive in the background
-        asyncio.create_task(
-            self.nonce_core.track_transaction(tx_hash.hex(), nonce_used or await self.nonce_core.get_nonce())
-        )
-        return tx_hash.hex()
-
-    # retain only valid keys
-    @staticmethod
-    def _clean_tx(tx: Dict[str, Any]) -> Dict[str, Any]:
-        valid = {
-            "nonce",
-            "gas",
-            "gasPrice",
-            "maxFeePerGas",
-            "maxPriorityFeePerGas",
-            "to",
-            "value",
-            "data",
-            "chainId",
-            "from",
-            "type",
-        }
-        return {k: v for k, v in tx.items() if k in valid}
-
-    # --------------------------------------------------------------------- #
-    # high-level send with retries                                          #
-    # --------------------------------------------------------------------- #
-
-    async def execute_transaction(self, tx: Dict[str, Any]) -> Optional[str]:
-        """Signs and broadcasts a tx, retrying with gas bump on failure."""
-        # Ensure nonce is set before simulation
-        if "nonce" not in tx and self.nonce_core:
-            tx["nonce"] = await self.nonce_core.get_nonce()
-            
-        # Apply gas price adjustments if gas_multiplier is present
-        if "gas_multiplier" in tx:
-            self._bump_gas(tx)
-            
-        # Perform simulation with the correct nonce and gas prices
-        simulation_success = await self.simulate_transaction(tx)
-        if not simulation_success:
-            logger.error("Transaction simulation failed, aborting execution")
-            return None
-            
-        max_retries = self.config.MEMPOOL_MAX_RETRIES
-        delay_s = float(self.config.MEMPOOL_RETRY_DELAY)
-
-        # use our account (where we know private key) if not specified
-        if "from" not in tx:
-            tx["from"] = self.account.address
-
-        # retry loop up to `max_retries` times
-        for attempt in range(max_retries):
-            try:
-                # sign tx via our account object
-                raw = await self.sign_transaction(tx)
-
-                # send tx to node
-                tx_hash = await self.send_signed(raw, tx.get("nonce"))
-                logger.info(f"Transaction sent: {tx_hash}")
-
-                # return resulting transaction hash
-                return tx_hash
-
-            except Exception as e:
-                if attempt >= max_retries - 1:
-                    logger.exception(f"Final attempt ({attempt+1}/{max_retries}) failed: {e}")
-                    return None
-
-                logger.warning(f"Attempt {attempt+1}/{max_retries} failed: {e}")
-                self._bump_gas(tx)
-
-                if tx.get("gasPrice") and int(tx["gasPrice"]) > self.web3.to_wei(
-                    self.config.MAX_GAS_PRICE_GWEI, "gwei"
-                ):
-                    logger.warning("Gas price cap reached – aborting retries.")
-                    return None
-
-                # sleep and retry
-                await asyncio.sleep(delay_s)
-
-        return None
-
-    def _bump_gas(self, tx: Dict[str, Any]) -> None:
-        """Apply exponential bump to whichever gas field is present."""
-        # Get multiplier from tx if present, otherwise use default
-        multiplier = tx.pop("gas_multiplier", self.GAS_RETRY_BUMP)
+        """Build an Ethereum transaction.
         
-        if "gasPrice" in tx:
-            tx["gasPrice"] = int(tx["gasPrice"] * multiplier)
-        else:
-            tx["maxFeePerGas"] = int(tx["maxFeePerGas"] * multiplier)
-            tx["maxPriorityFeePerGas"] = int(tx["maxPriorityFeePerGas"] * multiplier)
-
-    # --------------------------------------------------------------------- #
-    # user-facing helpers (withdraw, transfers, strategies etc.)            #
-    # --------------------------------------------------------------------- #
-
-    async def withdraw_eth(self) -> bool:
-        fn = self.aave_flashloan.functions.withdrawETH()
-        tx = await self.build_transaction(fn)
-        sent = await self.execute_transaction(tx)
-        return bool(sent)
-
-    async def transfer_profit_to_account(
-        self, token_address: str, amount: Decimal, target: str
-    ) -> bool:
-        """Transfer profit to a specified account and update profit tracking with on-chain receipt.
-    
         Args:
-            token_address: The address of the token to transfer
-            amount: The amount to transfer
-            target: The target address to receive the tokens
+            function_call: Function call or transaction data
+            additional_params: Additional transaction parameters
+            to_address: Destination address
+            value: Amount of ETH to send in wei
+            data: Transaction data (for contract calls)
+            gas_limit: Maximum gas to use
+            gas_price: Gas price in wei
+            nonce: Transaction nonce
             
         Returns:
-            bool: True if transfer successful
+            Transaction dictionary
         """
-        token = self.web3.eth.contract(
-            address=self.web3.to_checksum_address(token_address), abi=self.erc20_abi
-        )
-        decimals = await token.functions.decimals().call()
-        amt_raw = int(amount * Decimal(10) ** decimals)
-
-        fn = token.functions.transfer(self.web3.to_checksum_address(target), amt_raw)
-        tx = await self.build_transaction(fn)
+        # Get nonce if not provided
+        if nonce is None and self.nonce_core:
+            try:
+                nonce = await self.nonce_core.get_next_nonce(self.address)
+            except Exception as e:
+                logger.error(f"Failed to get nonce: {e}")
+                # Fallback to web3 nonce if available
+                try:
+                    nonce = await self.web3.eth.get_transaction_count(self.address)
+                except Exception:
+                    logger.error("Could not get nonce from web3, using 0")
+                    nonce = 0
+                    
+        # Handle function_call if it's a web3 function
+        if hasattr(function_call, 'build_transaction'):
+            # It's a web3 contract function call
+            tx_params = {
+                "from": self.address,
+                "value": value,
+                "chainId": self.chain_id,
+            }
+            if nonce is not None:
+                tx_params["nonce"] = nonce
+            if gas_price is not None:
+                tx_params["gasPrice"] = gas_price
+                
+            # Add additional params if provided
+            if additional_params:
+                tx_params.update(additional_params)
+                
+            try:
+                tx = await function_call.build_transaction(tx_params)
+            except Exception as e:
+                logger.error(f"Failed to build function call transaction: {e}")
+                raise StrategyExecutionError(f"Failed to build transaction: {e}")
+        else:
+            # Build a standard transaction
+            tx = {
+                "from": self.address,
+                "chainId": self.chain_id,
+                "value": value,
+            }
+            
+            # Set destination address
+            if to_address:
+                tx["to"] = to_address
+                
+            # Add data if provided
+            if data:
+                tx["data"] = data
+                
+            # Set nonce if provided or available
+            if nonce is not None:
+                tx["nonce"] = nonce
+                
+            # Add additional params if provided
+            if additional_params:
+                tx.update(additional_params)
+                
+        # Set gas price
+        if gas_price is None:
+            try:
+                gas_price = await self.web3.eth.gas_price
+                # Apply gas price multiplier from config if available
+                multiplier = getattr(self.configuration, 'gas_price_multiplier', 1.1)
+                if gas_price is not None:
+                    gas_price = int(gas_price * multiplier)
+            except Exception as e:
+                logger.error(f"Failed to get gas price: {e}")
+                # Use a reasonable default
+                gas_price = 50 * 10**9  # 50 Gwei
+                
+        tx["gasPrice"] = gas_price
+        
+        # Set gas limit
+        if gas_limit is None:
+            if data or "data" in tx:
+                try:
+                    # For contract interactions, estimate gas
+                    estimated = await self.web3.eth.estimate_gas(tx)
+                    gas_limit = int(estimated * 1.2)  # Add 20% buffer
+                except Exception as e:
+                    logger.warning(f"Gas estimation failed: {e}. Using default gas limit.")
+                    gas_limit = self.DEFAULT_GAS_LIMIT
+            else:
+                # For simple ETH transfers
+                gas_limit = self.ETH_TRANSFER_GAS
+                
+        tx["gas"] = gas_limit
+        
+        return tx
+        
+    async def sign_transaction(self, tx: Dict[str, Any]) -> 'SignedTransaction':
+        """Sign a transaction.
+        
+        Args:
+            tx: Transaction to sign
+            
+        Returns:
+            SignedTransaction: The signed transaction
+        """
+        try:
+            return self.account.sign_transaction(tx)
+        except Exception as e:
+            logger.error(f"Failed to sign transaction: {e}")
+            raise StrategyExecutionError(f"Transaction signing failed: {str(e)}")
+    
+    async def execute_transaction(
+        self,
+        tx: Dict[str, Any],
+        retry_count: int = 3,
+        retry_delay: float = 2.0
+    ) -> str:
+        """Execute (sign and send) a transaction.
+        
+        Args:
+            tx: Transaction to sign and send
+            retry_count: Number of attempts if transaction fails
+            retry_delay: Delay between retries in seconds
+            
+        Returns:
+            str: Transaction hash
+        """
+        # Perform safety checks if safety_net is available
+        if self.safety_net:
+            try:
+                await self.safety_net.check_transaction_safety(tx)
+            except Exception as e:
+                logger.error(f"Transaction safety check failed: {e}")
+                raise StrategyExecutionError(f"Transaction safety check failed: {str(e)}")
+            
+        # Track original gas price for retries
+        original_gas_price = tx.get("gasPrice", 0)
+        
+        for attempt in range(retry_count + 1):
+            try:
+                # Apply gas bump for retries
+                if attempt > 0:
+                    bumped_price = int(original_gas_price * (self.GAS_RETRY_BUMP ** attempt))
+                    logger.info(f"Retry {attempt}: Bumping gas price from {tx['gasPrice']} to {bumped_price}")
+                    tx["gasPrice"] = bumped_price
+                
+                # Sign transaction
+                signed_tx = await self.sign_transaction(tx)
+                
+                # Send raw transaction
+                tx_hash = await self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                tx_hash_str = tx_hash.hex()
+                
+                # Store pending transaction
+                self._pending_txs[tx_hash_str] = {
+                    "tx": tx,
+                    "signed_tx": signed_tx,
+                    "timestamp": time.time(),
+                    "status": "pending"
+                }
+                
+                # Track nonce if nonce_core is available
+                if self.nonce_core and "nonce" in tx:
+                    await self.nonce_core.track_transaction(tx_hash_str, tx["nonce"])
+                
+                logger.info(f"Transaction sent: {tx_hash_str}")
+                return tx_hash_str
+                
+            except Exception as e:
+                if attempt < retry_count:
+                    logger.warning(f"Transaction attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.error(f"Transaction failed after {retry_count + 1} attempts: {e}")
+                    raise StrategyExecutionError(f"Failed to send transaction: {str(e)}")
+    
+    async def wait_for_transaction_receipt(
+        self,
+        tx_hash: str,
+        timeout: int = 120,
+        poll_interval: float = 0.1
+    ) -> Dict[str, Any]:
+        """Wait for a transaction receipt.
+        
+        Args:
+            tx_hash: Transaction hash
+            timeout: Maximum time to wait in seconds
+            poll_interval: Time between checks in seconds
+            
+        Returns:
+            Dict[str, Any]: Transaction receipt
+        """
+        if not tx_hash.startswith("0x"):
+            tx_hash = f"0x{tx_hash}"
+            
+        start_time = time.time()
+        while True:
+            try:
+                receipt = await self.web3.eth.get_transaction_receipt(tx_hash)
+                if receipt is not None:
+                    # Update pending transaction status
+                    if tx_hash in self._pending_txs:
+                        if receipt["status"] == 1:
+                            self._pending_txs[tx_hash]["status"] = "success"
+                        else:
+                            self._pending_txs[tx_hash]["status"] = "failed"
+                    
+                    # Check if transaction was successful
+                    if receipt["status"] == 1:
+                        logger.info(f"Transaction {tx_hash} confirmed in block {receipt['blockNumber']}")
+                        return receipt
+                    else:
+                        error_msg = f"Transaction {tx_hash} failed with status 0"
+                        logger.error(error_msg)
+                        raise StrategyExecutionError(error_msg)
+            except Exception as e:
+                # Not yet mined or other error
+                pass
+            
+            # Check if we've exceeded the timeout
+            if time.time() - start_time > timeout:
+                raise asyncio.TimeoutError(f"Transaction {tx_hash} not mined within {timeout} seconds")
+            
+            # Wait before polling again
+            await asyncio.sleep(poll_interval)
+    
+    async def handle_eth_transaction(self, target_tx: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle a standard ETH transaction.
+        
+        Args:
+            target_tx: Transaction to handle
+            
+        Returns:
+            Dict[str, Any]: Transaction receipt
+        """
+        logger.info(f"Handling ETH transaction: {target_tx.get('tx_hash', 'Unknown hash')}")
+        
+        # Build transaction if needed
+        if "to" not in target_tx and "value" in target_tx:
+            tx = await self.build_transaction(
+                function_call=None,
+                to_address=target_tx.get("to_address"),
+                value=target_tx.get("value", 0)
+            )
+        else:
+            tx = target_tx
+            
+        # Execute transaction
         tx_hash = await self.execute_transaction(tx)
         
-        if tx_hash:
-            try:
-                # Get receipt to confirm transaction success
-                receipt = await self.web3.eth.wait_for_transaction_receipt(tx_hash)
-                
-                # Only update profit if transaction was successful
-                if receipt and receipt.status == 1:
-                    # Look for Transfer event to confirm actual amount transferred
-                    transfer_events = token.events.Transfer().process_receipt(receipt)
-                    
-                    # Update profit with actual transferred amount from blockchain if event exists
-                    if transfer_events:
-                        event = transfer_events[0]
-                        actual_amount = Decimal(event.args.value) / Decimal(10) ** decimals
-                        self.current_profit += actual_amount
-                        logger.info(f"Profit updated: +{actual_amount} tokens (tx: {tx_hash})")
-                    else:
-                        # Fall back to expected amount if event parsing fails
-                        self.current_profit += amount
-                        logger.info(f"Profit updated (estimate): +{amount} tokens (tx: {tx_hash})")
-                        
-                    return True
-                else:
-                    logger.warning(f"Transfer failed: {tx_hash}")
-                    return False
-                    
-            except Exception as exc:
-                logger.error(f"Error confirming profit transfer: {exc}")
-                # Use naive profit count as fallback
-                self.current_profit += amount
-                return True
+        # Wait for receipt
+        receipt = await self.wait_for_transaction_receipt(tx_hash)
+        return receipt
+    
+    async def get_eth_balance(self, address: Optional[str] = None) -> Decimal:
+        """Get ETH balance for an address.
         
-        return False
-
-    # --------------------------------------------------------------------- #
-    # simple ETH forwarding variant                                         #
-    # --------------------------------------------------------------------- #
-
-    async def handle_eth_transaction(self, target_tx: Dict[str, Any]) -> bool:
-        value = int(target_tx.get("value", 0))
-        if value <= 0:
-            return False
-
-        nonce = await self.nonce_core.get_nonce()
-        chain_id = await self.web3.eth.chain_id
-
-        tx = {
-            "to": target_tx.get("to", ""),
-            "value": value,
-            "nonce": nonce,
-            "chainId": chain_id,
-            "from": self.account.address,
-            "gas": self.ETH_TRANSFER_GAS,
-            "gas_multiplier": self.GAS_RETRY_BUMP  # Set desired gas aggressiveness factor
+        Args:
+            address: Address to check (defaults to account address)
+            
+        Returns:
+            Decimal: Balance in ETH
+        """
+        if address is None:
+            address = self.address
+            
+        try:
+            balance_wei = await self.web3.eth.get_balance(address)
+            return Decimal(balance_wei) / Decimal(10**18)
+        except Exception as e:
+            logger.error(f"Failed to get ETH balance: {e}")
+            return Decimal(0)
+        
+    async def simulate_transaction(self, transaction: Dict[str, Any]) -> Tuple[bool, str]:
+        """Simulate a transaction to check if it will succeed.
+        
+        Args:
+            transaction: Transaction to simulate
+            
+        Returns:
+            Tuple[bool, str]: (Success flag, Error message if failed)
+        """
+        try:
+            # Create a copy of the transaction
+            sim_tx = transaction.copy()
+            
+            # For simulation, we use eth_call which executes the tx locally
+            result = await self.web3.eth.call(sim_tx)
+            return True, ""
+        except Exception as e:
+            # Contract reverted or other error
+            error_message = str(e)
+            logger.warning(f"Transaction simulation failed: {error_message}")
+            return False, error_message
+    
+    async def prepare_flashloan_transaction(
+        self, 
+        flashloan_asset: str, 
+        flashloan_amount: int
+    ) -> Dict[str, Any]:
+        """Prepare a flashloan transaction.
+        
+        Args:
+            flashloan_asset: Asset address to borrow
+            flashloan_amount: Amount to borrow
+            
+        Returns:
+            Dict[str, Any]: Transaction object
+        """
+        logger.info(f"Preparing flashloan for {flashloan_amount} of asset {flashloan_asset}")
+        
+        # Example implementation - in real-world this would have actual flashloan logic
+        # using Aave, dYdX or other protocols
+        return {
+            "asset": flashloan_asset,
+            "amount": flashloan_amount,
+            "prepared": True
         }
-
-        sent = await self.execute_transaction(tx)
-        return bool(sent)
-
-    # --------------------------------------------------------------------- #
-    # strategy wrappers – unchanged except they now rely on updated helpers #
-    # --------------------------------------------------------------------- #
-
-    async def front_run(self, target_tx: Dict[str, Any]) -> bool:
-        return bool(await self.execute_transaction(target_tx))
-
-    async def back_run(self, target_tx: Dict[str, Any]) -> bool:
-        return bool(await self.execute_transaction(target_tx))
-
-    async def execute_sandwich_attack(self, target_tx: Dict[str, Any], strategy: str = "default") -> bool:
-        """Execute a sandwich attack on a target transaction with optional strategy parameter.
+    
+    async def send_bundle(self, transactions: List[Dict[str, Any]]) -> str:
+        """Send a bundle of transactions.
         
         Args:
-            target_tx: The target transaction to sandwich
-            strategy: Strategy to use ("default", "aggressive", "safe")
+            transactions: List of transaction objects
             
         Returns:
-            bool: True if both transactions were sent successfully
+            str: Bundle ID or hash
         """
-        front_tx = target_tx.copy()
-        back_tx = target_tx.copy()
-
-        # Set gas multipliers based on strategy instead of modifying gasPrice directly
-        if strategy == "aggressive":
-            front_tx["gas_multiplier"] = 1.25
-            back_tx["gas_multiplier"] = 0.95
-        elif strategy == "safe":
-            front_tx["gas_multiplier"] = 1.10
-            back_tx["gas_multiplier"] = 0.85
-        else:  # default strategy
-            front_tx["gas_multiplier"] = 1.15
-            back_tx["gas_multiplier"] = 0.90
-            
-        res_front = await self.execute_transaction(front_tx)
-        await asyncio.sleep(1)
-        res_back = await self.execute_transaction(back_tx)
-        return bool(res_front and res_back)
-
-    async def prepare_flashloan_transaction(self, token_address: str, amount: int) -> Dict[str, Any]:
-        """Prepare a flashloan transaction for the specified token and amount.
+        logger.info(f"Sending bundle with {len(transactions)} transactions")
+        
+        # Example implementation - actual logic would involve flashbots or similar
+        bundle_results = []
+        
+        for i, tx in enumerate(transactions):
+            try:
+                tx_hash = await self.execute_transaction(tx)
+                bundle_results.append(tx_hash)
+                logger.debug(f"Bundle tx {i+1}/{len(transactions)}: {tx_hash}")
+            except Exception as e:
+                logger.error(f"Bundle tx {i+1} failed: {e}")
+                raise StrategyExecutionError(f"Bundle execution failed at tx {i+1}: {e}")
+                
+        return ",".join(bundle_results)
+    
+    async def front_run(self, target_tx: Dict[str, Any]) -> str:
+        """Front-run a target transaction.
         
         Args:
-            token_address: The address of the token to borrow
-            amount: The amount to borrow (in raw units)
+            target_tx: Transaction to front-run
             
         Returns:
-            Dict[str, Any]: The prepared transaction
+            str: Transaction hash of front-running transaction
         """
-        if not self.aave_flashloan:
-            await self._initialize_contracts()
+        logger.info(f"Attempting to front-run transaction: {target_tx.get('tx_hash', 'Unknown')}")
         
-        # Convert address to checksum format
-        token_address = self.web3.to_checksum_address(token_address)
+        # Build front-run transaction with higher gas price
+        target_gas_price = target_tx.get("gasPrice", 0)
+        front_run_gas_price = int(target_gas_price * 1.2)  # 20% higher
         
-        # Prepare flashloan parameters
-        # params: assets, amounts, modes, onBehalfOf, params
-        assets = [token_address]
-        amounts = [amount]
-        modes = [0]  # 0 = no debt (flash loan)
-        on_behalf_of = self.account.address
-        params = b""  # Optional params (byte encoded)
-        
-        # Build flashloan function call
-        flashloan_call = self.aave_flashloan.functions.flashLoan(
-            assets, amounts, modes, on_behalf_of, params
+        # Create front-running transaction
+        tx = await self.build_transaction(
+            function_call=None,
+            to_address=target_tx.get("to"),
+            value=target_tx.get("value", 0),
+            data=target_tx.get("data", ""),
+            gas_price=front_run_gas_price
         )
         
-        # Build transaction
-        tx = await self.build_transaction(flashloan_call)
+        # Execute front-running transaction
+        tx_hash = await self.execute_transaction(tx)
+        logger.info(f"Front-running transaction sent: {tx_hash}")
         
-        # Simulate the transaction to check if it will succeed
-        simulation_success = await self.simulate_transaction(tx)
-        if not simulation_success:
-            logger.warning("Flashloan transaction simulation failed")
-        
-        return tx
-
-    async def send_bundle(self, transactions: List[Dict[str, Any]]) -> List[str]:
-        """Send a bundle of transactions using bundle_transactions and return hashes.
-        An alias for execute_bundle with additional pre-processing.
+        return tx_hash
+    
+    async def back_run(self, target_tx: Dict[str, Any]) -> str:
+        """Back-run a target transaction (execute after target tx is confirmed).
         
         Args:
-            transactions: List of transaction dictionaries to bundle
+            target_tx: Transaction to back-run
             
         Returns:
-            List[str]: List of transaction hashes
+            str: Transaction hash of back-running transaction
         """
-        # Preprocess transactions - ensure they have proper nonces
-        for i, tx in enumerate(transactions):
-            if "nonce" not in tx and self.nonce_core:
-                # Each tx needs an incrementing nonce
-                tx["nonce"] = await self.nonce_core.get_nonce() + i
+        logger.info(f"Setting up back-run for transaction: {target_tx.get('tx_hash', 'Unknown')}")
         
-        # Use execute_bundle to send transactions
-        return await self.execute_bundle(transactions)
-
-    async def cancel_transaction(self, nonce: int) -> Optional[str]:
-        """Cancel a pending transaction with the specified nonce.
+        # Wait for target transaction to be mined
+        target_tx_hash = target_tx.get("tx_hash")
+        if target_tx_hash:
+            try:
+                await self.web3.eth.wait_for_transaction_receipt(target_tx_hash)
+                logger.info(f"Target transaction {target_tx_hash} confirmed, executing back-run")
+            except Exception as e:
+                logger.error(f"Failed to wait for target tx: {e}")
+                raise StrategyExecutionError(f"Back-run failed: {e}")
+        
+        # Create back-running transaction
+        tx = await self.build_transaction(
+            function_call=None,
+            to_address=target_tx.get("to"),
+            value=target_tx.get("value", 0),
+            data=target_tx.get("data", "")
+        )
+        
+        # Execute back-running transaction
+        tx_hash = await self.execute_transaction(tx)
+        logger.info(f"Back-running transaction sent: {tx_hash}")
+        
+        return tx_hash
+    
+    async def execute_sandwich_attack(
+        self, 
+        target_tx: Dict[str, Any], 
+        strategy: str = "default"
+    ) -> Tuple[str, str]:
+        """Execute a sandwich attack (front-run and back-run).
         
         Args:
-            nonce: The nonce of the transaction to cancel
+            target_tx: Transaction to sandwich
+            strategy: Strategy to use for the sandwich attack
             
         Returns:
-            Optional[str]: The hash of the cancellation transaction, or None if failed
+            Tuple[str, str]: (Front-run tx hash, Back-run tx hash)
         """
-        # Build a transaction to ourselves with 0 value but higher gas price
-        chain_id = await self.web3.eth.chain_id
-        latest = await self.web3.eth.get_block("latest")
-        supports_1559 = "baseFeePerGas" in latest
+        logger.info(f"Executing sandwich attack on tx: {target_tx.get('tx_hash', 'Unknown')} with strategy: {strategy}")
         
-        cancel_tx = {
-            "to": self.account.address,  # Send to ourselves
-            "value": 0,  # Zero value
-            "nonce": nonce,  # The nonce to override
-            "chainId": chain_id,
-            "from": self.account.address,
-            "gas": self.ETH_TRANSFER_GAS,  # Minimal gas for transfer
+        # Execute front-run
+        front_run_tx_hash = await self.front_run(target_tx)
+        
+        # Wait for target transaction to be mined
+        target_tx_hash = target_tx.get("tx_hash")
+        if target_tx_hash:
+            try:
+                await self.web3.eth.wait_for_transaction_receipt(target_tx_hash)
+                logger.info(f"Target transaction {target_tx_hash} confirmed")
+            except Exception as e:
+                logger.error(f"Failed to wait for target tx: {e}")
+        
+        # Execute back-run
+        back_run_tx_hash = await self.back_run(target_tx)
+        
+        return front_run_tx_hash, back_run_tx_hash
+    
+    async def cancel_transaction(self, nonce: int) -> str:
+        """Cancel a pending transaction by replacing it with a higher gas price.
+        
+        Args:
+            nonce: Transaction nonce to cancel
+            
+        Returns:
+            str: Transaction hash for the cancellation transaction
+        """
+        # Get current gas price and increase it
+        try:
+            gas_price = await self.web3.eth.gas_price
+            cancel_gas_price = int(gas_price * 1.5)  # 50% higher
+        except Exception:
+            cancel_gas_price = 100 * 10**9  # 100 Gwei fallback
+        
+        # Build cancellation transaction (send 0 ETH to ourselves with same nonce)
+        tx = {
+            "from": self.address,
+            "to": self.address,
+            "value": 0,
+            "nonce": nonce,
+            "gas": self.ETH_TRANSFER_GAS,
+            "gasPrice": cancel_gas_price,
+            "chainId": self.chain_id
         }
         
-        # Set gas price significantly higher to encourage miners to include it
-        multiplier = 1.5  # 50% higher than current
-        
-        if supports_1559:
-            base = latest["baseFeePerGas"]
-            priority = await self.web3.eth.max_priority_fee
-            cancel_tx["maxFeePerGas"] = int(base * 2 * multiplier)
-            cancel_tx["maxPriorityFeePerGas"] = int(priority * multiplier)
-        else:
-            dyn_gas_gwei = await self._safety_net.get_dynamic_gas_price()
-            cancel_tx["gasPrice"] = int(
-                self.web3.to_wei(dyn_gas_gwei * self.gas_price_multiplier * multiplier, "gwei")
-            )
-        
-        # Execute the cancel transaction
-        return await self.execute_transaction(cancel_tx)
-
-    # aggressive / predictive / volatility helpers unchanged --------------
-
-    async def aggressive_front_run(self, target_tx: Dict[str, Any]) -> bool:
-        # Use gas_multiplier instead of direct gasPrice manipulation
-        target_tx["gas_multiplier"] = 1.30
-        return bool(await self.execute_transaction(target_tx))
-
-    async def predictive_front_run(self, target_tx: Dict[str, Any]) -> bool:
-        if await self.simulate_transaction(target_tx):
-            return await self.front_run(target_tx)
-        return False
-
-    async def volatility_front_run(self, target_tx: Dict[str, Any]) -> bool:
-        # Use gas_multiplier instead of direct gasPrice manipulation
-        target_tx["gas_multiplier"] = 1.50
-        return bool(await self.execute_transaction(target_tx))
-
-    # back-run helpers ------------------------------------------------------
-
-    async def price_dip_back_run(self, target_tx: Dict[str, Any]) -> bool:
-        # Instead of directly manipulating gasPrice, set gas_multiplier to let _bump_gas handle it
-        target_tx["gas_multiplier"] = 0.80
-        return bool(await self.execute_transaction(target_tx))
-
-    async def flashloan_back_run(self, target_tx: Dict[str, Any]) -> bool:
-        if await self.withdraw_eth():
-            return await self.back_run(target_tx)
-        return False
-
-    async def high_volume_back_run(self, target_tx: Dict[str, Any]) -> bool:
-        # Instead of directly manipulating gasPrice, set gas_multiplier to let _bump_gas handle it
-        target_tx["gas_multiplier"] = 0.85
-        return bool(await self.execute_transaction(target_tx))
-
-    # flash-loan + combo wrappers ------------------------------------------
-
-    async def flashloan_front_run(self, target_tx: Dict[str, Any]) -> bool:
-        if await self.withdraw_eth():
-            return await self.front_run(target_tx)
-        return False
-
-    async def flashloan_sandwich_attack(self, target_tx: Dict[str, Any]) -> bool:
-        if await self.withdraw_eth():
-            return await self.execute_sandwich_attack(target_tx)
-        return False
-
-    # --------------------------------------------------------------------- #
-    # bundles                                                               #
-    # --------------------------------------------------------------------- #
-
-    async def bundle_transactions(self, transactions: List[Dict[str, Any]]) -> List[str]:
-        """
-        Sign & send a list of tx-dicts sequentially.
-        Each dict **must already** contain correct nonce / gas.
-        Returns list of tx-hashes (hex).  No fancy flashbots; just serial send.
-        """
-        tx_hashes: List[str] = []
-        for tx in transactions:
-            raw = await self.sign_transaction(tx)
-            tx_hash = await self.send_signed(raw, nonce_used=tx["nonce"])
-            tx_hashes.append(tx_hash)
-        return tx_hashes
-
-    async def execute_bundle(self, transactions: List[Dict[str, Any]]) -> List[str]:
-        hashes = await self.bundle_transactions(transactions)
-        for h in hashes:
-            try:
-                receipt = await self.web3.eth.wait_for_transaction_receipt(h)
-                if receipt.status == 1:
-                    logger.info("Bundle tx %s mined OK", h)
-                else:
-                    logger.error("Bundle tx %s reverted", h)
-            except Exception as exc:
-                logger.error("Waiting for bundle tx %s failed: %s", h, exc)
-        return hashes
-
-    # --------------------------------------------------------------------- #
-    # misc utilities                                                        #
-    # --------------------------------------------------------------------- #
-
-    async def simulate_transaction(self, tx: Dict[str, Any]) -> bool:
+        # Execute cancellation transaction
         try:
-            await self.web3.eth.call(tx, block_identifier="pending")
-            return True
-        except ContractLogicError:
-            return False
-
-    async def stop(self) -> None:
-        # future-proof placeholder
-        await asyncio.sleep(0)
-
-    async def get_cached_token_price(self, token_address: str, vs: str = "eth") -> Optional[Decimal]:
-        """Get token price using the APIConfig's caching mechanism.
+            signed_tx = await self.sign_transaction(tx)
+            tx_hash = await self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash_str = tx_hash.hex()
+            
+            logger.info(f"Cancellation transaction sent: {tx_hash_str}")
+            return tx_hash_str
+        except Exception as e:
+            logger.error(f"Failed to cancel transaction: {e}")
+            raise StrategyExecutionError(f"Transaction cancellation failed: {e}")
+            
+    async def withdraw_eth(self, to_address: Optional[str] = None, amount: Optional[int] = None) -> str:
+        """Withdraw ETH from the account to a specified address.
         
-        Note: This method is kept for backwards compatibility but now delegates directly
-        to the APIConfig's get_real_time_price method which has its own caching.
+        Args:
+            to_address: Destination address (defaults to configuration.PROFIT_RECEIVER if available)
+            amount: Amount of ETH to withdraw in wei (defaults to 90% of balance)
+            
+        Returns:
+            str: Transaction hash
         """
-        if self.api_config:
-            return await self.api_config.get_real_time_price(token_address, vs)
-        return None
-
-    async def is_healthy(self) -> bool:
-        """Check if the transaction core is in a healthy state.
+        # Use default address from configuration if not specified
+        if to_address is None:
+            to_address = getattr(self.configuration, 'PROFIT_RECEIVER', None)
+            if not to_address:
+                raise StrategyExecutionError("No destination address specified for withdrawal")
+        
+        # Get account balance
+        try:
+            balance = await self.web3.eth.get_balance(self.address)
+            logger.info(f"Current account balance: {balance} wei")
+        except Exception as e:
+            logger.error(f"Failed to get account balance: {e}")
+            raise StrategyExecutionError(f"Failed to get account balance: {e}")
+            
+        # If amount not specified, withdraw 90% of balance
+        if amount is None:
+            # Leave 10% for gas fees
+            amount = int(balance * 0.9)
+            
+        # Ensure we have enough balance
+        if balance <= amount:
+            # Leave at least some ETH for gas
+            min_gas_reserve = self.ETH_TRANSFER_GAS * await self.web3.eth.gas_price
+            amount = max(0, balance - min_gas_reserve)
+            if amount <= 0:
+                raise StrategyExecutionError("Insufficient balance for withdrawal")
+                
+        logger.info(f"Withdrawing {amount} wei to {to_address}")
+        
+        # Build and execute the transaction
+        try:
+            tx = await self.build_transaction(
+                function_call=None,
+                to_address=to_address,
+                value=amount
+            )
+            tx_hash = await self.execute_transaction(tx)
+            logger.info(f"Withdrawal transaction sent: {tx_hash}")
+            return tx_hash
+        except Exception as e:
+            logger.error(f"Withdrawal failed: {e}")
+            raise StrategyExecutionError(f"ETH withdrawal failed: {e}")
+    
+    async def transfer_profit_to_account(self, amount: int, account: str) -> str:
+        """Transfer profit to a specific account.
+        
+        Args:
+            amount: Amount of ETH to transfer in wei
+            account: Destination address for the profit
+            
+        Returns:
+            str: Transaction hash
+        """
+        logger.info(f"Transferring {amount} wei profit to {account}")
+        
+        # Validate destination address
+        if not account or not self.web3.is_address(account):
+            raise StrategyExecutionError(f"Invalid destination address: {account}")
+            
+        # Ensure amount is valid
+        if amount <= 0:
+            raise StrategyExecutionError("Amount must be greater than 0")
+            
+        # Check if we have enough balance
+        try:
+            balance = await self.web3.eth.get_balance(self.address)
+            if balance < amount:
+                logger.warning(f"Insufficient balance: {balance} < {amount}")
+                raise StrategyExecutionError(f"Insufficient balance for profit transfer: {balance} < {amount}")
+        except Exception as e:
+            if not isinstance(e, StrategyExecutionError):
+                logger.error(f"Failed to check balance: {e}")
+                raise StrategyExecutionError(f"Failed to check balance: {e}")
+            raise
+            
+        # Build and execute the transaction
+        try:
+            tx = await self.build_transaction(
+                function_call=None,
+                to_address=account,
+                value=amount
+            )
+            tx_hash = await self.execute_transaction(tx)
+            logger.info(f"Profit transfer transaction sent: {tx_hash}")
+            return tx_hash
+        except Exception as e:
+            logger.error(f"Profit transfer failed: {e}")
+            raise StrategyExecutionError(f"Profit transfer failed: {e}")
+    
+    async def stop(self) -> bool:
+        """Stop and clean up the TransactionCore.
         
         Returns:
-            bool: True if healthy
+            bool: True if shutdown was successful
         """
-        # Check web3 connection
-        try:
-            await self.web3.eth.get_block_number()
-            
-            # Check contract access
-            if self.aave_flashloan:
-                code = await self.web3.eth.get_code(self.aave_flashloan.address)
-                if not code or code == b"":
-                    logger.warning("Aave flashloan contract not found")
-                    return False
-                    
-            return True
-        except Exception as exc:
-            logger.error(f"TransactionCore health check failed: {exc}")
-            return False
+        logger.info("Stopping TransactionCore...")
+        
+        # Close any pending connections
+        if hasattr(self.web3, 'provider') and hasattr(self.web3.provider, 'close'):
+            try:
+                await self.web3.provider.close()
+                logger.info("Web3 provider connection closed")
+            except Exception as e:
+                logger.warning(f"Error closing web3 provider: {e}")
+        
+        # Cancel any pending transactions if needed
+        pending_count = len(self._pending_txs)
+        if pending_count > 0:
+            logger.info(f"Found {pending_count} pending transactions during shutdown")
+            # Optional: You could add logic here to auto-cancel pending transactions
+        
+        # Clean up resources
+        self._pending_txs.clear()
+        
+        return True

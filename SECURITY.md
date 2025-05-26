@@ -49,7 +49,7 @@ ON1Builder/
 
    # Set appropriate permissions on data directory
    chmod 755 data/
-   chmod 644 data/abi/*
+   chmod 644 resources/abi/*
    chmod 644 data/ml/*
    ```
 

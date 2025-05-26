@@ -25,7 +25,7 @@ mkdir -p "$BACKUP_DIR"
 
 # Create a list of files to back up
 DATA_DIRS=(
-  "data/abi"
+  "resources/abi"
   "data/ml"
 )
 
@@ -48,8 +48,8 @@ done
 
 # Back up individual files
 DATA_FILES=(
-  "data/token_addresses.json"
-  "data/token_symbols.json"
+  "resources/tokens/chainid-1/symbol2address.json"
+  "resources/tokens/chainid-1/address2symbol.json"
   "data/erc20_signatures.json"
 )
 

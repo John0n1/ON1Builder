@@ -216,15 +216,21 @@ class Configuration:
         # First, update values for keys already in _config
         for key in self._config:
             env_value = os.getenv(key)
-            if env_value is not None:
+            if env_value is not None and env_value.strip() != "":  # Skip empty strings
                 # Convert environment string to appropriate type based on default
                 default_value = self._DEFAULTS.get(key)
                 if isinstance(default_value, bool):
                     self._config[key] = env_value.lower() in ('true', '1', 'yes')
                 elif isinstance(default_value, int):
-                    self._config[key] = int(env_value)
+                    try:
+                        self._config[key] = int(env_value)
+                    except ValueError:
+                        logger.warning(f"Failed to convert env var '{key}' value '{env_value}' to int, using default {default_value}")
                 elif isinstance(default_value, float):
-                    self._config[key] = float(env_value)
+                    try:
+                        self._config[key] = float(env_value)
+                    except ValueError:
+                        logger.warning(f"Failed to convert env var '{key}' value '{env_value}' to float, using default {default_value}")
                 else:
                     self._config[key] = env_value
                 
@@ -232,7 +238,7 @@ class Configuration:
                 
         # Now add any environment variables not already in _config
         for key, value in os.environ.items():
-            if key not in self._config and key.isupper():  # Only consider uppercase environment variables
+            if key not in self._config and key.isupper() and value.strip() != "":  # Only consider uppercase environment variables with non-empty values
                 # Try to convert value to appropriate type
                 if value.lower() in ('true', 'false', 'yes', 'no', '1', '0'):
                     self._config[key] = value.lower() in ('true', '1', 'yes')
@@ -698,7 +704,11 @@ class APIConfig:
                         endpoint = "/tickers/btc-bitcoin"
                     else:
                         token_id = self.symbol_to_api_id.get(token, token)
-                        endpoint = prov.price_url.format(id=token_id)
+                        if prov.price_url:
+                            endpoint = prov.price_url.format(id=token_id)
+                        else:
+                            logger.debug(f"No price URL defined for {prov.name}")
+                            return None
                         
                     data = await self._request(prov, endpoint)
                     if data and "quotes" in data and vs.upper() in data["quotes"] and "price" in data["quotes"][vs.upper()]:
@@ -730,6 +740,8 @@ class APIConfig:
 
     async def _volume_from_provider(self, prov: Provider, token: str) -> Optional[float]:
         if prov.name == "binance":
+            if not prov.volume_url:
+                return None
             endpoint = prov.volume_url
             data = await self._request(prov, endpoint, params={"symbol": token + "USDT"})
             return float(data["quoteVolume"]) if data else None

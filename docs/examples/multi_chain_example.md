@@ -209,9 +209,9 @@ common:
   PROMETHEUS_PORT: 9090
   
   # ABI files (common for all chains)
-  ERC20_ABI: "data/abi/erc20_abi.json"
-  UNISWAP_ABI: "data/abi/uniswap_abi.json"
-  SUSHISWAP_ABI: "data/abi/sushiswap_abi.json"
+  ERC20_ABI: "resources/abi/erc20_abi.json"
+  UNISWAP_ABI: "resources/abi/uniswap_abi.json"
+  SUSHISWAP_ABI: "resources/abi/sushiswap_abi.json"
   
   # Cross-chain strategies
   ENABLE_CROSS_CHAIN_STRATEGIES: true

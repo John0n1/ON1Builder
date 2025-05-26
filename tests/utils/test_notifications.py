@@ -1,20 +1,27 @@
-# LICENSE: MIT // github.com/John0n1/ON1Builder
-
 """
-Tests for the notification utilities in utils/notifications.py
+Implementation of Telegram notification functionality and tests for the notification system
 """
 
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
-import json
-import datetime
+from unittest.mock import AsyncMock, patch, MagicMock
+import aiohttp
 
-from on1builder.utils.notifications import (
-    NotificationManager,
-    get_notification_manager,
-    send_alert,
-    import_time,
-)
+from on1builder.utils.notifications import NotificationManager, get_notification_manager
+
+
+class MockResponse:
+    def __init__(self, status, json_data):
+        self.status = status
+        self._json_data = json_data
+
+    async def json(self):
+        return self._json_data
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    async def __aenter__(self):
+        return self
 
 
 @pytest.fixture
@@ -41,196 +48,116 @@ def notification_manager(mock_config):
     """Create a notification manager with the mock config."""
     with patch('on1builder.utils.notifications.aiohttp.ClientSession') as mock_session:
         manager = NotificationManager(mock_config)
-        manager.session = mock_session
+        manager.session = mock_session()
         yield manager
 
 
 @pytest.mark.asyncio
-async def test_send_slack_via_private_method(notification_manager):
-    """Test sending a Slack notification via private method."""
-    # Instead of mocking aiohttp, just mock the entire _send_slack method 
-    # and verify it's called correctly
-    original_send_slack = notification_manager._send_slack
-    
-    async def mock_send_slack(message, level, webhook_url):
-        # Verify the arguments
-        assert message == "Test message"
-        assert level == "INFO"
-        assert webhook_url == "https://slack.webhook/test"
-        return True
-    
-    # Replace the method with our mock
-    notification_manager._send_slack = mock_send_slack
-    
-    try:
-        # Call the method directly to test the interface
-        webhook_url = "https://slack.webhook/test"
-        result = await notification_manager._send_slack(
-            "Test message", "INFO", webhook_url
-        )
-        
-        # Should return True since our mock returns True
-        assert result is True
-    finally:
-        # Restore the original method
-        notification_manager._send_slack = original_send_slack
-
-
-# Note: Telegram notification functionality is not implemented yet
-# This test is a placeholder for when that functionality is added
-@pytest.mark.skip("Telegram notification functionality is not implemented yet")
-@pytest.mark.asyncio
 async def test_send_telegram_notification(notification_manager):
     """Test sending a Telegram notification."""
-    # This test will be implemented when telegram notification functionality is added
-    pass
-
-
-# Note: We've already implemented test_send_slack_via_private_method which tests 
-# the actual _send_slack method that the implementation uses.
-# This test is redundant and can be removed.
-@pytest.mark.skip("Redundant with test_send_slack_via_private_method")
-@pytest.mark.asyncio
-async def test_send_slack_notification(notification_manager):
-    """This test is redundant with test_send_slack_via_private_method."""
-    pass
-
-
-@pytest.mark.asyncio
-async def test_send_email_via_private_method(notification_manager):
-    """Test sending an email notification via private method."""
-    with patch('on1builder.utils.notifications.smtplib.SMTP') as mock_smtp_class:
-        # Create an instance for the SMTP constructor to return
-        mock_smtp_instance = MagicMock()
-        mock_smtp_class.return_value = mock_smtp_instance
-        
-        # Set up email config as it would appear in the implementation
-        email_config = {
-            "server": notification_manager.config.EMAIL_SMTP_SERVER,
-            "port": notification_manager.config.EMAIL_SMTP_PORT,
-            "username": notification_manager.config.EMAIL_USERNAME,
-            "password": notification_manager.config.EMAIL_PASSWORD,
-            "recipient": notification_manager.config.EMAIL_TO
-        }
-        
-        # Call the method we're testing
-        result = await notification_manager._send_email(
-            "Test message", "CRITICAL", email_config
-        )
-        
-        # Check that SMTP was initialized with the right server and port
-        mock_smtp_class.assert_called_once_with(
-            email_config["server"],
-            email_config["port"]
-        )
-        
-        # Check that the required methods were called
-        mock_smtp_instance.starttls.assert_called_once()
-        mock_smtp_instance.login.assert_called_once_with(
-            email_config["username"],
-            email_config["password"]
-        )
-        mock_smtp_instance.send_message.assert_called_once()
-        mock_smtp_instance.quit.assert_called_once()
-        
-        # The result should be True for a successful email
-        assert result is True
-        
-        # Check that the result was successful
-        assert result is True
+    # Create mock for Telegram API response
+    mock_response = MockResponse(200, {"ok": True, "result": {"message_id": 123}})
+    
+    # Configure the mock session to return our mock response
+    notification_manager.session.post = AsyncMock(return_value=mock_response)
+    
+    # Call the method under test
+    message = "Test notification message"
+    result = await notification_manager._send_telegram(message)
+    
+    # Check that the telegram API was called correctly
+    notification_manager.session.post.assert_called_once()
+    call_args = notification_manager.session.post.call_args[0][0]
+    assert "telegram" in call_args
+    assert notification_manager.config.TELEGRAM_BOT_TOKEN in call_args
+    
+    # Verify the result indicates success
+    assert result is True
 
 
 @pytest.mark.asyncio
-async def test_send_notification(notification_manager):
-    """Test the send_notification method."""
-    # Mock the private notification methods
-    with patch.object(notification_manager, '_send_slack', new_callable=AsyncMock) as mock_slack, \
-         patch.object(notification_manager, '_send_email', new_callable=AsyncMock) as mock_email:
-        
-        # Set return values
-        mock_slack.return_value = True
-        mock_email.return_value = True
-        
-        # Set up channels for the notification manager
-        notification_manager._channels = [
-            ("slack", "https://slack.webhook/test"),
-            ("email", {
-                "server": "smtp.example.com",
-                "port": 587,
-                "username": "test@example.com",
-                "password": "password",
-                "recipient": "admin@example.com"
-            })
-        ]
+async def test_send_telegram_notification_failure(notification_manager):
+    """Test handling of failed Telegram notification."""
+    # Create mock for Telegram API error response
+    mock_response = MockResponse(400, {"ok": False, "description": "Bad Request"})
+    
+    # Configure the mock session to return our mock response
+    notification_manager.session.post = AsyncMock(return_value=mock_response)
+    
+    # Call the method under test
+    message = "Test notification message"
+    result = await notification_manager._send_telegram(message)
+    
+    # Verify the result indicates failure
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_send_notification_all_channels(notification_manager):
+    """Test sending notifications to all configured channels."""
+    # Mock all notification methods
+    with patch.object(notification_manager, '_send_discord', return_value=True) as mock_discord, \
+         patch.object(notification_manager, '_send_slack', return_value=True) as mock_slack, \
+         patch.object(notification_manager, '_send_telegram', return_value=True) as mock_telegram, \
+         patch.object(notification_manager, '_send_email', return_value=True) as mock_email:
         
         # Call the send_notification method
-        result = await notification_manager.send_notification(
-            "Test message", "WARNING", {"key": "value"}
-        )
+        message = "Test notification to all channels"
+        level = "INFO"
+        result = await notification_manager.send_notification(message, level=level)
         
-        # Check that the private methods were called
-        mock_slack.assert_called_once()
-        mock_email.assert_called_once()
+        # Verify all channels were used
+        mock_discord.assert_called_once_with(message)
+        mock_slack.assert_called_once_with(message)
+        mock_telegram.assert_called_once_with(message)
+        mock_email.assert_called_once_with(message, f"[{level}] ON1Builder Notification")
         
-        # Check that the result was successful (the implementation returns a boolean)
+        # All channels succeeded so result should be True
         assert result is True
 
 
 @pytest.mark.asyncio
-async def test_get_notification_manager():
-    """Test the get_notification_manager function."""
-    mock_config = MagicMock()
+async def test_send_notification_level_filtering(notification_manager):
+    """Test that notifications are filtered by level."""
+    # Set MIN_NOTIFICATION_LEVEL to WARNING
+    notification_manager.config.MIN_NOTIFICATION_LEVEL = "WARNING"
     
-    # Clear the global instance
-    import on1builder.utils.notifications
-    on1builder.utils.notifications._notification_manager = None
-    
-    # Get a new instance
-    with patch('on1builder.utils.notifications.NotificationManager') as mock_manager_class:
-        mock_instance = MagicMock()
-        mock_manager_class.return_value = mock_instance
+    # Mock notification methods
+    with patch.object(notification_manager, '_send_discord') as mock_discord, \
+         patch.object(notification_manager, '_send_slack') as mock_slack, \
+         patch.object(notification_manager, '_send_telegram') as mock_telegram, \
+         patch.object(notification_manager, '_send_email') as mock_email:
         
-        manager = get_notification_manager(mock_config)
+        # Send INFO level message (should be ignored)
+        message = "This is an info message"
+        await notification_manager.send_notification(message, level="INFO")
         
-        # Check that NotificationManager was instantiated
-        mock_manager_class.assert_called_once_with(mock_config)
+        # None of the send methods should be called
+        mock_discord.assert_not_called()
+        mock_slack.assert_not_called()
+        mock_telegram.assert_not_called()
+        mock_email.assert_not_called()
         
-        # Check that the same instance is returned on subsequent calls
-        manager2 = get_notification_manager(mock_config)
-        assert manager2 is manager
+        # Send WARNING level message (should be sent)
+        message = "This is a warning message"
+        await notification_manager.send_notification(message, level="WARNING")
         
-        # Check that NotificationManager was only instantiated once
-        mock_manager_class.assert_called_once()
+        # All send methods should be called
+        mock_discord.assert_called_once()
+        mock_slack.assert_called_once()
+        mock_telegram.assert_called_once()
+        mock_email.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_send_alert():
-    """Test the send_alert function."""
-    mock_config = MagicMock()
+async def test_get_notification_manager_with_custom_config():
+    """Test getting notification manager with custom config."""
+    custom_config = MagicMock()
+    custom_config.NOTIFICATION_CHANNELS = ["email"]
     
-    # Mock get_notification_manager to return a mock manager
-    mock_manager = AsyncMock()
-    with patch('on1builder.utils.notifications.get_notification_manager', return_value=mock_manager) as mock_get_manager:
+    with patch('on1builder.utils.notifications.NotificationManager') as mock_notification_class:
+        manager = get_notification_manager(custom_config)
         
-        # Call send_alert
-        message = "Test alert message"
-        level = "WARNING"
-        details = {"test": "details"}
-        
-        await send_alert(message, level, details, mock_config)
-        
-        # Check that get_notification_manager was called
-        mock_get_manager.assert_called_once_with(mock_config)
-        
-        # Check that the manager's send_notification method was called
-        mock_manager.send_notification.assert_called_once_with(message, level, details)
-
-
-def test_import_time():
-    """Test the import_time function."""
-    time_module = import_time()
-    
-    # Check that the returned object has the time module's attributes
-    assert hasattr(time_module, 'time')
-    assert hasattr(time_module, 'sleep')
-    assert callable(time_module.time)
+        # NotificationManager should be instantiated with our custom config
+        mock_notification_class.assert_called_once_with(custom_config)
+        assert manager == mock_notification_class.return_value

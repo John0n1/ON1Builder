@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from on1builder.config.config import Configuration, _DEFAULTS
+from on1builder.config.config import Configuration
 
 @pytest.fixture
 def configuration():
@@ -133,7 +133,8 @@ async def test__init__with_env_file(configuration_instance):
 @pytest.mark.asyncio
 async def test__validate_method(configuration_instance):
     # Test _validate method with MIN_PROFIT
+    default_min_profit = 0.001  # Match the hardcoded default from Configuration._DEFAULTS
     configuration_instance.MIN_PROFIT = -1  # Set invalid value
     configuration_instance._validate()
     # After validation, the value should be reset to default
-    assert configuration_instance.MIN_PROFIT == _DEFAULTS["MIN_PROFIT"]
+    assert configuration_instance.MIN_PROFIT == default_min_profit

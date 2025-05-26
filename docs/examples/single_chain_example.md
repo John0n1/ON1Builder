@@ -116,11 +116,11 @@ development:
   # -------------------------------------------------------------------------
   # ABI + data files (relative to project root)
   # -------------------------------------------------------------------------
-  ERC20_ABI: "data/abi/erc20_abi.json"
-  UNISWAP_ABI: "data/abi/uniswap_abi.json"
-  SUSHISWAP_ABI: "data/abi/sushiswap_abi.json"
-  TOKEN_ADDRESSES: "data/token_addresses.json"
-  TOKEN_SYMBOLS: "data/token_symbols.json"
+  ERC20_ABI: "resources/abi/erc20_abi.json"
+  UNISWAP_ABI: "resources/abi/uniswap_abi.json"
+  SUSHISWAP_ABI: "resources/abi/sushiswap_abi.json"
+  TOKEN_ADDRESSES: "resources/tokens/chainid-1/symbol2address.json"
+  TOKEN_SYMBOLS: "resources/tokens/chainid-1/address2symbol.json"
 
   # -------------------------------------------------------------------------
   # Safety parameters
@@ -315,7 +315,7 @@ See the [Troubleshooting Guide](../guides/troubleshooting.md) for more detailed 
 
 For advanced users, you can customize the strategy behavior:
 
-1. **Token Pairs**: Add specific token pairs to monitor in `data/token_addresses.json`
+1. **Token Pairs**: Add specific token pairs to monitor in `resources/tokens/chainid-1/symbol2address.json`
 
 2. **Custom Gas Strategies**: Create your own gas price strategy:
 

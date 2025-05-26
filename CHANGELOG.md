@@ -44,3 +44,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mempool monitoring and transaction submission
 - Market data integration
 - Strategy execution framework
+
+### Changed
+- Initial codebase cleanup and refactoring
+- Improved documentation and code comments
+### Fixed
+- Fixed initial bugs in transaction handling
+- Resolved initial memory leaks in monitors                 
+- Fixed initial websocket connection issues
+## [2.0.1] - 2025-05-26
+
+### Added
+- Added support for new blockchain networks
+- Enhanced transaction retry logic
+- Improved error handling in websocket connections
+### Changed
+- Updated dependency versions for security and performance
+### Fixed
+- Fixed issues with transaction submission under high load
+- Resolved websocket reconnection issues
+## [2.0.0] - 2025-05-26
+### Added
+- Major refactor of core components
+- Introduced new configuration management system

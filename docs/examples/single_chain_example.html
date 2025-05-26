@@ -130,11 +130,11 @@ development:
   # -------------------------------------------------------------------------
   # ABI + data files (relative to project root)
   # -------------------------------------------------------------------------
-  ERC20_ABI: "data/abi/erc20_abi.json"
-  UNISWAP_ABI: "data/abi/uniswap_abi.json"
-  SUSHISWAP_ABI: "data/abi/sushiswap_abi.json"
-  TOKEN_ADDRESSES: "data/token_addresses.json"
-  TOKEN_SYMBOLS: "data/token_symbols.json"
+  ERC20_ABI: "resources/abi/erc20_abi.json"
+  UNISWAP_ABI: "resources/abi/uniswap_abi.json"
+  SUSHISWAP_ABI: "resources/abi/sushiswap_abi.json"
+  TOKEN_ADDRESSES: "resources/tokens/chainid-1/symbol2address.json"
+  TOKEN_SYMBOLS: "resources/tokens/chainid-1/address2symbol.json"
 
   # -------------------------------------------------------------------------
   # Safety parameters
@@ -315,7 +315,7 @@ SLIPPAGE_DEFAULT: 0.08  # Increase slippage tolerance
     <h2>Advanced Customization</h2>
     <p>For advanced users, you can customize the strategy behavior:</p>
     <ol>
-        <li><strong>Token Pairs</strong>: Add specific token pairs to monitor in <code>data/token_addresses.json</code></li>
+        <li><strong>Token Pairs</strong>: Add specific token pairs to monitor in <code>resources/tokens/chainid-1/symbol2address.json</code></li>
         <li><strong>Custom Gas Strategies</strong>: Create your own gas price strategy:
             <pre><code>
 GAS_PRICE_STRATEGY: "custom"

@@ -23,6 +23,8 @@ joblib = "^1.3.0"
 pandas = "^2.0.0"
 numpy = "^1.24.0"
 eth-account = "^0.13.7"
+psutil = "^7.0.0"
+aiosqlite = "^0.21.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
