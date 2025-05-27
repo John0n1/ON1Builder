@@ -8,28 +8,19 @@ transactions, and execute various strategies such as front-running, back-running
 """
 
 from __future__ import annotations
+
 import asyncio
 import time
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
-# Import web3 and eth_account for runtime use
-try:
-    from web3 import AsyncWeb3
-    from eth_account import Account
-    from eth_account.datastructures import SignedTransaction
-except ImportError:
-    # For development/testing when dependencies might not be available
-    AsyncWeb3 = Any
-    Account = Any
-    SignedTransaction = Any
+from eth_account import Account
+from eth_account.datastructures import SignedTransaction
+from web3 import AsyncWeb3
 
-# Use TYPE_CHECKING for circular import prevention
-if TYPE_CHECKING:
-    from on1builder.config.config import Configuration
-    from on1builder.core.nonce_core import NonceCore
-    from on1builder.engines.safety_net import SafetyNet
-
+from on1builder.config.config import Configuration
+from on1builder.core.nonce_core import NonceCore
+from on1builder.engines.safety_net import SafetyNet
 from on1builder.utils.logger import setup_logging
 from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 
@@ -46,14 +37,14 @@ class TransactionCore:
 
     def __init__(
         self,
-        web3: "AsyncWeb3",
+        web3: AsyncWeb3,
         account: "Account",
-        configuration: "Configuration",
+        configuration: Configuration,
         api_config=None,
         market_monitor=None,
         txpool_monitor=None,
-        nonce_core: Optional["NonceCore"] = None,
-        safety_net: Optional["SafetyNet"] = None,
+        nonce_core: Optional[NonceCore] = None,
+        safety_net: Optional[SafetyNet] = None,
         chain_id: int = 1,
     ) -> None:
         """Initialize the TransactionCore.
@@ -150,8 +141,7 @@ class TransactionCore:
                 tx = await function_call.build_transaction(tx_params)
             except Exception as e:
                 logger.error(f"Failed to build function call transaction: {e}")
-                raise StrategyExecutionError(
-                    f"Failed to build transaction: {e}")
+                raise StrategyExecutionError(f"Failed to build transaction: {e}")
         else:
             # Build a standard transaction
             tx = {
@@ -181,8 +171,7 @@ class TransactionCore:
             try:
                 gas_price = await self.web3.eth.gas_price
                 # Apply gas price multiplier from config if available
-                multiplier = getattr(
-                    self.configuration, "gas_price_multiplier", 1.1)
+                multiplier = getattr(self.configuration, "gas_price_multiplier", 1.1)
                 if gas_price is not None:
                     gas_price = int(gas_price * multiplier)
             except Exception as e:
@@ -212,8 +201,7 @@ class TransactionCore:
 
         return tx
 
-    async def sign_transaction(
-            self, tx: Dict[str, Any]) -> "SignedTransaction":
+    async def sign_transaction(self, tx: Dict[str, Any]) -> "SignedTransaction":
         """Sign a transaction.
 
         Args:
@@ -226,8 +214,7 @@ class TransactionCore:
             return self.account.sign_transaction(tx)
         except Exception as e:
             logger.error(f"Failed to sign transaction: {e}")
-            raise StrategyExecutionError(
-                f"Transaction signing failed: {str(e)}")
+            raise StrategyExecutionError(f"Transaction signing failed: {str(e)}")
 
     async def execute_transaction(
         self, tx: Dict[str, Any], retry_count: int = 3, retry_delay: float = 2.0
@@ -360,8 +347,7 @@ class TransactionCore:
             # Wait before polling again
             await asyncio.sleep(poll_interval)
 
-    async def handle_eth_transaction(
-            self, target_tx: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_eth_transaction(self, target_tx: Dict[str, Any]) -> Dict[str, Any]:
         """Handle a standard ETH transaction.
 
         Args:
@@ -454,8 +440,7 @@ class TransactionCore:
 
         # Example implementation - in real-world this would have actual flashloan logic
         # using Aave, dYdX or other protocols
-        return {"asset": flashloan_asset,
-                "amount": flashloan_amount, "prepared": True}
+        return {"asset": flashloan_asset, "amount": flashloan_amount, "prepared": True}
 
     async def send_bundle(self, transactions: List[Dict[str, Any]]) -> str:
         """Send a bundle of transactions.
@@ -476,8 +461,7 @@ class TransactionCore:
             try:
                 tx_hash = await self.execute_transaction(tx)
                 bundle_results.append(tx_hash)
-                logger.debug(
-                    f"Bundle tx {i + 1}/{len(transactions)}: {tx_hash}")
+                logger.debug(f"Bundle tx {i + 1}/{len(transactions)}: {tx_hash}")
             except Exception as e:
                 logger.error(f"Bundle tx {i + 1} failed: {e}")
                 raise StrategyExecutionError(
@@ -637,8 +621,7 @@ class TransactionCore:
             return tx_hash_str
         except Exception as e:
             logger.error(f"Failed to cancel transaction: {e}")
-            raise StrategyExecutionError(
-                f"Transaction cancellation failed: {e}")
+            raise StrategyExecutionError(f"Transaction cancellation failed: {e}")
 
     async def withdraw_eth(
         self, to_address: Optional[str] = None, amount: Optional[int] = None
@@ -679,8 +662,7 @@ class TransactionCore:
             min_gas_reserve = self.ETH_TRANSFER_GAS * await self.web3.eth.gas_price
             amount = max(0, balance - min_gas_reserve)
             if amount <= 0:
-                raise StrategyExecutionError(
-                    "Insufficient balance for withdrawal")
+                raise StrategyExecutionError("Insufficient balance for withdrawal")
 
         logger.info(f"Withdrawing {amount} wei to {to_address}")
 
@@ -696,8 +678,7 @@ class TransactionCore:
             logger.error(f"Withdrawal failed: {e}")
             raise StrategyExecutionError(f"ETH withdrawal failed: {e}")
 
-    async def transfer_profit_to_account(
-            self, amount: int, account: str) -> str:
+    async def transfer_profit_to_account(self, amount: int, account: str) -> str:
         """Transfer profit to a specific account.
 
         Args:
@@ -711,8 +692,7 @@ class TransactionCore:
 
         # Validate destination address
         if not account or not self.web3.is_address(account):
-            raise StrategyExecutionError(
-                f"Invalid destination address: {account}")
+            raise StrategyExecutionError(f"Invalid destination address: {account}")
 
         # Ensure amount is valid
         if amount <= 0:
@@ -753,8 +733,7 @@ class TransactionCore:
         logger.info("Stopping TransactionCore...")
 
         # Close any pending connections
-        if hasattr(self.web3, "provider") and hasattr(
-                self.web3.provider, "close"):
+        if hasattr(self.web3, "provider") and hasattr(self.web3.provider, "close"):
             try:
                 await self.web3.provider.close()
                 logger.info("Web3 provider connection closed")
@@ -764,8 +743,7 @@ class TransactionCore:
         # Cancel any pending transactions if needed
         pending_count = len(self._pending_txs)
         if pending_count > 0:
-            logger.info(
-                f"Found {pending_count} pending transactions during shutdown")
+            logger.info(f"Found {pending_count} pending transactions during shutdown")
             # Optional: You could add logic here to auto-cancel pending
             # transactions
 

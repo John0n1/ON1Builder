@@ -7,26 +7,27 @@ and monitoring information.
 """
 
 from __future__ import annotations
+
 import datetime
 import os
 from typing import Any, Dict, List, Optional
 
 try:
     import sqlalchemy
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy import (
+        Boolean,
         Column,
+        DateTime,
+        Float,
+        ForeignKey,
         Integer,
         String,
-        Float,
-        DateTime,
-        Boolean,
         Text,
-        ForeignKey,
         select,
     )
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import sessionmaker
 
     HAS_SQLALCHEMY = True
 except ImportError:
@@ -146,8 +147,7 @@ class DatabaseManager:
     def _setup_db(self) -> None:
         """Set up database connection and tables."""
         if not HAS_SQLALCHEMY:
-            logger.warning(
-                "SQLAlchemy not installed, database functionality disabled")
+            logger.warning("SQLAlchemy not installed, database functionality disabled")
             return
 
         try:
@@ -272,8 +272,7 @@ class DatabaseManager:
             Record ID or None if error
         """
         if not HAS_SQLALCHEMY or not self._async_session:
-            logger.warning(
-                "Database not available, skipping save_profit_record")
+            logger.warning("Database not available, skipping save_profit_record")
             return None
 
         try:
@@ -289,8 +288,7 @@ class DatabaseManager:
 
                 session.add(profit_record)
                 await session.commit()
-                logger.debug(
-                    f"Saved profit record for {tx_hash}: {profit_amount}")
+                logger.debug(f"Saved profit record for {tx_hash}: {profit_amount}")
                 return profit_record.id
         except Exception as e:
             logger.error(f"Error saving profit record for {tx_hash}: {str(e)}")
@@ -316,8 +314,7 @@ class DatabaseManager:
 
                 if tx is None:
                     # If not found, try with a query
-                    query = select(Transaction).where(
-                        Transaction.tx_hash == tx_hash)
+                    query = select(Transaction).where(Transaction.tx_hash == tx_hash)
                     result = await session.execute(query)
 
                     # Handle scalar result appropriately
@@ -363,8 +360,7 @@ class DatabaseManager:
             Summary dictionary with total profit and related metrics
         """
         if not HAS_SQLALCHEMY or not self._async_session:
-            logger.warning(
-                "Database not available, skipping get_profit_summary")
+            logger.warning("Database not available, skipping get_profit_summary")
             return {
                 "total_profit_eth": 0.0,
                 "total_gas_spent_eth": 0.0,
@@ -375,13 +371,11 @@ class DatabaseManager:
 
         try:
             async with self._async_session() as session:
-                from sqlalchemy import select, func, and_
+                from sqlalchemy import and_, func, select
 
                 # Base query for profit records
                 profit_query = select(
-                    func.sum(
-                        ProfitRecord.profit_amount), func.count(
-                        ProfitRecord.id)
+                    func.sum(ProfitRecord.profit_amount), func.count(ProfitRecord.id)
                 )
 
                 # Apply filters
@@ -400,8 +394,7 @@ class DatabaseManager:
                 result = await session.execute(profit_query)
                 # Handle both direct results and coroutines
                 first_result = result.first()
-                if hasattr(
-                        first_result, "__await__"):  # Check if it's a coroutine
+                if hasattr(first_result, "__await__"):  # Check if it's a coroutine
                     first_result = await first_result
                 total_profit, profit_count = first_result or (0.0, 0)
 
@@ -425,14 +418,12 @@ class DatabaseManager:
 
                 result = await session.execute(tx_query)
                 scalar_result = result.scalar()
-                if hasattr(scalar_result,
-                           "__await__"):  # Check if it's a coroutine
+                if hasattr(scalar_result, "__await__"):  # Check if it's a coroutine
                     scalar_result = await scalar_result
                 total_gas_wei = scalar_result or 0
 
                 # Convert wei to ETH (approximate)
-                total_gas_eth = float(total_gas_wei) / \
-                    1e18 if total_gas_wei else 0.0
+                total_gas_eth = float(total_gas_wei) / 1e18 if total_gas_wei else 0.0
 
                 # Count successful transactions
                 success_query = select(func.count(Transaction.id)).where(
@@ -443,8 +434,7 @@ class DatabaseManager:
 
                 success_result = await session.execute(success_query)
                 scalar_success = success_result.scalar()
-                if hasattr(scalar_success,
-                           "__await__"):  # Check if it's a coroutine
+                if hasattr(scalar_success, "__await__"):  # Check if it's a coroutine
                     scalar_success = await scalar_success
                 success_count = scalar_success or 0
 
@@ -455,15 +445,13 @@ class DatabaseManager:
 
                 total_result = await session.execute(total_query)
                 scalar_total = total_result.scalar()
-                if hasattr(
-                        scalar_total, "__await__"):  # Check if it's a coroutine
+                if hasattr(scalar_total, "__await__"):  # Check if it's a coroutine
                     scalar_total = await scalar_total
                 total_count = scalar_total or 0
 
                 # Calculate metrics
                 success_rate = (
-                    (success_count / total_count) *
-                    100 if total_count > 0 else 0
+                    (success_count / total_count) * 100 if total_count > 0 else 0
                 )
                 avg_profit = total_profit / profit_count if profit_count > 0 else 0
 
@@ -492,10 +480,9 @@ class DatabaseManager:
         """Get count of transactions, optionally filtered by chain_id and
         from_address."""
         if not HAS_SQLALCHEMY or not self._async_session:
-            logger.warning(
-                "Database not available, skipping get_transaction_count")
+            logger.warning("Database not available, skipping get_transaction_count")
             return 0
-        from sqlalchemy import select, func, and_
+        from sqlalchemy import and_, func, select
 
         try:
             async with self._async_session() as session:
@@ -514,14 +501,12 @@ class DatabaseManager:
             logger.error(f"Error getting transaction count: {e}")
             return 0
 
-    async def get_monitored_tokens(
-            self, chain_id: Optional[int] = None) -> List[str]:
+    async def get_monitored_tokens(self, chain_id: Optional[int] = None) -> List[str]:
         """Get distinct recipient token addresses for a given chain ID."""
         if not HAS_SQLALCHEMY or not self._async_session:
-            logger.warning(
-                "Database not available, skipping get_monitored_tokens")
+            logger.warning("Database not available, skipping get_monitored_tokens")
             return []
-        from sqlalchemy import select, distinct
+        from sqlalchemy import distinct, select
 
         try:
             async with self._async_session() as session:
@@ -532,8 +517,7 @@ class DatabaseManager:
 
                 # Handle both direct results and coroutines
                 scalars_result = result.scalars()
-                if hasattr(scalars_result,
-                           "__await__"):  # Check if it's a coroutine
+                if hasattr(scalars_result, "__await__"):  # Check if it's a coroutine
                     scalars_result = await scalars_result
 
                 all_result = (
@@ -541,12 +525,10 @@ class DatabaseManager:
                     if hasattr(scalars_result, "all")
                     else scalars_result
                 )
-                if hasattr(
-                        all_result, "__await__"):  # Check if it's a coroutine
+                if hasattr(all_result, "__await__"):  # Check if it's a coroutine
                     all_result = await all_result
 
-                return all_result if isinstance(
-                    all_result, list) else list(all_result)
+                return all_result if isinstance(all_result, list) else list(all_result)
         except Exception as e:
             logger.error(f"Error getting monitored tokens: {e}")
             return []

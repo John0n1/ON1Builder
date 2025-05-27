@@ -15,7 +15,7 @@ from on1builder.core.main_core import MainCore
 @pytest.fixture
 def config():
     config = Configuration()
-    config.HTTP_ENDPOINT = "HTTPS://ethereum-rpc.publicnode.com"
+    config.HTTP_ENDPOINT = "https://ethereum-rpc.publicnode.com"
     config.WEBSOCKET_ENDPOINT = "wss://ethereum-rpc.publicnode.com"
     config.CONNECTION_RETRY_COUNT = 3
     config.CONNECTION_RETRY_DELAY = 0.1  # short delay for tests

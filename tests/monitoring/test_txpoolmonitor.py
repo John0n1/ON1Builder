@@ -14,8 +14,8 @@ def configuration():
     config = Configuration()
     config.WALLET_KEY = "test_wallet_key"
     config.BASE_PATH = "test_base_path"
-    config.HTTP_ENDPOINT = "http://localhost:8545"
-    config.WEBSOCKET_ENDPOINT = "ws://localhost:8546"
+    config.HTTP_ENDPOINT = "https://ethereum-rpc.publicnode.com"
+    config.WEBSOCKET_ENDPOINT = "wss://ethereum-rpc.publicnode.com"
     config.IPC_ENDPOINT = "/path/to/geth.ipc"
     return config
 

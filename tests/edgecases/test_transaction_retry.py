@@ -17,7 +17,7 @@ def config():
     config.TRANSACTION_RETRY_COUNT = 3
     config.TRANSACTION_RETRY_DELAY = 0.1  # short delay for tests
     config.GAS_MULTIPLIER = 1.1
-    config.HTTP_ENDPOINT = "http://localhost:8545"
+    config.HTTP_ENDPOINT = "https://ethereum-rpc.publicnode.com"
     config.WALLET_KEY = "0x" + "1" * 64  # Dummy private key
     config.MEMPOOL_MAX_RETRIES = 4
     config.MEMPOOL_RETRY_DELAY = 0.1

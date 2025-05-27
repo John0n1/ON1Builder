@@ -9,9 +9,10 @@ Manages multiple chain workers and coordinates operations across chains.
 import asyncio
 import logging
 import time
-from typing import Dict, Any, List
-from on1builder.engines.chain_worker import ChainWorker
 from contextlib import suppress
+from typing import Any, Dict, List
+
+from on1builder.engines.chain_worker import ChainWorker
 
 logger = logging.getLogger("MultiChainCore")
 
@@ -57,8 +58,7 @@ class MultiChainCore:
         self._health_check_task = None
         self._shutdown_event = asyncio.Event()
 
-        logger.info(
-            f"Initialized MultiChainCore with {len(self.chains_config)} chains")
+        logger.info(f"Initialized MultiChainCore with {len(self.chains_config)} chains")
         for chain in self.chains_config:
             logger.info(
                 f"Configured chain: {
@@ -98,9 +98,8 @@ class MultiChainCore:
                     # Extract chain-specific config from global config
                     for key in dir(self.config):
                         if key.startswith(chain_prefix):
-                            config_key = key[len(chain_prefix):]
-                            chain_config[config_key] = getattr(
-                                self.config, key)
+                            config_key = key[len(chain_prefix) :]
+                            chain_config[config_key] = getattr(self.config, key)
 
                     # Add default chain name if not specified
                     if "CHAIN_NAME" not in chain_config:
@@ -197,8 +196,7 @@ class MultiChainCore:
                             type(result), result, result.__traceback__
                         ),
                     }
-                    self.metrics["errors"].setdefault(
-                        chain_id, []).append(error_entry)
+                    self.metrics["errors"].setdefault(chain_id, []).append(error_entry)
                     self.metrics["initialization_failures"] += 1
                 elif result:  # True means success
                     success_count += 1
@@ -300,8 +298,7 @@ class MultiChainCore:
         chain_results = await asyncio.gather(*chain_check_tasks, return_exceptions=True)
 
         # Process results
-        for i, (chain_id, result) in enumerate(
-                zip(self.workers.keys(), chain_results)):
+        for i, (chain_id, result) in enumerate(zip(self.workers.keys(), chain_results)):
             if isinstance(result, Exception):
                 health["chains"][chain_id] = {
                     "status": "unhealthy",
@@ -345,8 +342,7 @@ class MultiChainCore:
                     balance = await worker.get_wallet_balance()
                     if balance is None:
                         chain_status = "degraded"
-                        chain_errors.append(
-                            "Failed to retrieve wallet balance")
+                        chain_errors.append("Failed to retrieve wallet balance")
 
                     # Check gas price availability
                     gas_price = await worker.get_gas_price()
@@ -396,8 +392,7 @@ class MultiChainCore:
                                     chain_health['status']}"
                             )
                             for error in chain_health["errors"]:
-                                logger.warning(
-                                    f"Chain {chain_id} error: {error}")
+                                logger.warning(f"Chain {chain_id} error: {error}")
 
                 # Update metrics with health info
                 self.metrics["active_chains"] = health["active_chains"]
@@ -408,8 +403,7 @@ class MultiChainCore:
                         chain_health["status"] == "unhealthy"
                         and chain_id in self.workers
                     ):
-                        logger.info(
-                            f"Attempting to recover unhealthy chain {chain_id}")
+                        logger.info(f"Attempting to recover unhealthy chain {chain_id}")
                         await self.workers[chain_id].reconnect()
 
                 # Wait before next check
@@ -431,8 +425,7 @@ class MultiChainCore:
         # Start all workers
         worker_tasks = []
         for chain_id, worker in self.workers.items():
-            task = asyncio.create_task(
-                worker.start(), name=f"worker_{chain_id}")
+            task = asyncio.create_task(worker.start(), name=f"worker_{chain_id}")
             worker_tasks.append(task)
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
@@ -476,8 +469,7 @@ class MultiChainCore:
             async with asyncio.timeout(30):  # 30-second timeout for shutdown
                 await asyncio.gather(*stop_tasks, return_exceptions=True)
         except asyncio.TimeoutError:
-            logger.warning(
-                "Some chain workers did not stop gracefully within timeout")
+            logger.warning("Some chain workers did not stop gracefully within timeout")
 
         # Cancel any remaining tasks
         for task in self._tasks:

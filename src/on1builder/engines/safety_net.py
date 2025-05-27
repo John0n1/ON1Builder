@@ -6,13 +6,14 @@ Provides safety checks and circuit-breaker functionality to prevent operational 
 """
 
 from __future__ import annotations
+
 import asyncio
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from web3 import AsyncWeb3
 
-from on1builder.config.config import Configuration, APIConfig
+from on1builder.config.config import APIConfig, Configuration
 from on1builder.utils.logger import setup_logging
 
 logger = setup_logging("SafetyNet", level="DEBUG")
@@ -81,8 +82,7 @@ class SafetyNet:
         if await self.web3.is_connected():
             logger.info("Safety net initialized with active web3 connection")
         else:
-            logger.warning(
-                "Safety net initialized but web3 connection is not active")
+            logger.warning("Safety net initialized but web3 connection is not active")
 
     async def stop(self) -> None:
         """Stop the safety net system.
@@ -114,7 +114,8 @@ class SafetyNet:
         if self.circuit_broken:
             logger.warning(
                 f"Circuit breaker active: {
-                    self.circuit_break_reason}")
+                    self.circuit_break_reason}"
+            )
             return False
 
         # Check account balance
@@ -346,8 +347,7 @@ class SafetyNet:
             gas_price = await self.web3.eth.gas_price
             return float(self.web3.from_wei(gas_price, "gwei"))
 
-    async def adjust_slippage_tolerance(
-            self, congestion_level: float = None) -> float:
+    async def adjust_slippage_tolerance(self, congestion_level: float = None) -> float:
         """Adjust slippage tolerance based on network congestion.
 
         Args:
@@ -362,12 +362,9 @@ class SafetyNet:
                 congestion_level = await self.get_network_congestion()
 
             # Get base slippage values from config
-            slippage_low = self.config.get(
-                "SLIPPAGE_LOW_CONGESTION", 0.1)  # 0.1%
-            slippage_medium = self.config.get(
-                "SLIPPAGE_MEDIUM_CONGESTION", 0.5)  # 0.5%
-            slippage_high = self.config.get(
-                "SLIPPAGE_HIGH_CONGESTION", 1.0)  # 1.0%
+            slippage_low = self.config.get("SLIPPAGE_LOW_CONGESTION", 0.1)  # 0.1%
+            slippage_medium = self.config.get("SLIPPAGE_MEDIUM_CONGESTION", 0.5)  # 0.5%
+            slippage_high = self.config.get("SLIPPAGE_HIGH_CONGESTION", 1.0)  # 1.0%
             slippage_extreme = self.config.get(
                 "SLIPPAGE_EXTREME_CONGESTION", 2.0
             )  # 2.0%
@@ -409,8 +406,7 @@ class SafetyNet:
                             elif volatility_condition == "low":
                                 slippage *= 0.8
                 except Exception as e:
-                    logger.debug(
-                        f"Could not adjust slippage for token volatility: {e}")
+                    logger.debug(f"Could not adjust slippage for token volatility: {e}")
 
             # Ensure slippage is within reasonable bounds
             min_slippage = self.config.get("MIN_SLIPPAGE", 0.05)  # 0.05%
@@ -429,8 +425,7 @@ class SafetyNet:
             # Return default slippage
             return self.config.get("SLIPPAGE_DEFAULT", 0.5)  # 0.5%
 
-    async def _calculate_gas_cost(
-            self, gas_price: float, gas_used: int) -> float:
+    async def _calculate_gas_cost(self, gas_price: float, gas_used: int) -> float:
         """Calculate gas cost in ETH.
 
         Args:
@@ -525,12 +520,10 @@ class SafetyNet:
                 # If pending block not available, use a different approach
                 try:
                     # Check txpool if available
-                    if hasattr(self.web3, "geth") and hasattr(
-                            self.web3.geth, "txpool"):
+                    if hasattr(self.web3, "geth") and hasattr(self.web3.geth, "txpool"):
                         txpool = await self.web3.geth.txpool.status()
                         pending_count = (
-                            int(txpool.pending, 16) if hasattr(
-                                txpool, "pending") else 0
+                            int(txpool.pending, 16) if hasattr(txpool, "pending") else 0
                         )
                 except Exception:
                     # Unable to get pending transactions
@@ -567,8 +560,7 @@ class SafetyNet:
                         # Normalize trend between 0-1 (0 = decreasing, 1 =
                         # increasing sharply)
                         trend_ratio = recent_avg / older_avg
-                        gas_price_trend = min(
-                            1.0, max(0.0, (trend_ratio - 0.95) / 0.5))
+                        gas_price_trend = min(1.0, max(0.0, (trend_ratio - 0.95) / 0.5))
             except Exception as e:
                 logger.debug(f"Could not calculate gas price trend: {e}")
 
@@ -833,9 +825,11 @@ class SafetyNet:
                     "passed": balance_check_ok,
                     "details": {
                         "balance": float(self.web3.from_wei(balance, "ether")),
-                        "required": float(self.web3.from_wei(required_balance, "ether"))
-                        if value
-                        else "N/A",
+                        "required": (
+                            float(self.web3.from_wei(required_balance, "ether"))
+                            if value
+                            else "N/A"
+                        ),
                     },
                 }
             except Exception as e:
@@ -869,13 +863,11 @@ class SafetyNet:
                 result["checks_passed"] += 1
 
             # Calculate overall safety percentage
-            safety_percentage = (
-                result["checks_passed"] / result["checks_total"]) * 100
+            safety_percentage = (result["checks_passed"] / result["checks_total"]) * 100
             result["safety_percentage"] = safety_percentage
 
             # Determine if safe based on required percentage
-            min_safety_percentage = self.config.get(
-                "MIN_SAFETY_PERCENTAGE", 85)
+            min_safety_percentage = self.config.get("MIN_SAFETY_PERCENTAGE", 85)
             is_safe = safety_percentage >= min_safety_percentage
 
             # Set final results

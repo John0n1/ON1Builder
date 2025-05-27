@@ -3,10 +3,10 @@
 This module provides the CLI functionality for the application.
 """
 
-from typing import Dict, Any, List, Optional
 import argparse
-import sys
 import os
+import sys
+from typing import Any, Dict, List, Optional
 
 __all__ = ["parse_args", "run_command", "monitor_command"]
 
@@ -18,8 +18,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     )
 
     # Main command groups
-    subparsers = parser.add_subparsers(
-        dest="command", help="Command to execute")
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Run command
     run_parser = subparsers.add_parser("run", help="Run the ON1Builder system")
@@ -40,10 +39,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     monitor_parser = subparsers.add_parser(
         "monitor", help="Start the monitoring system only"
     )
-    monitor_parser.add_argument(
-        "--chain",
-        help="Chain ID to monitor",
-        required=True)
+    monitor_parser.add_argument("--chain", help="Chain ID to monitor", required=True)
     monitor_parser.add_argument(
         "--config", "-c", help="Path to config file", default="config/config.yaml"
     )

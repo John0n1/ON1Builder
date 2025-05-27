@@ -145,9 +145,7 @@ async def test_run(multi_chain_core):
         "on1builder.engines.chain_worker.ChainWorker.start", new_callable=AsyncMock
     ):
         # Mock the _update_metrics method
-        with patch.object(
-            multi_chain_core, "_update_metrics", new_callable=AsyncMock
-        ):
+        with patch.object(multi_chain_core, "_update_metrics", new_callable=AsyncMock):
             # Add some workers
             multi_chain_core.workers = {
                 "1": MagicMock(),

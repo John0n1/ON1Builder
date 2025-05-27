@@ -5,9 +5,9 @@ ON1Builder - Dependency Injection Container
 A simple dependency injection container to manage component lifecycle and resolve circular dependencies.
 """
 
-from typing import Any, Dict, TypeVar, Optional, Callable
 import inspect
 import logging
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 # Type variable for container types
 T = TypeVar("T")
@@ -129,8 +129,7 @@ class Container:
         This method is used for graceful shutdown of the container.
         """
         for key, instance in self._instances.items():
-            if hasattr(instance, "close") and callable(
-                    getattr(instance, "close")):
+            if hasattr(instance, "close") and callable(getattr(instance, "close")):
                 logger.debug(f"Closing component: {key}")
 
                 close_method = getattr(instance, "close")

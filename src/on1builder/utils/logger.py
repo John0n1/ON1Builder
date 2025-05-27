@@ -6,11 +6,11 @@ ON1Builder - Logging Utilities
 Provides logging configuration and utilities for the application.
 """
 
+import json
 import logging
 import sys
-import json
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Use colorlog if available, otherwise fallback to standard logging
 try:

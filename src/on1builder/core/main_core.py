@@ -10,34 +10,27 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import tracemalloc
 import time
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import tracemalloc
+from typing import Any, Dict, List, Optional
 
-try:
-    from eth_account import Account
-    from web3 import AsyncWeb3
-    from web3.middleware import ExtraDataToPOAMiddleware
-    from web3.providers import AsyncHTTPProvider, WebSocketProvider, IPCProvider
-    HAS_WEB3 = True
-except ImportError:
-    HAS_WEB3 = False
+from eth_account import Account
+from web3 import AsyncWeb3
+from web3.middleware import ExtraDataToPOAMiddleware
+from web3.providers import AsyncHTTPProvider, IPCProvider, WebSocketProvider
 
-
-from on1builder.config.config import Configuration
-from on1builder.config.config import APIConfig
-from on1builder.utils.logger import setup_logging
+from on1builder.config.config import APIConfig, Configuration
 from on1builder.core.nonce_core import NonceCore
+from on1builder.core.transaction_core import TransactionCore
 from on1builder.engines.safety_net import SafetyNet
 from on1builder.engines.strategy_net import StrategyNet
-from on1builder.core.transaction_core import TransactionCore
+from on1builder.monitoring.market_monitor import MarketMonitor
+from on1builder.monitoring.txpool_monitor import TxpoolMonitor
+from on1builder.utils.logger import setup_logging
 from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 
 # Conditional imports for monitors
-if TYPE_CHECKING:
-    from on1builder.monitoring.market_monitor import MarketMonitor
-    from on1builder.monitoring.txpool_monitor import TxpoolMonitor
-pass
+
 
 
 logger = setup_logging("MainCore", level="DEBUG")
@@ -84,8 +77,7 @@ class MainCore:
         # Call _connect_web3, await if necessary
         conn = self._connect_web3()
         web3 = await conn if inspect.isawaitable(conn) else conn
-        if not web3:
-            return False
+
 
         # Some mocks use async is_connected, others sync
         try:
@@ -105,7 +97,7 @@ class MainCore:
         This method implements reconnection logic with retries according
         to the configuration.
         """
-        if not HAS_WEB3:
+        if not self.web3:
             logger.error("Web3.py is not installed")
             return False
 
@@ -130,10 +122,8 @@ class MainCore:
                 # Apply POA middleware if needed
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(
-                        ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(
-                        f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
 
                 # Connection successful
                 self.web3 = web3
@@ -152,8 +142,7 @@ class MainCore:
                     )
                     await asyncio.sleep(retry_delay)
                 else:
-                    logger.error(
-                        f"All WebSocket connection attempts failed: {e}")
+                    logger.error(f"All WebSocket connection attempts failed: {e}")
                     return False
 
         return False
@@ -179,16 +168,10 @@ class MainCore:
             )
 
         # transaction processor
-        self._bg.append(
-            asyncio.create_task(
-                self._tx_processor(),
-                name="TX_proc"))
+        self._bg.append(asyncio.create_task(self._tx_processor(), name="TX_proc"))
 
         # heartbeat
-        self._bg.append(
-            asyncio.create_task(
-                self._heartbeat(),
-                name="Heartbeat"))
+        self._bg.append(asyncio.create_task(self._heartbeat(), name="Heartbeat"))
 
         try:
             await asyncio.shield(self._stop_evt.wait())
@@ -319,7 +302,7 @@ class MainCore:
 
     async def _create_web3_connection(self) -> Optional[AsyncWeb3]:
         """Create Web3 connection using available endpoints."""
-        if not HAS_WEB3:
+        if not AsyncWeb3:
             logger.error("Web3.py is not installed")
             return None
 
@@ -331,22 +314,20 @@ class MainCore:
                 await web3.eth.chain_id
                 logger.info(
                     f"Connected to HTTP endpoint: {
-                        self.cfg.HTTP_ENDPOINT}")
+                        self.cfg.HTTP_ENDPOINT}"
+                )
 
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(
-                        ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(
-                        f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
                 return web3
         except Exception as e:
             logger.warning(f"Failed to connect to HTTP endpoint: {e}")
 
         # Try WebSocket endpoint
         try:
-            if hasattr(self.cfg,
-                       "WEBSOCKET_ENDPOINT") and self.cfg.WEBSOCKET_ENDPOINT:
+            if hasattr(self.cfg, "WEBSOCKET_ENDPOINT") and self.cfg.WEBSOCKET_ENDPOINT:
                 provider = WebSocketProvider(self.cfg.WEBSOCKET_ENDPOINT)
                 web3 = AsyncWeb3(provider)
                 await web3.eth.chain_id
@@ -357,10 +338,8 @@ class MainCore:
 
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(
-                        ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(
-                        f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
                 return web3
         except Exception as e:
             logger.warning(f"Failed to connect to WebSocket endpoint: {e}")
@@ -373,14 +352,13 @@ class MainCore:
                 await web3.eth.chain_id
                 logger.info(
                     f"Connected to IPC endpoint: {
-                        self.cfg.IPC_ENDPOINT}")
+                        self.cfg.IPC_ENDPOINT}"
+                )
 
                 chain_id = await web3.eth.chain_id
                 if chain_id in _POA_CHAINS:
-                    web3.middleware_onion.inject(
-                        ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(
-                        f"Applied PoA middleware for chain ID {chain_id}")
+                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+                    logger.info(f"Applied PoA middleware for chain ID {chain_id}")
                 return web3
         except Exception as e:
             logger.warning(f"Failed to connect to IPC endpoint: {e}")
@@ -390,7 +368,7 @@ class MainCore:
 
     async def _create_account(self) -> Optional[Account]:
         """Create account from private key or mnemonic."""
-        if not HAS_WEB3:
+        if not AsyncWeb3:
             logger.error("Web3.py is not installed")
             return None
 
@@ -401,8 +379,7 @@ class MainCore:
                 logger.error("Mnemonic support not implemented")
                 return None
             else:
-                logger.error(
-                    "No WALLET_KEY or MNEMONIC provided in configuration")
+                logger.error("No WALLET_KEY or MNEMONIC provided in configuration")
                 return None
         except Exception as e:
             logger.error(f"Failed to create account: {e}")
@@ -417,13 +394,13 @@ class MainCore:
 
     async def _create_safety_net(self) -> SafetyNet:
         """Create and initialize SafetyNet."""
-        safety_net = SafetyNet(self.web3, self.cfg)
+        safety_net = SafetyNet(self.web3, self.cfg, self.account)
         await safety_net.initialize()
         return safety_net
 
     async def _create_transaction_core(self) -> TransactionCore:
         """Create and initialize TransactionCore."""
-        chain_id = await self.web3.eth.chain_id if HAS_WEB3 and self.web3 else 1
+        chain_id = await self.web3.eth.chain_id if AsyncWeb3 and self.web3 else 1
         tx_core = TransactionCore(
             self.web3,
             self.account,
@@ -468,8 +445,7 @@ class MainCore:
     async def _heartbeat(self) -> None:
         """Periodic health check and memory usage reporting."""
         interval = getattr(self.cfg, "HEARTBEAT_INTERVAL", 60)
-        memory_report_interval = getattr(
-            self.cfg, "MEMORY_REPORT_INTERVAL", 300)
+        memory_report_interval = getattr(self.cfg, "MEMORY_REPORT_INTERVAL", 300)
         health_check_interval = getattr(self.cfg, "HEALTH_CHECK_INTERVAL", 10)
 
         last_memory_report = 0
@@ -501,8 +477,7 @@ class MainCore:
         interval = getattr(self.cfg, "TX_PROCESSOR_INTERVAL", 5)
         while not self._stop_evt.is_set():
             try:
-                logger.debug(
-                    "Transaction processor checking for new transactions")
+                logger.debug("Transaction processor checking for new transactions")
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 logger.info("Transaction processor task cancelled")
@@ -521,8 +496,7 @@ class MainCore:
                     health_status = await component.check_health()
                     self.component_health[name] = health_status
                     if not health_status:
-                        logger.warning(
-                            f"Component {name} reports unhealthy state")
+                        logger.warning(f"Component {name} reports unhealthy state")
                 else:
                     self.component_health[name] = True
             except Exception as e:
@@ -537,8 +511,7 @@ class MainCore:
 
         try:
             current_snapshot = tracemalloc.take_snapshot()
-            top_stats = current_snapshot.compare_to(
-                self._mem_snapshot, "lineno")
+            top_stats = current_snapshot.compare_to(self._mem_snapshot, "lineno")
             logger.info("Top 10 memory usage differences:")
             for stat in top_stats[:10]:
                 logger.info(str(stat))

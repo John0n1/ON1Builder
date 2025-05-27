@@ -2,6 +2,7 @@
 
 import os
 import sys
+
 import yaml
 
 try:
@@ -39,8 +40,7 @@ def validate_config(config_path: str) -> bool:
         required_sections = ["chains"]
         for section in required_sections:
             if section not in config:
-                print(
-                    f"Error: Required section '{section}' not found in configuration")
+                print(f"Error: Required section '{section}' not found in configuration")
                 return False
 
         # Check chains section
@@ -81,8 +81,7 @@ if HAS_TYPER:
 
     @app.command("validate")
     def validate_command(
-        config_path: str = typer.Argument(...,
-                                          help="Path to configuration file")
+        config_path: str = typer.Argument(..., help="Path to configuration file")
     ):
         """Validate a configuration file."""
         valid = validate_config(config_path)

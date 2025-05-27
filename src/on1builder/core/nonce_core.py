@@ -1,12 +1,13 @@
 # src/on1builder/core/nonce_core.py
 
 from __future__ import annotations
+
 import asyncio
 import time
 from typing import Any, Dict, Optional
 
-from web3 import AsyncWeb3
 from eth_utils import to_checksum_address
+from web3 import AsyncWeb3
 
 from on1builder.config.config import Configuration
 from on1builder.utils.logger import setup_logging
@@ -41,8 +42,7 @@ class NonceCore:
         self._cache_ttl = getattr(configuration, "NONCE_CACHE_TTL", 60)
         self._retry_delay = getattr(configuration, "NONCE_RETRY_DELAY", 1)
         self._max_retries = getattr(configuration, "NONCE_MAX_RETRIES", 5)
-        self._tx_timeout = getattr(
-            configuration, "NONCE_TRANSACTION_TIMEOUT", 120)
+        self._tx_timeout = getattr(configuration, "NONCE_TRANSACTION_TIMEOUT", 120)
 
         logger.info("NonceCore initialized")
 
@@ -74,8 +74,7 @@ class NonceCore:
         """
         if address is None:
             if not hasattr(self.account, "address"):
-                raise ValueError(
-                    "No address provided and account has no `.address`")
+                raise ValueError("No address provided and account has no `.address`")
             address = self.account.address
 
         checksum = to_checksum_address(address)
@@ -101,8 +100,7 @@ class NonceCore:
         """Force-refresh the nonce from chain."""
         if address is None:
             if not hasattr(self.account, "address"):
-                raise ValueError(
-                    "No address provided and account has no `.address`")
+                raise ValueError("No address provided and account has no `.address`")
             address = self.account.address
 
         checksum = to_checksum_address(address)
@@ -207,8 +205,7 @@ class NonceCore:
         """Alias for reset_nonce()."""
         return await self.reset_nonce(address)
 
-    async def sync_nonce_with_chain(
-            self, address: Optional[str] = None) -> int:
+    async def sync_nonce_with_chain(self, address: Optional[str] = None) -> int:
         """Synchronize the local nonce cache with the blockchain.
 
         This is a more comprehensive version of reset_nonce that also

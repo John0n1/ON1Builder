@@ -117,32 +117,23 @@ def test_main_with_args():
         # Test with single chain command
         sys.argv = ["on1builder", "run", "--config", "test_config.yaml"]
 
-        with (
-            patch("on1builder.__main__.run_system_async") as mock_run_system_async,
-            patch("on1builder.__main__.run_single_chain"),
-        ):
+        with (patch("on1builder.__main__.run_single_chain") as mock_run_single_chain,):
             main()
-            mock_run_system_async.assert_called_once()
+            mock_run_single_chain.assert_called_once_with("test_config.yaml", None)
 
         # Test with multi-chain command
         sys.argv = ["on1builder", "run-multi", "--config", "test_multi_config.yaml"]
 
-        with (
-            patch("on1builder.__main__.run_system_async") as mock_run_system_async,
-            patch("on1builder.__main__.run_multi_chain"),
-        ):
+        with (patch("on1builder.__main__.run_multi_chain") as mock_run_multi_chain,):
             main()
-            mock_run_system_async.assert_called_once()
+            mock_run_multi_chain.assert_called_once_with("test_multi_config.yaml", None)
 
         # Test with monitor command
         sys.argv = ["on1builder", "monitor", "--config", "test_config.yaml"]
 
-        with (
-            patch("on1builder.__main__.run_system_async") as mock_run_system_async,
-            patch("on1builder.__main__.run_monitor"),
-        ):
+        with (patch("on1builder.__main__.run_monitor") as mock_run_monitor,):
             main()
-            mock_run_system_async.assert_called_once()
+            mock_run_monitor.assert_called_once_with("test_config.yaml", None)
 
     finally:
         # Restore original argv

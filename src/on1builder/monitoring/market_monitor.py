@@ -6,14 +6,17 @@ Monitors market data such as token prices, volumes, and market trends.
 """
 
 from __future__ import annotations
+
 import asyncio
-from decimal import Decimal
+import random
 import time
-from typing import Dict, Optional, Any, List
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from on1builder.config.config import Configuration, APIConfig
+
+from on1builder.config.config import APIConfig, Configuration
 from on1builder.utils.logger import setup_logging
 
 logger = setup_logging("MarketMonitor", level="DEBUG")
@@ -45,7 +48,7 @@ class MarketMonitor:
         self._cache_lock = asyncio.Lock()
         self._last_cache_cleanup = time.time()
         # Cache TTL configurable via config
-        self._cache_ttl = config.MARKET_CACHE_TTL  # seconds
+        self._cache_ttl = config.get("PRICE_CACHE_TTL", 300)  # Default 5 minutes
 
         # Session for HTTP requests
         self._session: Optional[aiohttp.ClientSession] = None
@@ -96,11 +99,9 @@ class MarketMonitor:
         if price is not None:
             # Update cache
             async with self._cache_lock:
-                self._price_cache[cache_key] = {
-                    "price": price, "timestamp": now}
+                self._price_cache[cache_key] = {"price": price, "timestamp": now}
 
-            logger.debug(
-                f"Updated price for {token}: {price} {quote_currency}")
+            logger.debug(f"Updated price for {token}: {price} {quote_currency}")
         else:
             # Handle the case when price is None
             # Try to use any predefined default values for major tokens
@@ -167,7 +168,8 @@ class MarketMonitor:
             if expired_keys:
                 logger.debug(
                     f"Cleared {
-                        len(expired_keys)} expired price cache entries")
+                        len(expired_keys)} expired price cache entries"
+                )
 
     async def get_market_trend(
         self, token: str, timeframe: str = "1h"
@@ -235,8 +237,7 @@ class MarketMonitor:
         logger.info("Scheduling market data updates")
 
         # Get monitoring configuration
-        update_interval = self.config.get(
-            "MARKET_UPDATE_INTERVAL", 60)  # seconds
+        update_interval = self.config.get("MARKET_UPDATE_INTERVAL", 60)  # seconds
         monitored_tokens = self.config.get("MONITORED_TOKENS", [])
 
         if not monitored_tokens:
@@ -244,10 +245,7 @@ class MarketMonitor:
             return
 
         # Start update loop in background
-        asyncio.create_task(
-            self._update_loop(
-                update_interval,
-                monitored_tokens))
+        asyncio.create_task(self._update_loop(update_interval, monitored_tokens))
 
     async def _update_loop(self, interval: int, tokens: List[str]) -> None:
         """Background loop to refresh market data.
@@ -258,7 +256,8 @@ class MarketMonitor:
         """
         logger.info(
             f"Starting market data update loop for {
-                len(tokens)} tokens")
+                len(tokens)} tokens"
+        )
         while True:
             try:
                 for token in tokens:
@@ -328,8 +327,7 @@ class MarketMonitor:
         try:
             current_price = await self.get_token_price(token, quote_currency)
             if current_price is None:
-                return {"trend": "unknown",
-                        "error": "Could not fetch price data"}
+                return {"trend": "unknown", "error": "Could not fetch price data"}
 
             # For fallback, we'll use a very basic trend indicator
             # In a real implementation, this would use historical data
@@ -448,8 +446,7 @@ class MarketMonitor:
                 volatility = abs(float(trend_data.get("percent_change", 0)))
                 if trend_data_4h:
                     volatility = (
-                        volatility +
-                        abs(float(trend_data_4h.get("percent_change", 0)))
+                        volatility + abs(float(trend_data_4h.get("percent_change", 0)))
                     ) / 2
 
                 # Classify volatility
@@ -558,8 +555,7 @@ class MarketMonitor:
                     )
                 else:
                     result.update(
-                        {"condition": "unknown",
-                         "error": "Could not fetch trend data"}
+                        {"condition": "unknown", "error": "Could not fetch trend data"}
                     )
             else:
                 result.update(
@@ -589,10 +585,7 @@ class MarketMonitor:
         Returns:
             Dictionary with prediction details
         """
-        result = {
-            "token": token,
-            "timeframe": timeframe,
-            "timestamp": time.time()}
+        result = {"token": token, "timeframe": timeframe, "timestamp": time.time()}
 
         try:
             # Get market features
@@ -791,8 +784,6 @@ class MarketMonitor:
                 metrics["volume_to_price_ratio"] = volume_to_price_ratio
 
                 # Simple buy/sell pressure indicator (random for placeholder)
-                import random
-
                 metrics["buy_pressure"] = random.uniform(0.3, 0.7)
                 metrics["sell_pressure"] = random.uniform(0.3, 0.7)
 
@@ -862,8 +853,7 @@ class MarketMonitor:
         """
         return await self.get_token_volume(token, timeframe=timeframe)
 
-    async def get_token_prices_across_venues(
-            self, token: str) -> Dict[str, float]:
+    async def get_token_prices_across_venues(self, token: str) -> Dict[str, float]:
         """Get token prices from different trading venues for arbitrage
         analysis.
 
@@ -875,181 +865,18 @@ class MarketMonitor:
         """
         venues = {}
 
-        try:
-            # Primary price from our API
-            primary_price = await self.get_token_price(token)
-            if primary_price:
-                venues["primary"] = float(primary_price)
+        # Primary price from our API
+        primary_price = await self.get_token_price(token)
+        if primary_price:
+            venues["primary"] = float(primary_price)
 
-            # If we have multiple providers in api_config, get prices from each
-            if hasattr(self.api_config, "providers"):
-                for provider_name, provider in self.api_config.providers.items():
-                    try:
-                        price = await self.api_config._price_from_provider(
-                            provider, token, "usd"
-                        )
-                        if price:
-                            venues[provider_name] = float(price)
-                    except Exception as e:
-                        logger.debug(
-                            f"Error getting price from {provider_name}: {e}")
-
-            # Fallback: add some mock venues for testing
-            if not venues:
-                base_price = 100.0  # Fallback price
-                venues = {
-                    "uniswap": base_price,
-                    "sushiswap": base_price * 1.02,  # 2% higher
-                    "balancer": base_price * 0.98,  # 2% lower
-                }
-
-        except Exception as e:
-            logger.error(f"Error getting prices across venues: {e}")
-
-        return venues
-
-    async def _get_token_liquidity(self, token: str) -> Optional[float]:
-        """Get token liquidity metrics.
-
-        Args:
-            token: Token symbol or address
-
-        Returns:
-            Liquidity value or None
-        """
-        try:
-            # Use volume as a proxy for liquidity
-            volume = await self.get_token_volume(token)
-
-            if volume:
-                # Simple liquidity estimate: volume * 10 (assuming 10x
-                # multiple)
-                return float(volume) * 10.0
-
-            # Fallback liquidity estimate based on token
-            token_upper = token.upper()
-            liquidity_estimates = {
-                "ETH": 50000000.0,  # $50M
-                "BTC": 100000000.0,  # $100M
-                "USDT": 80000000.0,  # $80M
-                "USDC": 60000000.0,  # $60M
-                "WETH": 50000000.0,  # $50M
-                "LINK": 10000000.0,  # $10M
-                "UNI": 5000000.0,  # $5M
-            }
-
-            return liquidity_estimates.get(
-                token_upper, 1000000.0)  # Default $1M
-
-        except Exception as e:
-            logger.error(f"Error getting token liquidity: {e}")
-            return None
-
-    async def is_arbitrage_opportunity(
-        self, token: str, min_spread_percent: float = 1.0
-    ) -> bool:
-        """Check if there's an arbitrage opportunity for a token.
-
-        Args:
-            token: Token symbol or address
-            min_spread_percent: Minimum spread required for opportunity
-
-        Returns:
-            True if arbitrage opportunity exists
-        """
-        try:
-            prices = await self.get_token_prices_across_venues(token)
-
-            if len(prices) < 2:
-                return False
-
-            price_values = list(prices.values())
-            min_price = min(price_values)
-            max_price = max(price_values)
-
-            if min_price == 0:
-                return False
-
-            spread_percent = ((max_price - min_price) / min_price) * 100
-
-            logger.debug(
-                f"Arbitrage check for {token}: spread {
-                    spread_percent:.2f}% (min: {min_spread_percent}%)"
-            )
-
-            return spread_percent >= min_spread_percent
-
-        except Exception as e:
-            logger.error(f"Error checking arbitrage opportunity: {e}")
-            return False
-
-    async def get_market_features(self, token: str) -> Dict[str, Any]:
-        """Public method to get market features.
-
-        Args:
-            token: Token symbol or address
-
-        Returns:
-            Dictionary with market features
-        """
-        return await self._get_market_features(token)
-
-    async def _get_token_price_data(self, token: str) -> Dict[str, Any]:
-        """Get detailed price data for a token.
-
-        Args:
-            token: Token symbol or address
-
-        Returns:
-            Dictionary with detailed price information
-        """
-        try:
-            price = await self.get_token_price(token)
-            volume = await self.get_token_volume(token)
-            trend = await self.get_market_trend(token)
-
-            return {
-                "price": float(price) if price else None,
-                "volume_24h": float(volume) if volume else None,
-                "market_cap": None,  # Would need additional data source
-                "change_24h": trend.get("percent_change") if trend else None,
-                "timestamp": time.time(),
-            }
-        except Exception as e:
-            logger.error(f"Error getting token price data: {e}")
-            return {"error": str(e)}
-
-    async def _get_price_volatility(self, token: str) -> float:
-        """Calculate price volatility for a token.
-
-        Args:
-            token: Token symbol or address
-
-        Returns:
-            Volatility score (0.0 to 1.0)
-        """
-        try:
-            # Get trend data from multiple timeframes
-            trend_1h = await self.get_market_trend(token, "1h")
-            trend_4h = await self.get_market_trend(token, "4h")
-            trend_24h = await self.get_market_trend(token, "24h")
-
-            changes = []
-            if trend_1h and "percent_change" in trend_1h:
-                changes.append(abs(float(trend_1h["percent_change"])))
-            if trend_4h and "percent_change" in trend_4h:
-                changes.append(abs(float(trend_4h["percent_change"])))
-            if trend_24h and "percent_change" in trend_24h:
-                changes.append(abs(float(trend_24h["percent_change"])))
-
-            if changes:
-                # Average of absolute percentage changes
-                avg_change = sum(changes) / len(changes)
-                # Normalize to 0-1 scale (assuming max 100% change)
-                return min(avg_change / 100.0, 1.0)
-
-            return 0.05  # Default low volatility
-
-        except Exception as e:
-            logger.error(f"Error calculating price volatility: {e}")
-            return 0.05  # Default low volatility
+        # If we have multiple providers in api_config, get prices from each
+        if hasattr(self.api_config, "providers"):
+            for _, provider in self.api_config.providers.items():
+                try:
+                    price = await self.api_config._price_from_provider(
+                        provider, token, "usd"
+                    )
+                    if price:
+                        pass
+                         

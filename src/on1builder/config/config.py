@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import os
 import random
-import yaml
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +19,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 import joblib
 import pandas as pd
+import yaml
 from cachetools import TTLCache
 from dotenv import load_dotenv
 
@@ -30,10 +30,10 @@ logger = setup_logging("Config", level="DEBUG")
 
 class Configuration:
     """Base configuration class for ON1Builder."""
-
+    # TTL for market data cache
     # Chains that need the geth/erigon "extraData" PoA middleware
     POA_CHAINS = {99, 100, 77, 7766, 56, 11155111}
-
+    
     # Default configuration values
     _DEFAULTS = {
         # API provider configuration keys
@@ -58,11 +58,13 @@ class Configuration:
         "SAFETYNET_GAS_PRICE_TTL": 10,
         "MAX_GAS_PRICE_GWEI": 100,
         "MIN_PROFIT": 0.001,
+
         # Mempool configuration
         "MEMPOOL_RETRY_DELAY": 0.5,
         "MEMPOOL_MAX_RETRIES": 3,
+        "MARKET_CACHE_TTL": 60,
         "MEMPOOL_MAX_PARALLEL_TASKS": 10,
-        "WALLET_KEY": "",
+        "WALLET_KEY": "<WALLET_KEY>",
         "TRANSACTION_RETRY_COUNT": 3,
         "TRANSACTION_RETRY_DELAY": 1.0,
         "GAS_MULTIPLIER": 1.1,
@@ -71,9 +73,8 @@ class Configuration:
         "WEB3_MAX_RETRIES": 3,
         "MEMORY_CHECK_INTERVAL": 300,
         # TTL for market data cache
-        "MARKET_CACHE_TTL": 60,
-        # Maximum number of parallel tasks for mempool processing
-        # "MEMPOOL_MAX_PARALLEL_TASKS": 5, # This line is duplicated, keeping the one above.
+        'MARKET_CACHE_TTL': 10,
+
     }
 
     def __init__(self, config_path=None, env_file=None, skip_env=False):
@@ -139,8 +140,7 @@ class Configuration:
         """Get configuration attribute with fallback to _config dict."""
         if name in self._config:
             return self._config[name]
-        raise AttributeError(
-            f"{self.__class__.__name__} has no attribute '{name}'")
+        raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
 
     def __setattr__(self, name, value):
         """Set configuration attribute in _config dict, except private and
@@ -231,9 +231,7 @@ class Configuration:
 
     def _load_from_env(self):
         """Load configuration from environment variables."""
-        logger.debug(
-            "Before _load_from_env: DEBUG=%s",
-            self._config.get("DEBUG"))
+        logger.debug("Before _load_from_env: DEBUG=%s", self._config.get("DEBUG"))
 
         # First, update values for keys already in _config
         for key in self._config:
@@ -243,8 +241,7 @@ class Configuration:
                 # default
                 default_value = self._DEFAULTS.get(key)
                 if isinstance(default_value, bool):
-                    self._config[key] = env_value.lower() in (
-                        "true", "1", "yes")
+                    self._config[key] = env_value.lower() in ("true", "1", "yes")
                 elif isinstance(default_value, int):
                     try:
                         self._config[key] = int(env_value)
@@ -288,9 +285,7 @@ class Configuration:
 
                 logger.debug("Added from env: %s=%s", key, self._config[key])
 
-        logger.debug(
-            "After _load_from_env: DEBUG=%s",
-            self._config.get("DEBUG"))
+        logger.debug("After _load_from_env: DEBUG=%s", self._config.get("DEBUG"))
 
         # Special handling for WALLET_KEY
         if os.getenv("WALLET_KEY"):
@@ -305,8 +300,7 @@ class Configuration:
 
         # Ensure gas price limits are reasonable
         if self._config.get("MAX_GAS_PRICE_GWEI", 0) <= 0:
-            logger.warning(
-                "MAX_GAS_PRICE_GWEI must be positive, using default")
+            logger.warning("MAX_GAS_PRICE_GWEI must be positive, using default")
             self._config["MAX_GAS_PRICE_GWEI"] = self._DEFAULTS["MAX_GAS_PRICE_GWEI"]
 
     async def _load_json_safe(self, path, description=None):
@@ -482,9 +476,7 @@ class APIConfig:
 
         await self._populate_token_maps()
         await self._acquire_session()
-        logger.info(
-            "APIConfig initialised with %d providers", len(
-                self.providers))
+        logger.info("APIConfig initialised with %d providers", len(self.providers))
 
     async def close(self) -> None:
         # Close instance session if one was patched
@@ -584,8 +576,7 @@ class APIConfig:
             self.token_symbol_to_address[sym_u] = addr_l
             self.symbol_to_api_id[sym_u] = symbols.get(sym_u, sym_u.lower())
 
-        logger.debug(
-            f"Loaded {len(self.token_address_to_symbol)} token mappings")
+        logger.debug(f"Loaded {len(self.token_address_to_symbol)} token mappings")
 
     # session management (shared across all APIConfig instances) ----------
 
@@ -716,26 +707,22 @@ class APIConfig:
                     )
                     if data and "price" in data:
                         price = Decimal(data["price"])
-                        logger.debug(
-                            f"Got {token} price from Binance: {price}")
+                        logger.debug(f"Got {token} price from Binance: {price}")
                         return price
                     else:
-                        logger.debug(
-                            f"Failed to get {token} price from Binance")
+                        logger.debug(f"Failed to get {token} price from Binance")
                         return None
                 elif prov.name == "coingecko":
                     # For CoinGecko, use specific ids for major tokens
                     token_id = (
-                        "ethereum" if token.upper() in [
-                            "ETH", "WETH"] else "bitcoin"
+                        "ethereum" if token.upper() in ["ETH", "WETH"] else "bitcoin"
                     )
                     params = {"ids": token_id, "vs_currencies": vs}
                     data = await self._request(prov, prov.price_url, params=params)
                     try:
                         if data and token_id in data and vs in data[token_id]:
                             price = Decimal(str(data[token_id][vs]))
-                            logger.debug(
-                                f"Got {token} price from CoinGecko: {price}")
+                            logger.debug(f"Got {token} price from CoinGecko: {price}")
                             return price
                     except Exception as e:
                         logger.debug(
@@ -751,8 +738,7 @@ class APIConfig:
                 data = await self._request(
                     prov, prov.price_url, params={"symbol": token + vs.upper()}
                 )
-                return Decimal(
-                    data["price"]) if data and "price" in data else None
+                return Decimal(data["price"]) if data and "price" in data else None
 
             if prov.name == "coingecko":
                 token_id = self.symbol_to_api_id.get(token, token.lower())
@@ -762,8 +748,7 @@ class APIConfig:
                     if data and token_id in data and vs in data[token_id]:
                         return Decimal(str(data[token_id][vs]))
                 except Exception as e:
-                    logger.debug(
-                        f"Error parsing CoinGecko response for {token}: {e}")
+                    logger.debug(f"Error parsing CoinGecko response for {token}: {e}")
                 return None
 
             if prov.name == "dexscreener" and token.startswith("0x"):
@@ -774,8 +759,7 @@ class APIConfig:
                         price = data["pair"]["priceUsd"]
                         return Decimal(str(price)) if price else None
                 except Exception as e:
-                    logger.debug(
-                        f"Error parsing Dexscreener response for {token}: {e}")
+                    logger.debug(f"Error parsing Dexscreener response for {token}: {e}")
                 return None
 
             if prov.name == "coinpaprika":
@@ -809,7 +793,8 @@ class APIConfig:
             # Global exception handler for all provider issues
             logger.debug(
                 f"Error getting price from {
-                    prov.name} for {token}: {e}")
+                    prov.name} for {token}: {e}"
+            )
             return None
 
     async def get_token_volume(self, token_or_addr: str) -> float:
@@ -898,8 +883,7 @@ class APIConfig:
                 prov.historical_url.format(id=token_id),
                 params={"vs_currency": "usd", "days": days},
             )
-            return [float(p[1])
-                    for p in (data or {}).get("prices", [])][-days:]
+            return [float(p[1]) for p in (data or {}).get("prices", [])][-days:]
         return []
 
     # ------------------------------------------------------------------ #
@@ -987,8 +971,7 @@ class APIConfig:
                     )
                     return formatted_data
                 # Try to get data from another provider - Dexscreener
-            if token_or_addr.startswith(
-                    "0x") and "dexscreener" in self.providers:
+            if token_or_addr.startswith("0x") and "dexscreener" in self.providers:
                 try:
                     prov = self.providers["dexscreener"]
                     endpoint = f"/pairs/ethereum/{token_or_addr.lower()}"
@@ -1001,12 +984,7 @@ class APIConfig:
                         # Use price change data to estimate historical prices
                         current_price = float(pair_data.get("priceUsd", 0))
                         price_change = (
-                            float(
-                                pair_data.get(
-                                    "priceChange",
-                                    {}).get(
-                                    "h24",
-                                    0)) / 100
+                            float(pair_data.get("priceChange", {}).get("h24", 0)) / 100
                         )
 
                         if current_price > 0:
@@ -1018,16 +996,13 @@ class APIConfig:
                             points = (
                                 24
                                 if "h" in timeframe
-                                else 7
-                                if "d" in timeframe
-                                else 12
+                                else 7 if "d" in timeframe else 12
                             )
 
                             # Generate synthetic price history based on current
                             # price and change percentage
                             previous_price = current_price / (1 + price_change)
-                            price_step = (
-                                current_price - previous_price) / points
+                            price_step = (current_price - previous_price) / points
 
                             for i in range(points + 1):
                                 point_time = now - timedelta(
@@ -1069,11 +1044,11 @@ class APIConfig:
 
                 for i in range(points):
                     time_offset = timedelta(
-                        hours=-i
-                        if "h" in timeframe
-                        else -i * 24
-                        if "d" in timeframe
-                        else -i * 0.5
+                        hours=(
+                            -i
+                            if "h" in timeframe
+                            else -i * 24 if "d" in timeframe else -i * 0.5
+                        )
                     )
                     timestamp = int((now + time_offset).timestamp() * 1000)
 
@@ -1115,8 +1090,7 @@ class APIConfig:
     # price feed fallbacks                                              #
     # ------------------------------------------------------------------ #
 
-    def _get_fallback_price(self, token: str,
-                            vs: str = "usd") -> Optional[Decimal]:
+    def _get_fallback_price(self, token: str, vs: str = "usd") -> Optional[Decimal]:
         """Provide fallback prices for common tokens when APIs fail.
 
         Args:

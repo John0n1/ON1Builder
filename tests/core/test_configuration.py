@@ -53,9 +53,7 @@ async def test_validate_configuration(configuration_instance):
 @pytest.mark.asyncio
 async def test_get_method(configuration_instance):
     # Test the get method that exists in Configuration
-    with patch(
-        "on1builder.config.configuration.os.getenv", return_value="test_value"
-    ):
+    with patch("on1builder.config.configuration.os.getenv", return_value="test_value"):
         # Test the get method which exists in Configuration
         value = configuration_instance.get("TEST_VAR", "default_value")
         assert value == "default_value"  # Because TEST_VAR doesn't exist in _config

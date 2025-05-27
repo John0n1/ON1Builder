@@ -6,26 +6,25 @@ ON1Builder – Chain Worker
 Handles operations for a specific blockchain.
 """
 
+import asyncio
+import logging
 import os
 import sys
-import asyncio
 import time
-import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
+from eth_account.account import Account
 from web3 import AsyncWeb3
 from web3.providers import AsyncHTTPProvider
-from eth_account.account import Account
 
-from on1builder.utils.logger import setup_logging
-from on1builder.monitoring.txpool_monitor import TxpoolMonitor
-from on1builder.engines.safety_net import SafetyNet
-from on1builder.core.transaction_core import TransactionCore
-from on1builder.core.nonce_core import NonceCore
 from on1builder.config.config import APIConfig
+from on1builder.core.nonce_core import NonceCore
+from on1builder.core.transaction_core import TransactionCore
+from on1builder.engines.safety_net import SafetyNet
 from on1builder.monitoring.market_monitor import MarketMonitor
+from on1builder.monitoring.txpool_monitor import TxpoolMonitor
 from on1builder.persistence.db_manager import DatabaseManager, get_db_manager
-
+from on1builder.utils.logger import setup_logging
 
 # Set up logging
 logger = setup_logging("ChainWorker", level=logging.INFO)
@@ -44,8 +43,7 @@ class MockPOAMiddleware:
 class ChainWorker:
     """Manages operations for a specific blockchain."""
 
-    def __init__(
-            self, chain_config: Dict[str, Any], global_config: Dict[str, Any]):
+    def __init__(self, chain_config: Dict[str, Any], global_config: Dict[str, Any]):
         """Initialize the chain worker with configuration.
 
         Args:
@@ -55,8 +53,7 @@ class ChainWorker:
         self.chain_config = chain_config
         self.global_config = global_config
         self.chain_id = chain_config.get("CHAIN_ID", "unknown")
-        self.chain_name = chain_config.get(
-            "CHAIN_NAME", f"chain-{self.chain_id}")
+        self.chain_name = chain_config.get("CHAIN_NAME", f"chain-{self.chain_id}")
 
         # Endpoints
         self.http_endpoint = chain_config.get("HTTP_ENDPOINT")
@@ -65,8 +62,7 @@ class ChainWorker:
 
         # Wallet
         self.wallet_address = chain_config.get("WALLET_ADDRESS")
-        self.wallet_key = chain_config.get(
-            "WALLET_KEY") or os.getenv("WALLET_KEY")
+        self.wallet_key = chain_config.get("WALLET_KEY") or os.getenv("WALLET_KEY")
 
         # Components
         self.web3: Optional[AsyncWeb3] = None
@@ -145,7 +141,8 @@ class ChainWorker:
             if not await self._initialize_web3():
                 logger.error(
                     f"Failed to initialize Web3 for {
-                        self.chain_name}")
+                        self.chain_name}"
+                )
                 return False
 
             # Initialize account
@@ -164,8 +161,7 @@ class ChainWorker:
                             self.account.address}"
                     )
             else:
-                logger.error(
-                    "No wallet key provided, cannot initialize account")
+                logger.error("No wallet key provided, cannot initialize account")
                 return False
 
             # Initialize API config
@@ -184,16 +180,14 @@ class ChainWorker:
                     except Exception as e:
                         # If setting as attribute fails, log a warning but
                         # continue
-                        logger.warning(
-                            f"Could not set config attribute {key}: {e}")
+                        logger.warning(f"Could not set config attribute {key}: {e}")
 
             # Ensure chain-specific settings override global ones
             for key, value in self.chain_config.items():
                 try:
                     setattr(config_obj, key, value)
                 except Exception as e:
-                    logger.warning(
-                        f"Could not override config attribute {key}: {e}")
+                    logger.warning(f"Could not override config attribute {key}: {e}")
 
             self.api_config = APIConfig(config_obj)
             await self.api_config.initialize()
@@ -257,7 +251,8 @@ class ChainWorker:
             self.initialized = True
             logger.info(
                 f"Chain worker for {
-                    self.chain_name} initialized successfully")
+                    self.chain_name} initialized successfully"
+            )
             return True
 
         except Exception as e:
@@ -278,7 +273,8 @@ class ChainWorker:
         if self.running:
             logger.warning(
                 f"Chain worker for {
-                    self.chain_name} is already running")
+                    self.chain_name} is already running"
+            )
             return
 
         logger.info(f"Starting chain worker for {self.chain_name}")
@@ -294,8 +290,7 @@ class ChainWorker:
                 await self.market_monitor.schedule_updates()
 
             # Schedule periodic metrics updates
-            metrics_task = asyncio.create_task(
-                self._update_metrics_periodically())
+            metrics_task = asyncio.create_task(self._update_metrics_periodically())
             self._tasks.append(metrics_task)
 
             # Start opportunity monitoring
@@ -306,12 +301,14 @@ class ChainWorker:
 
             logger.info(
                 f"Chain worker for {
-                    self.chain_name} started successfully")
+                    self.chain_name} started successfully"
+            )
 
         except Exception as e:
             logger.exception(
                 f"Error starting chain worker for {
-                    self.chain_name}: {e}")
+                    self.chain_name}: {e}"
+            )
             self.running = False
 
     async def stop(self) -> None:
@@ -372,7 +369,8 @@ class ChainWorker:
         except Exception as e:
             logger.error(
                 f"Error getting wallet balance for {
-                    self.chain_name}: {e}")
+                    self.chain_name}: {e}"
+            )
             return 0.0
 
     async def get_gas_price(self) -> float:
@@ -414,16 +412,14 @@ class ChainWorker:
                     return gwei
 
             # Normal production code path
-            if self.safety_net and hasattr(
-                    self.safety_net, "get_dynamic_gas_price"):
+            if self.safety_net and hasattr(self.safety_net, "get_dynamic_gas_price"):
                 try:
                     gas_price = await self.safety_net.get_dynamic_gas_price()
                     gwei = float(gas_price)
                     self.metrics["last_gas_price_gwei"] = gwei
                     return gwei
                 except Exception as e:
-                    logger.error(
-                        f"Error getting dynamic gas price from SafetyNet: {e}")
+                    logger.error(f"Error getting dynamic gas price from SafetyNet: {e}")
                     # Fallback to direct web3 call
                     gas_price_wei = await self.web3.eth.gas_price
                     gwei = float(self.web3.from_wei(gas_price_wei, "gwei"))
@@ -458,8 +454,7 @@ class ChainWorker:
             tokens = await self._get_monitored_tokens()
 
             if not tokens:
-                logger.warning(
-                    "No tokens to monitor, skipping opportunity search")
+                logger.warning("No tokens to monitor, skipping opportunity search")
                 return
 
             # Fetch current market data
@@ -473,14 +468,17 @@ class ChainWorker:
                     token_data[token_addr] = {
                         "price": price,
                         "volume": volume,
-                        "trend": trend.get("trend", "unknown")
-                        if isinstance(trend, dict)
-                        else "unknown",
+                        "trend": (
+                            trend.get("trend", "unknown")
+                            if isinstance(trend, dict)
+                            else "unknown"
+                        ),
                     }
                 except Exception as e:
                     logger.error(
                         f"Error fetching data for {token_addr}: {
-                            str(e)}")
+                            str(e)}"
+                    )
 
             # Check for trading opportunities
             # This would be connected to strategy components in a full
@@ -495,8 +493,7 @@ class ChainWorker:
 
     async def _update_metrics_periodically(self) -> None:
         """Update metrics at regular intervals."""
-        interval = self.chain_config.get(
-            "METRICS_UPDATE_INTERVAL", 30)  # seconds
+        interval = self.chain_config.get("METRICS_UPDATE_INTERVAL", 30)  # seconds
 
         while self.running:
             try:
@@ -546,8 +543,7 @@ class ChainWorker:
                         if block and "number" in block:
                             self.metrics["last_block_number"] = block["number"]
                     except Exception as inner_e:
-                        logger.error(
-                            f"Failed fallback for block number: {inner_e}")
+                        logger.error(f"Failed fallback for block number: {inner_e}")
 
             # Get transaction count from database if available
             if self.db_manager:
@@ -572,7 +568,8 @@ class ChainWorker:
                 except Exception as e:
                     logger.error(
                         f"Error getting metrics from database: {
-                            str(e)}")
+                            str(e)}"
+                    )
 
             # Calculate performance metrics
             current_time = time.time()
@@ -587,7 +584,8 @@ class ChainWorker:
             logger.debug(
                 f"Updated metrics for {
                     self.chain_name}: {
-                    self.metrics}")
+                    self.metrics}"
+            )
             return self.metrics
 
         except Exception as e:
@@ -617,7 +615,8 @@ class ChainWorker:
         if tokens:
             logger.debug(
                 f"Using {
-                    len(tokens)} tokens from chain configuration")
+                    len(tokens)} tokens from chain configuration"
+            )
             return tokens
 
         # Try to get from global config
@@ -626,7 +625,8 @@ class ChainWorker:
         if tokens:
             logger.debug(
                 f"Using {
-                    len(tokens)} tokens from global configuration")
+                    len(tokens)} tokens from global configuration"
+            )
             return tokens
 
         # Try to fetch from database if available
@@ -637,7 +637,8 @@ class ChainWorker:
                 if db_tokens:
                     logger.debug(
                         f"Using {
-                            len(db_tokens)} tokens from database")
+                            len(db_tokens)} tokens from database"
+                    )
                     return db_tokens
             except Exception as e:
                 logger.error(f"Error fetching tokens from database: {str(e)}")
@@ -672,14 +673,12 @@ class ChainWorker:
                 try:
                     from web3.middleware import ExtraDataToPOAMiddleware
 
-                    self.web3.middleware_onion.inject(
-                        ExtraDataToPOAMiddleware, layer=0)
+                    self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
                 except Exception as e:
                     logger.warning(
                         f"Failed to inject POA middleware: {e}, using mock instead"
                     )
-                    self.web3.middleware_onion.inject(
-                        MockPOAMiddleware(), layer=0)
+                    self.web3.middleware_onion.inject(MockPOAMiddleware(), layer=0)
 
                 # Verify connection
                 if not await self._verify_web3_connection():
@@ -689,14 +688,14 @@ class ChainWorker:
                 return True
 
             else:
-                logger.error(
-                    "No HTTP endpoint provided in chain configuration")
+                logger.error("No HTTP endpoint provided in chain configuration")
                 return False
 
         except Exception as e:
             logger.exception(
                 f"Error initializing Web3 for {
-                    self.chain_name}: {e}")
+                    self.chain_name}: {e}"
+            )
             return False
 
     async def _verify_web3_connection(self) -> bool:
@@ -730,7 +729,8 @@ class ChainWorker:
             logger.info(
                 f"Connected to {
                     self.chain_name} at block {
-                    block['number']}")
+                    block['number']}"
+            )
             self.metrics["last_block_number"] = block["number"]
             return True
 
@@ -823,8 +823,7 @@ class ChainWorker:
 
     async def _monitor_opportunities_periodically(self) -> None:
         """Periodically monitor for trading opportunities."""
-        interval = self.chain_config.get(
-            "OPPORTUNITY_CHECK_INTERVAL", 60)  # seconds
+        interval = self.chain_config.get("OPPORTUNITY_CHECK_INTERVAL", 60)  # seconds
 
         while self.running:
             try:
@@ -832,6 +831,7 @@ class ChainWorker:
             except Exception as e:
                 logger.error(
                     f"Error in opportunity monitoring cycle: {
-                        str(e)}")
+                        str(e)}"
+                )
 
             await asyncio.sleep(interval)

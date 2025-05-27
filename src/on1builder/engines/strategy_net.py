@@ -142,8 +142,7 @@ class StrategyNet:
             try:
                 data = json.loads(self._WEIGHT_FILE.read_text())
                 for stype, arr in data.items():
-                    if stype in self.weights and len(
-                            arr) == len(self.weights[stype]):
+                    if stype in self.weights and len(arr) == len(self.weights[stype]):
                         self.weights[stype] = np.array(arr, dtype=float)
             except Exception as exc:
                 logger.warning("Failed to load strategy weights: %s", exc)
@@ -163,7 +162,8 @@ class StrategyNet:
                 self._last_saved_weights = current_weights_json
                 logger.debug(
                     f"Saved updated strategy weights to {
-                        self._WEIGHT_FILE}")
+                        self._WEIGHT_FILE}"
+                )
         except Exception as e:
             logger.error(f"Failed to save strategy weights: {e}")
 
@@ -210,10 +210,7 @@ class StrategyNet:
         """Ε-greedy selection over soft-maxed weights."""
         if random.random() < self.cfg.exploration_rate:
             choice = random.choice(strategies)
-            logger.debug(
-                "Exploration chose %s (%s)",
-                choice.__name__,
-                strategy_type)
+            logger.debug("Exploration chose %s (%s)", choice.__name__, strategy_type)
             return choice
 
         w = self.weights[strategy_type]
@@ -276,8 +273,7 @@ class StrategyNet:
     # internals                                                          #
     # ------------------------------------------------------------------ #
 
-    def _calc_reward(self, success: bool, profit: Decimal,
-                     exec_time: float) -> float:
+    def _calc_reward(self, success: bool, profit: Decimal, exec_time: float) -> float:
         """
         A simple reward:
           +profit (ETH) if success

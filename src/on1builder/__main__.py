@@ -6,56 +6,38 @@ ON1Builder - Entry Point
 Main entry point for the ON1Builder application.
 """
 
-from on1builder.utils.logger import setup_logging
-from on1builder.config.config import Configuration, MultiChainConfiguration
 import asyncio
-import os
-import sys
 import logging
+import os
 import signal
-from typing import Dict, Any, List, Optional
+import sys
+from typing import Any, Dict, List, Optional
 
-try:
-    import typer
+import typer  # noqa: F811
+from dotenv import load_dotenv
 
-    HAS_TYPER = True
-except ImportError:
-    HAS_TYPER = False
-    print("Typer not installed. Using basic CLI.")
+from on1builder.config.config import Configuration, MultiChainConfiguration
+from on1builder.core.main_core import MainCore
+from on1builder.core.multi_chain_core import MultiChainCore
+from on1builder.monitoring.txpool_monitor import TxpoolMonitor
+from on1builder.utils.logger import setup_logging
 
-try:
-    from dotenv import load_dotenv
-
-    HAS_DOTENV = True
-except ImportError:
-    HAS_DOTENV = False
-    print("Python-dotenv not installed. Environment file loading disabled.")
-
+HAS_TYPER = True
+HAS_DOTENV = True
+HAS_WEB3 = True
 # Add parent directory to path for local development if running from source
 sys_path_modified = False
 if (
     os.path.basename(os.getcwd()) == "src"
     or os.path.basename(os.getcwd()) == "on1builder"
 ):
-    parent_dir = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "..", ".."))
+    parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    # Define this variable since imports have been moved above
+
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
         sys_path_modified = True
         print(f"Added {parent_dir} to sys.path for local development")
-
-# Import our modules
-
-# Import core classes for testing purposes (so tests can patch them)
-try:
-    from on1builder.core.main_core import MainCore
-    from on1builder.core.multi_chain_core import MultiChainCore
-    from on1builder.monitoring.txpool_monitor import TxpoolMonitor
-except ImportError:
-    # Handle import errors gracefully for testing
-    MainCore = None
-    MultiChainCore = None
-    TxpoolMonitor = None
 
 logger = setup_logging("main", level="INFO")
 
@@ -132,8 +114,7 @@ async def run_bot(
 
 # Use typer for CLI if available
 if HAS_TYPER:
-    app = typer.Typer(
-        help="ON1Builder - Multi-chain blockchain transaction framework")
+    app = typer.Typer(help="ON1Builder - Multi-chain blockchain transaction framework")
 
     @app.command("run")
     def run_command(
@@ -149,35 +130,75 @@ if HAS_TYPER:
         dry_run: bool = typer.Option(
             True, "--dry-run", "-d", help="Run in simulation mode"
         ),
-        env_file: str = typer.Option(
-            ".env", "--env", "-e", help="Path to .env file"),
+        env_file: str = typer.Option(".env", "--env", "-e", help="Path to .env file"),
+        log_level: str = typer.Option(
+            "INFO",
+            "--log-level",
+            "-l",
+            help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+        ),
+        chain_id: int = typer.Option(
+            None, "--chain-id", "-n", help="Chain ID to run on (optional)."
+        ),
     ):
-        """Run the ON1Builder system."""
+        """Run ON1Builder in single-chain mode."""
         asyncio.run(run_system_async(config, multi_chain, dry_run, env_file))
 
-    @app.command("monitor")
-    def monitor_command(
-        chain: str = typer.Option(
-            "ethereum", "--chain", help="Chain to monitor"),
+    @app.command("run-multi")
+    def run_multi_command(
         config: str = typer.Option(
             "configs/chains/config.yaml",
             "--config",
             "-c",
             help="Path to configuration file",
         ),
-        env_file: str = typer.Option(
-            ".env", "--env", "-e", help="Path to .env file"),
+        multi_chain: bool = typer.Option(
+            True, "--multi-chain", "-m", help="Enable multi-chain mode"
+        ),
+        dry_run: bool = typer.Option(
+            True, "--dry-run", "-d", help="Run in simulation mode"
+        ),
+        env_file: str = typer.Option(".env", "--env", "-e", help="Path to .env file"),
+        log_level: str = typer.Option(
+            "INFO",
+            "--log-level",
+            "-l",
+            help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+        ),
     ):
-        """Start monitoring system only."""
+        """Run ON1Builder in multi-chain mode."""
+        asyncio.run(run_multi_chain(config, env_file))
+
+    @app.command("monitor")
+    def monitor_command(
+        chain: str = typer.Option("ethereum", "--chain", help="Chain to monitor"),
+        config: str = typer.Option(
+            "configs/chains/config.yaml",
+            "--config",
+            "-c",
+            help="Path to configuration file",
+        ),
+        env_file: str = typer.Option(".env", "--env", "-e", help="Path to .env file"),
+        log_level: str = typer.Option(
+            "INFO",
+            "--log-level",
+            "-l",
+            help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+        ),
+        monitor_type: str = typer.Option(
+            "market",
+            "--monitor-type",
+            "-m",
+            help="Type of monitor to run (market, txpool, all).",
+        ),
+    ):
+        """Run ON1Builder monitoring services."""
         asyncio.run(monitor_async(chain, config, env_file))
 
     # Import and include config subcommands
     from on1builder.cli.config import app as config_app
 
-    app.add_typer(
-        config_app,
-        name="config",
-        help="Configuration management commands")
+    app.add_typer(config_app, name="config", help="Configuration management commands")
 
 
 # Legacy CLI for compatibility
@@ -188,8 +209,7 @@ def parse_args(args: Optional[List[str]] = None) -> Dict[str, Any]:
     parser = argparse.ArgumentParser(
         description="ON1Builder - Multi-chain blockchain transaction framework"
     )
-    subparsers = parser.add_subparsers(
-        dest="command", help="Command to execute")
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Run command
     run_parser = subparsers.add_parser("run", help="Run the ON1Builder system")
@@ -205,31 +225,20 @@ def parse_args(args: Optional[List[str]] = None) -> Dict[str, Any]:
     run_parser.add_argument(
         "--dry-run", "-d", action="store_true", help="Run in simulation mode"
     )
-    run_parser.add_argument(
-        "--env",
-        "-e",
-        help="Path to .env file",
-        default=".env")
+    run_parser.add_argument("--env", "-e", help="Path to .env file", default=".env")
 
     # Monitor command
     monitor_parser = subparsers.add_parser(
         "monitor", help="Start monitoring system only"
     )
-    monitor_parser.add_argument(
-        "--chain",
-        help="Chain to monitor",
-        required=True)
+    monitor_parser.add_argument("--chain", help="Chain to monitor", required=True)
     monitor_parser.add_argument(
         "--config",
         "-c",
         help="Path to configuration file",
         default="configs/chains/config.yaml",
     )
-    monitor_parser.add_argument(
-        "--env",
-        "-e",
-        help="Path to .env file",
-        default=".env")
+    monitor_parser.add_argument("--env", "-e", help="Path to .env file", default=".env")
 
     # Config commands
     config_parser = subparsers.add_parser(
@@ -279,10 +288,11 @@ async def run_system_async(
     """
     import os
     import signal
+
     from dotenv import load_dotenv
 
-    from on1builder.utils.logger import setup_logging
     from on1builder.config.config import Configuration, MultiChainConfiguration
+    from on1builder.utils.logger import setup_logging
 
     # Setup signal handlers for graceful shutdown
     shutdown_event = asyncio.Event()
@@ -303,7 +313,8 @@ async def run_system_async(
     logger = setup_logging("ON1Builder", level=logging.INFO)
     logger.info(
         f"Starting ON1Builder {
-            '(multi-chain)' if multi_chain else ''}")
+            '(multi-chain)' if multi_chain else ''}"
+    )
     logger.info(f"Configuration file: {config_path}")
     logger.info(f"Dry run: {dry_run}")
 
@@ -356,8 +367,7 @@ async def run_system_async(
     return None
 
 
-async def monitor_async(chain: str, config_path: str,
-                        env_file: str = ".env") -> None:
+async def monitor_async(chain: str, config_path: str, env_file: str = ".env") -> None:
     """Start monitoring system only.
 
     Args:
@@ -367,12 +377,13 @@ async def monitor_async(chain: str, config_path: str,
     """
     import os
     import signal
+
     from dotenv import load_dotenv
 
-    from on1builder.utils.logger import setup_logging
     from on1builder.config.config import Configuration
     from on1builder.monitoring.market_monitor import MarketMonitor
     from on1builder.monitoring.txpool_monitor import TxpoolMonitor
+    from on1builder.utils.logger import setup_logging
 
     # Setup signal handlers for graceful shutdown
     shutdown_event = asyncio.Event()
@@ -465,8 +476,7 @@ async def handle_shutdown(core_instance=None):
             logger.error(f"Error stopping core instance: {e}")
 
 
-async def run_single_chain(config_path: str = None,
-                           env_file: str = None) -> None:
+async def run_single_chain(config_path: str = None, env_file: str = None) -> None:
     """Run in single chain mode."""
     if config_path is None:
         config_path = "configs/chains/config.yaml"
@@ -484,8 +494,7 @@ async def run_single_chain(config_path: str = None,
     await core.run()
 
 
-async def run_multi_chain(config_path: str = None,
-                          env_file: str = None) -> None:
+async def run_multi_chain(config_path: str = None, env_file: str = None) -> None:
     """Run in multi-chain mode."""
     if config_path is None:
         config_path = "configs/chains/config.yaml"
@@ -530,11 +539,41 @@ def main_with_args(args: list = None) -> None:
 
     # Parse arguments and determine what to run
     if len(args) == 0 or args[0] == "run":
-        asyncio.run(run_single_chain())
+        config_path = None
+        env_file = None
+
+        # Process additional arguments
+        for i in range(1, len(args)):
+            if args[i] == "--config" and i + 1 < len(args):
+                config_path = args[i + 1]
+            elif args[i] == "--env" and i + 1 < len(args):
+                env_file = args[i + 1]
+
+        asyncio.run(run_single_chain(config_path, env_file))
     elif args[0] == "run-multi":
-        asyncio.run(run_multi_chain())
+        config_path = None
+        env_file = None
+
+        # Process additional arguments
+        for i in range(1, len(args)):
+            if args[i] == "--config" and i + 1 < len(args):
+                config_path = args[i + 1]
+            elif args[i] == "--env" and i + 1 < len(args):
+                env_file = args[i + 1]
+
+        asyncio.run(run_multi_chain(config_path, env_file))
     elif args[0] == "monitor":
-        asyncio.run(run_monitor())
+        config_path = None
+        env_file = None
+
+        # Process additional arguments
+        for i in range(1, len(args)):
+            if args[i] == "--config" and i + 1 < len(args):
+                config_path = args[i + 1]
+            elif args[i] == "--env" and i + 1 < len(args):
+                env_file = args[i + 1]
+
+        asyncio.run(run_monitor(config_path, env_file))
     else:
         logger.error(f"Unknown command: {args[0]}")
         sys.exit(1)
@@ -547,11 +586,7 @@ def main_with_args(args: list = None) -> None:
 
 def main() -> int:
     """Main entry point for the application."""
-    asyncio.run(
-        run_system_async(
-            config_path="configs/chains/config.yaml", multi_chain=False, env_file=".env"
-        )
-    )
+    main_with_args(sys.argv[1:])
     return 0
 
 

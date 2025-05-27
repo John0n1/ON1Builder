@@ -8,15 +8,15 @@ block polling. Surfaces profitable transactions for StrategyNet
 from __future__ import annotations
 
 import asyncio
-import psutil  # Added psutil for memory monitoring
 from typing import Any, Dict, List, Optional
 
+import psutil  # Added psutil for memory monitoring
 from web3 import AsyncWeb3
 from web3.exceptions import TransactionNotFound
 
-from on1builder.config.config import Configuration, APIConfig
-from on1builder.engines.safety_net import SafetyNet
+from on1builder.config.config import APIConfig, Configuration
 from on1builder.core.nonce_core import NonceCore
+from on1builder.engines.safety_net import SafetyNet
 from on1builder.monitoring.market_monitor import MarketMonitor
 from on1builder.utils.logger import setup_logging
 
@@ -63,8 +63,7 @@ class TxpoolMonitor:
         # queues -------------------------------------------------------------
         self._tx_hash_queue: asyncio.Queue[str] = asyncio.Queue()
         self._tx_analysis_queue: asyncio.Queue[str] = asyncio.Queue()
-        self.profitable_transactions: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(
-        )
+        self.profitable_transactions: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 
         # task book-keeping
         self._tasks: List[asyncio.Task] = []
@@ -113,16 +112,12 @@ class TxpoolMonitor:
 
         # spawn background tasks
         self._tasks = [
-            asyncio.create_task(
-                self._collect_hashes(),
-                name="MM_collect_hashes"),
+            asyncio.create_task(self._collect_hashes(), name="MM_collect_hashes"),
             asyncio.create_task(
                 self._analysis_dispatcher(), name="MM_analysis_dispatcher"
             ),
         ]
-        logger.info(
-            "TxpoolMonitor: started %d background tasks", len(
-                self._tasks))
+        logger.info("TxpoolMonitor: started %d background tasks", len(self._tasks))
 
         # allow caller to await until stopped
         await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -181,9 +176,7 @@ class TxpoolMonitor:
                 for n in range(last_block + 1, current + 1):
                     block = await self.web3.eth.get_block(n, full_transactions=True)
                     for tx in block.transactions:  # type: ignore[attr-defined]
-                        txh = (
-                            tx.hash if hasattr(
-                                tx, "hash") else tx["hash"]).hex()
+                        txh = (tx.hash if hasattr(tx, "hash") else tx["hash"]).hex()
                         await self._enqueue_hash(txh)
                 last_block = current
             except Exception:
@@ -246,8 +239,7 @@ class TxpoolMonitor:
 
     # ---------- helpers ----------------------------------------------------
 
-    async def _fetch_transaction(
-            self, tx_hash: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
         if tx_hash in self._tx_cache:
             return self._tx_cache[tx_hash]
 
@@ -374,10 +366,7 @@ class TxpoolMonitor:
             if isinstance(tx_item, str):
                 tx_hash = tx_item
                 # Create minimal dummy tx_data for testing
-                tx_data = {
-                    "hash": tx_hash,
-                    "value": 1,
-                    "gas": self.min_gas + 1}
+                tx_data = {"hash": tx_hash, "value": 1, "gas": self.min_gas + 1}
             else:
                 # Regular case with dictionary
                 tx_data = tx_item
@@ -399,9 +388,7 @@ class TxpoolMonitor:
             # Queue for analysis if potentially interesting (in production
             # code)
             to_address = (
-                tx_data.get(
-                    "to", "").lower() if isinstance(
-                    tx_data, dict) else ""
+                tx_data.get("to", "").lower() if isinstance(tx_data, dict) else ""
             )
             if to_address in self.monitored_tokens:
                 await self._queue_transaction(tx_hash, tx_data)
@@ -454,9 +441,7 @@ class TxpoolMonitor:
         This periodically cleans up caches and processed transaction
         lists to prevent memory leaks during long-running operation.
         """
-        self.configuration.get(
-            "MEMORY_CHECK_INTERVAL", 300
-        )  # 5 minutes
+        self.configuration.get("MEMORY_CHECK_INTERVAL", 300)  # 5 minutes
         max_cache_size = self.configuration.get("MAX_TXPOOL_CACHE_SIZE", 10000)
 
         # Get current memory usage
@@ -478,8 +463,7 @@ class TxpoolMonitor:
                     f"Cleaning up txpool cache (size: {len(self.processed_txs)})"
                 )
                 # Keep only the most recent transactions
-                self.processed_txs = set(
-                    list(self.processed_txs)[-max_cache_size:])
+                self.processed_txs = set(list(self.processed_txs)[-max_cache_size:])
 
             # Log memory usage statistics
             logger.debug(
@@ -516,8 +500,7 @@ class TxpoolMonitor:
             try:
                 return await self.safety_net.get_dynamic_gas_price()
             except Exception as e:
-                logger.error(
-                    f"Error getting dynamic gas price from SafetyNet: {e}")
+                logger.error(f"Error getting dynamic gas price from SafetyNet: {e}")
                 # Fallback to default maximum
                 return float(self.configuration.get("MAX_GAS_PRICE_GWEI", 100))
 

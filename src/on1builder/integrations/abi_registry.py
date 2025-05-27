@@ -194,8 +194,7 @@ class ABIRegistry:
                 self.abis[name] = abi
 
                 # Extract function signatures
-                self.function_signatures[name] = self._extract_function_signatures(
-                    abi)
+                self.function_signatures[name] = self._extract_function_signatures(abi)
 
                 loaded += 1
 
@@ -205,8 +204,7 @@ class ABIRegistry:
 
         logger.info(f"Loaded {loaded} ABIs, {failed} failed")
 
-    def _extract_function_signatures(
-            self, abi: List[Dict[str, Any]]) -> Dict[str, str]:
+    def _extract_function_signatures(self, abi: List[Dict[str, Any]]) -> Dict[str, str]:
         """Extract function signatures from ABI.
 
         Args:
@@ -292,8 +290,7 @@ class ABIRegistry:
         missing = required_functions - abi_functions
 
         if missing:
-            logger.warning(
-                f"ABI {name} is missing required functions: {missing}")
+            logger.warning(f"ABI {name} is missing required functions: {missing}")
             return False
 
         return True
