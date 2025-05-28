@@ -160,6 +160,38 @@ def test_json_formatter_with_exception():
     assert "ValueError: Test exception" in log_entry["exception"]
 
 
+def test_json_formatter_with_stack_info():
+    """Test the JsonFormatter with stack trace information."""
+    formatter = JsonFormatter()
+
+    # Create a log record with stack_info
+    # For Python logging, stack_info needs to be set when the record
+    # is created or it might not be properly processed
+    record = logging.LogRecord(
+        name="TestLogger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=42,
+        msg="Stack trace info",
+        args=(),
+        exc_info=None,
+        stack_info=None,  # Will be set manually below
+    )
+    
+    # Manually set stack_info to ensure our test covers the right code
+    record.stack_info = "Fake stack\n  trace\n    info"
+
+    # Format the record
+    formatted = formatter.format(record)
+
+    # Parse the JSON
+    log_entry = json.loads(formatted)
+
+    # Check the stack_info field
+    assert "stack_info" in log_entry
+    assert "Fake stack\n  trace\n    info" == log_entry["stack_info"]
+
+
 def test_setup_logging_with_existing_handlers():
     """Test that existing handlers are cleared when setting up logger."""
     logger_name = "ExistingHandlersLogger"
@@ -180,15 +212,27 @@ def test_setup_logging_with_existing_handlers():
     assert len(test_logger.handlers) == 1  # should have exactly one handler
 
 
-@patch("on1builder.utils.logger.HAVE_COLORLOG", False)
 def test_setup_logging_without_colorlog():
     """Test logger setup when colorlog is not available."""
-    logger = setup_logging("PlainLogger", level="INFO")
-
-    # Should still work but with plain formatting
-    for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler):
-            assert not str(handler.formatter).startswith("colorlog")
+    # Create a patched module import that raises ImportError for colorlog
+    with patch("on1builder.utils.logger.HAVE_COLORLOG", False), \
+         patch.dict('sys.modules', {'colorlog': None}):
+        
+        # Re-import logger to simulate the ImportError condition
+        import importlib
+        import on1builder.utils.logger
+        importlib.reload(on1builder.utils.logger)
+        
+        # Verify HAVE_COLORLOG is False after the ImportError
+        assert on1builder.utils.logger.HAVE_COLORLOG is False
+        
+        # Create logger with the patched module
+        logger = on1builder.utils.logger.setup_logging("PlainLogger", level="INFO")
+        
+        # Should still work but with plain formatting
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                assert not str(handler.formatter).startswith("colorlog")
 
 
 def test_logging_output(caplog):

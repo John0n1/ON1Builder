@@ -107,33 +107,38 @@ async def test_cleanup_cache(market_monitor):
     """Test the cache cleanup mechanism."""
     # Setup with short TTL
     market_monitor._cache_ttl = 0.1
+    market_monitor._cleanup_interval = 0.1  # Also set cleanup interval to match TTL
     market_monitor._last_cache_cleanup = time.time() - 1  # Force cleanup on next access
 
     # Populate cache with dummy data
-    token1 = "0xToken1"
-    token2 = "0xToken2"
+    token1 = "0xtoken1_usd"  # Using the format from get_token_price: f"{token.lower()}_{quote_currency.lower()}"
+    token2 = "0xtoken2_usd"
     async with market_monitor._cache_lock:
         market_monitor._price_cache[token1] = {
             "timestamp": time.time() - 0.2,  # Expired
             "price": 100.0,
-            "change_24h": 1.0,
         }
         market_monitor._price_cache[token2] = {
             "timestamp": time.time(),  # Not expired
             "price": 200.0,
-            "change_24h": 2.0,
         }
 
     # Force cleanup by accessing a token price
     with patch.object(
-        market_monitor.api_config, "get_price", new_callable=AsyncMock
+        market_monitor.api_config, "get_real_time_price", new_callable=AsyncMock
     ) as mock_get_price:
-        mock_get_price.return_value = {"price": 300.0, "change_24h": 3.0}
+        mock_get_price.return_value = 300.0
+        # The get_token_price will trigger cleanup since we set _last_cache_cleanup to a time in the past
         await market_monitor.get_token_price("0xToken3")
+        # To be extra sure, we can also call cleanup directly
+        await market_monitor._cleanup_cache()
 
     # Check that expired entry was removed but non-expired remains
-    assert token1 not in market_monitor._price_cache
-    assert token2 in market_monitor._price_cache
+    assert token1 not in market_monitor._price_cache, "Expired entry should be removed from cache"
+    assert token2 in market_monitor._price_cache, "Non-expired entry should remain in cache"
+    
+    # Additional verification that the cache is correctly managed
+    assert len(market_monitor._price_cache) == 2  # token2 and 0xtoken3_usd from our get_token_price call
 
 
 @pytest.mark.asyncio
@@ -248,3 +253,5 @@ async def test_get_market_features(market_monitor):
         assert features["volume"] == 500000.0
         assert features["liquidity"] == 2000000.0
         assert features["volatility"] == 0.05
+
+

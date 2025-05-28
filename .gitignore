@@ -20,6 +20,7 @@ htmlcov/
 data/logs/
 logs/
 *.log
+.ruff_cache
 
 # Build artifacts
 dist/
@@ -39,7 +40,9 @@ build/
 data/logs/
 
 # Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-test_data
-poetry.lock
 
+poetry.lock
+tests/
+test_data/
+tests/auto_generated/
+data/
