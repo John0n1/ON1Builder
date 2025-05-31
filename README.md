@@ -11,12 +11,13 @@
 - [Troubleshooting Guide](docs/guides/troubleshooting.md)
 > ⚠️ **Warning:** This project is in **alpha** development phase and undergoing rapid iteration. Expect breaking changes and incomplete features.
 
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
-[![docs](https://img.shields.io/badge/docs-gh--pages-success.svg)](https://john0n1.github.io/ON1Builder/)
+[![PyPI version](https://img.shields.io/pypi/v/on1builder.svg?color=cyan&logo=pypi&logoColor=pink&style=flat)](https://pypi.org/project/on1builder/)
+[![license](https://img.shields.io/badge/License-MIT-blue.svg?logo=refinedgithub)](LICENSE)
+[![python](https://img.shields.io/badge/Python-3.12--14%2B-blue.svg?logo=python&logoColor=blue&style=flat)](pyproject.toml)
+[![docs](https://img.shields.io/badge/Docs--&--instructions-white.svg?logo=readthedocs&logoColor=brown&style=flat)](https://john0n1.github.io/ON1Builder/)
 
 
-> Asynchronous, production-ready engine for scanning mempools, analyzing on-chain
+> Asynchronous engine for scanning mempools, analyzing on-chain
 > & market data, and dispatching profitable MEV trades **across any EVM chain** –
 > with first-class safety-nets, RL-powered strategy selection, pluggable ABIs and
 > a fully async SQL persistence layer.
