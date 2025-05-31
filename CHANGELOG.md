@@ -67,3 +67,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Major refactor of core components
 - Introduced new configuration management system
+

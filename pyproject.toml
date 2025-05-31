@@ -1,189 +1,62 @@
-[tool.poetry]
+[project]
 name = "on1builder"
-version = "0.1.0"
-description = "ON1Builder - Multi-chain blockchain transaction execution framework"
-authors = ["john0n1 <john0n1@example.com>"]
-readme = "README.md"
+version = "2.1.0"
+description = "Multi-chain blockchain transaction execution framework"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.12,<3.14"
+authors = [
+  { name = "john0n1", email = "john@on1.no" },
+]
 license = "MIT"
-repository = "https://github.com/john0n1/ON1Builder"
-packages = [{include = "on1builder", from = "src"}]
+keywords = ["mev", "blockchain", "ethereum", "async", "mempool"]
+dependencies = [
+  "aiohttp>=3.12.1",
+  "asyncio>=3.4.3",
+  "attrs>=25.3.0",
+  "eth-account>=0.13.7",
+  "eth-hash>=0.5.2",
+  "eth-keyfile>=0.7.0",
+  "eth-keys>=0.4.0",
+  "eth-rlp>=0.3.0",
+  "eth-typing>=3.5.0",
+  "eth-utils>=5.3.0",
+  "eth_abi>=4.2.1",
+  "pydantic>=2.11.5",
+  "psutil>=7.0.0",
+  "python-dotenv>=1.1.0",
+  "sqlalchemy>=2.0.41",
+  "web3>=7.12.0",
+  "typer>=0.16.0",
+  "pyyaml>=6.0.0",
+]
 classifiers = [
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3 :: Only",
-    "Operating System :: OS Independent",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: System :: Monitoring",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<3.13"
-aiohappyeyeballs = "==2.6.1"
-aiohttp = "==3.12.1" # 3
-aiosignal = "==1.3.2"
-annotated-types = "==0.7.0"
-anyio = "==4.9.0"
-async-timeout = "==5.0.1"
-asyncio = "==3.4.3"
-attrs = "==25.3.0"
-bitarray = "==3.4.2"
-blinker = "==1.9.0"
-build = "==1.2.2.post1"
-CacheControl = "==0.14.3"
-cachetools = "==6.0.0"
-certifi = "==2025.4.26"
-cffi = "==1.17.1"
-charset-normalizer = "==3.4.2"
-ckzg = "==2.1.1"
-cleo = "==2.1.0"
-click = "==8.2.1"
-colorlog = "==6.9.0"
-crashtest = "==0.4.1"
-cryptography = "==45.0.3"
-cytoolz = "==1.0.1"
-distlib = "==0.3.9"
-dotenv = "==0.9.9"
-dulwich = "==0.22.8"
-eth-account = "==0.13.7"
-eth-hash = "==0.7.1"
-eth-keyfile = "==0.8.1"
-eth-keys = "==0.7.0"
-eth-rlp = "==2.2.0"
-eth-typing = "==5.2.1"
-eth-utils = "==5.3.0"
-eth_abi = "==5.2.0"
-fastjsonschema = "==2.21.1"
-filelock = "==3.18.0"
-findpython = "==0.6.3"
-Flask = "==3.1.1" 
-flask-cors = "==6.0.0"
-frozenlist = "==1.6.0"
-greenlet = "==3.2.2"
-h11 = "==0.16.0"
-hexbytes = "==1.3.1"
-httpcore = "==1.0.9"
-httpx = "==0.28.1"
-idna = "==3.10" 
-iniconfig = "==2.1.0"
-installer = "==0.7.0"
-itsdangerous = "==2.2.0"
-jeepney = "==0.9.0"
-Jinja2 = "==3.1.6"
-joblib = "==1.5.1"
-keyring = "==25.6.0"
-markdown-it-py = "==3.0.0"
-MarkupSafe = "==3.0.2"
-mdurl = "==0.1.2"
-more-itertools = "==10.7.0"
-msgpack = "==1.1.0"
-multidict = "==6.4.4"
-numpy = "==2.2.6"
-packaging = "==25.0"
-pandas = "==2.2.3"
-parsimonious = "==0.10.0"
-pbs-installer = "==2025.5.17"
-pkginfo = "==1.12.1.2"
-platformdirs = "==4.3.8"
-pluggy = "==1.6.0"
-poetry = "==2.1.3"
-poetry-core = "==2.1.3"
-propcache = "==0.3.1"
-psutil = "==7.0.0"
-pycparser = "==2.22"
-pycryptodome = "==3.23.0"
-pydantic = "==2.11.5"
-pydantic_core = "==2.33.2"
-Pygments = "==2.19.1"
-pyproject_hooks = "==1.2.0"
-pytest = "==8.3.5"
-python-dateutil = "==2.9.0.post0"
-python-dotenv = "==1.1.0"
-pytz = "==2025.2"
-pyunormalize = "==16.0.0"
-PyYAML = "==6.0.2"
-RapidFuzz = "==3.13.0"
-regex = "==2024.11.6"
-requests = "==2.32.3"
-requests-toolbelt = "==1.0.0"
-rich = "==14.0.0"
-rlp = "==4.1.0"
-scikit-learn = "==1.6.1"
-scipy = "==1.15.3"
-SecretStorage = "==3.3.3"
-shellingham = "==1.5.4"
-six = "==1.17.0"
-sniffio = "==1.3.1"
-SQLAlchemy = "==2.0.41"
-threadpoolctl = "==3.6.0"
-tomlkit = "==0.13.2"
-toolz = "==1.0.0"
-trove-classifiers = "==2025.5.9.12"
-typer = "==0.16.0"
-types-requests = "==2.32.0.20250515"
-typing-inspection = "==0.4.1"
-typing_extensions = "==4.13.2"
-tzdata = "==2025.2"
-urllib3 = "==2.4.0"
-virtualenv = "==20.31.2"
-web3 = "==7.12.0"
-websockets = "==15.0.1"
-Werkzeug = "==3.1.3"
-yarl = "==1.20.0"
-zstandard = "==0.23.0"
+[project.urls]
+Homepage = "https://on1.no"
+Repository = "https://github.com/john0n1/ON1Builder"
+Tracker = "https://github.com/john0n1/ON1Builder/issues"
 
-[tool.poetry.extras]
-# Define any optional dependencies here
+[project.scripts]
+on1builder = "on1builder.__main__:main"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "==8.3.5"
-pytest-asyncio = "==0.26.0"
-black = "==25.1.0"
-isort = "==6.0.1"
-flake8 = "==7.2.0"
-mypy = "==1.15.0"
-pytest-cov = "==6.1.1"
-alabaster = "==1.0.0"
-cfgv = "==3.4.0"
-coverage = "==7.8.1"
-docutils = "==0.21.2"
-execnet = "==2.1.1"
-identify = "==2.6.10"
-imagesize = "==1.4.1"
-mccabe = "==0.7.0"
-mypy_extensions = "==1.1.0"
-nodeenv = "==1.9.1"
-pathspec = "==0.12.1"
-pre_commit = "==4.2.0"
-pycodestyle = "==2.13.0"
-pyflakes = "==3.3.2"
-pytest-mock = "==3.14.0"
-pytest-xdist = "==3.6.1"
-Sphinx = "==8.2.3"
-"sphinx-autodoc-typehints" = "==3.2.0"
-"sphinx-rtd-theme" = "==3.0.2"
-"sphinxcontrib-applehelp" = "==2.0.0"
-"sphinxcontrib-devhelp" = "==2.0.0"
-"sphinxcontrib-htmlhelp" = "==2.1.0"
-"sphinxcontrib-jquery" = "==4.1"
-"sphinxcontrib-jsmath" = "==1.0.1"
-"sphinxcontrib-qthelp" = "==2.0.0"
-"sphinxcontrib-serializinghtml" = "==2.0.0"
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.yaml", "*.yml", "*.md"]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = ""
 [tool.black]
 line-length = 88
 target-version = ["py312"]
 
 [tool.isort]
 profile = "black"
-line_length = 88
 
-[tool.mypy]
-python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"

@@ -44,8 +44,8 @@ cd ON1Builder
 ### 2. Set Up Environment
 
 ```bash
-# Copy the template environment file
-cp template.env .env
+# Copy the .env.example file
+cp .env.example .env
 
 # Edit the .env file with your configuration
 nano .env
@@ -90,8 +90,8 @@ cd ON1Builder
 ### 2. Set Up Environment
 
 ```bash
-# Copy the template environment file
-cp template.env .env
+# Copy the .env.example file
+cp .env.example .env
 
 # Edit the .env file with your production configuration
 nano .env
@@ -129,8 +129,8 @@ cd ON1Builder
 ### 2. Set Up Environment
 
 ```bash
-# Copy the template environment file
-cp template.env .env
+# Copy the .env.example file
+cp .env.example .env
 
 # Edit the .env file with your configuration
 nano .env

@@ -8,9 +8,9 @@ cd ON1Builder
 
 2. **Set Up**
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+chmod +x setup_dev.sh
+
+./setup_dev
 ```
 
 3. **Configure**
@@ -20,7 +20,7 @@ cp .env.example .env
 ```
 
 ## What You Need
-- Python 3.12+
+- Python 3.12+ 
 - Git
 - Ethereum node access
 - Some API keys (Infura, Etherscan, etc.)

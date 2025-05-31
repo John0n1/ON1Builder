@@ -1,98 +1,87 @@
-"""CLI configuration validation module."""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: MIT
+"""
+ON1Builder – CLI Configuration Validation
+=========================================
+Validate ON1Builder YAML configuration files.
+==========================
+License: MIT
+==========================
+This module provides a `validate` command to check the syntax and
+required sections/keys of your ON1Builder config.
+"""
 
-import os
+from __future__ import annotations
 import sys
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import yaml
+import typer
 
-try:
-    import typer
-
-    HAS_TYPER = True
-    app = typer.Typer(help="Configuration management commands")
-except ImportError:
-    HAS_TYPER = False
+app = typer.Typer(name="config", help="Configuration management commands")
 
 
-def validate_config(config_path: str) -> bool:
-    """Validate a configuration file.
-
-    Args:
-        config_path: Path to the configuration file
-
-    Returns:
-        True if the configuration is valid, False otherwise
-    """
-    if not os.path.exists(config_path):
-        print(f"Error: Configuration file {config_path} not found")
-        return False
-
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    """Load YAML file and return its contents as a dict."""
     try:
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-
-        # Validate basic structure
-        if not isinstance(config, dict):
-            print("Error: Configuration must be a dictionary")
-            return False
-
-        # Check for required sections
-        required_sections = ["chains"]
-        for section in required_sections:
-            if section not in config:
-                print(f"Error: Required section '{section}' not found in configuration")
-                return False
-
-        # Check chains section
-        chains = config.get("chains", {})
-        if not isinstance(chains, dict) or not chains:
-            print("Error: 'chains' section must be a non-empty dictionary")
-            return False
-
-        # Validate each chain config
-        for chain_name, chain_config in chains.items():
-            if not isinstance(chain_config, dict):
-                print(
-                    f"Error: Configuration for chain '{chain_name}' must be a dictionary"
-                )
-                return False
-
-            # Check for required chain configuration keys
-            required_chain_keys = ["rpc_url", "chain_id"]
-            for key in required_chain_keys:
-                if key not in chain_config:
-                    print(
-                        f"Error: Required key '{key}' not found in configuration for chain '{chain_name}'"
-                    )
-                    return False
-
-        print(f"✅ Configuration file {config_path} is valid")
-        return True
-
+        return yaml.safe_load(path.read_text()) or {}
     except yaml.YAMLError as e:
-        print(f"Error parsing YAML: {str(e)}")
-        return False
-    except Exception as e:
-        print(f"Error validating configuration: {str(e)}")
-        return False
+        typer.secho(f"❌ YAML parsing error: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
 
 
-if HAS_TYPER:
+@app.command("validate")
+def validate_command(
+    config_path: Path = typer.Argument(
+        Path("configs/chains/config.yaml"),
+        exists=True,
+        readable=True,
+        help="Path to the YAML configuration file to validate",
+    )
+) -> None:
+    """
+    Validate an ON1Builder YAML configuration file.
 
-    @app.command("validate")
-    def validate_command(
-        config_path: str = typer.Argument(..., help="Path to configuration file")
-    ):
-        """Validate a configuration file."""
-        valid = validate_config(config_path)
-        if not valid:
-            sys.exit(1)
+    Checks:
+      - File exists and is valid YAML
+      - Top-level structure is a mapping
+      - Contains a non-empty `chains` section (or `CHAINS`)
+      - Each chain entry is a mapping with required keys `rpc_url` and `chain_id`
+    """
+    config = _load_yaml(config_path)
 
-else:
+    if not isinstance(config, dict):
+        typer.secho("❌ Configuration root must be a mapping (dictionary).", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
 
-    def validate_command_legacy(args):
-        """Legacy validation command handling."""
-        config_path = args[0] if args else "configs/chains/config.yaml"
-        valid = validate_config(config_path)
-        if not valid:
-            sys.exit(1)
+    # Accept either 'chains' or uppercase 'CHAINS'
+    raw_chains = config.get("chains") or config.get("CHAINS")
+    if raw_chains is None:
+        typer.secho("❌ Missing required top-level section: 'chains'.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    if not isinstance(raw_chains, dict) or not raw_chains:
+        typer.secho("❌ 'chains' must be a non-empty mapping.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    errors: list[str] = []
+    for name, chain_cfg in raw_chains.items():
+        if not isinstance(chain_cfg, dict):
+            errors.append(f"Chain '{name}': configuration must be a mapping.")
+            continue
+        for key in ("rpc_url", "chain_id"):
+            if key not in chain_cfg:
+                errors.append(f"Chain '{name}': missing required key '{key}'.")
+
+    if errors:
+        for err in errors:
+            typer.secho(f"❌ {err}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"✅ Configuration file '{config_path}' is valid.", fg=typer.colors.GREEN)
+
+
+if __name__ == "__main__":
+    app()

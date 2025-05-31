@@ -1,0 +1,20 @@
+include LICENSE
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+include requirements.txt
+include pyproject.toml
+include poetry.lock
+
+recursive-include docs *
+recursive-include configs *.yaml *.yml
+recursive-include resources *.json *.sol *.csv *.sql
+
+prune venv
+prune data
+prune __pycache__
+prune *.pyc
+prune .git
+prune .github
+prune .vscode

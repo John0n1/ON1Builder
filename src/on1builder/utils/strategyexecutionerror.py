@@ -1,9 +1,18 @@
-# ========================================================================================================================
-# https://github.com/John0n1/ON1Builder
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: MIT
+"""
+ON1Builder – StrategyExecutionError
+======================
 
-# This file contains the StrategyExecutionError class, which is a custom exception for strategy execution failures.
-# ========================================================================================================================
+Custom exception for strategy execution failures.
+==========================
+License: MIT
+=========================
 
+This file is part of the ON1Builder project, which is licensed under the MIT License.
+see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder/blob/master/LICENSE
+"""
 
 class StrategyExecutionError(Exception):
     """Custom exception for strategy execution failures."""

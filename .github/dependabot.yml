@@ -10,6 +10,13 @@ updates:
       - "John0n1"
     assignees:
       - "John0n1"
+    labels:
+      - "dependencies"
+      - "python"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -21,3 +28,6 @@ updates:
       - "John0n1"
     assignees:
       - "John0n1"
+    labels:
+      - "dependencies"
+      - "github-actions"

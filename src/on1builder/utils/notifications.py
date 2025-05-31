@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: MIT
 """
 ON1Builder - Notification System
 ===============================
 
 Provides utilities for sending notifications and alerts through various channels.
+==========================
+License: MIT
+=========================
+
+This file is part of the ON1Builder project, which is licensed under the MIT License.
+see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder/blob/master/LICENSE
 """
 
 import logging
@@ -14,9 +22,12 @@ from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiohttp
+from dotenv import load_dotenv
 
 logger = logging.getLogger("Notifications")
 
+# Load environment variables from .env file
+load_dotenv()
 
 class NotificationManager:
     """Manages sending notifications through various channels.
@@ -35,10 +46,16 @@ class NotificationManager:
         Args:
             config: Configuration object containing notification settings
         """
+        # Always load .env from project root if config is not provided or missing values
+        root_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
+        if os.path.exists(root_env_path):
+            load_dotenv(dotenv_path=root_env_path, override=False)
+
         self.config = config
         self._channels: List[Tuple[str, Any]] = []
         self._min_notification_level = "INFO"  # Default level
         self._initialize_channels()
+
 
     def _initialize_channels(self):
         """Initialize notification channels based on configuration."""

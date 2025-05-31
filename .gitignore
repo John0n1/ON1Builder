@@ -26,6 +26,10 @@ logs/
 dist/
 build/
 *.egg-info/
+*.egg
+.eggs/
+.Python
+develop-eggs/
 
 # Local development
 .idea/
@@ -41,8 +45,15 @@ data/logs/
 
 # Jupyter Notebook checkpoints
 
-poetry.lock
-tests/
+# Keep poetry.lock out of git to reduce conflicts
+# poetry.lock
+
+# Test data that should be generated at runtime
 test_data/
 tests/auto_generated/
 data/
+
+# Local configurations
+.hypothesis/
+.tox/
+build.sh

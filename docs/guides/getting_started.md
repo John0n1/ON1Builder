@@ -52,7 +52,7 @@ Here's a simplified installation process:
 
 2. Set up your environment:
    ```bash
-   cp template.env .env
+   cp .env.example .env
    # Edit .env with your API keys and wallet information
    ```
 
