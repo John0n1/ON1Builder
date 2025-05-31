@@ -68,6 +68,18 @@ class MarketMonitor:
 
         logger.info("MarketMonitor initialized")
 
+    async def initialize(self) -> None:
+        """Initialize the market monitor with configuration settings.
+        
+        This method is called after construction to set up any async resources.
+        """
+        logger.debug("MarketMonitor: Starting initialization")
+        # Initialize any required async resources like HTTP sessions
+        self.session = self.api_config.get_client_session()
+        # Pre-warm cache for common tokens if needed
+        logger.debug("MarketMonitor: Initialization complete")
+        return
+
     @track("price_lookup")
     async def get_token_price(
         self,

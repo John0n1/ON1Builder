@@ -14,7 +14,7 @@ import asyncio
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from eth_account.account import Account
 from web3 import AsyncWeb3
@@ -23,7 +23,9 @@ from web3.middleware import ExtraDataToPOAMiddleware
 
 from on1builder.config.config import Configuration, APIConfig
 from on1builder.core.nonce_core import NonceCore
-from on1builder.core.transaction_core import TransactionCore
+# Break circular dependency
+if TYPE_CHECKING:
+    from on1builder.core.transaction_core import TransactionCore
 from on1builder.engines.safety_net import SafetyNet
 
 from on1builder.monitoring.market_monitor import MarketMonitor
@@ -109,7 +111,13 @@ class ChainWorker:
             await self.api_config.initialize()
 
             # — Persistence —
-            self.db = await get_db_manager()
+            # Use provided database manager if available, otherwise initialize a new one
+            if hasattr(self.transaction_core, "components") and "db_manager" in self.transaction_core.components:
+                self.db = self.transaction_core.components["db_manager"]
+                logger.debug("Using shared database manager from TransactionCore")
+            else:
+                self.db = await get_db_manager()
+                logger.debug("Initialized new database manager")
 
             # — Cores & Monitors —
             self.nonce_core = NonceCore(self.web3, self.config)

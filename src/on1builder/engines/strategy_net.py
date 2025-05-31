@@ -17,13 +17,15 @@ import random
 import time
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 import numpy as np
 from web3 import AsyncWeb3
 
 from on1builder.config.config import Configuration
-from on1builder.core.transaction_core import TransactionCore
+# Break circular dependency
+if TYPE_CHECKING:
+    from on1builder.core.transaction_core import TransactionCore
 from on1builder.engines.safety_net import SafetyNet
 from on1builder.monitoring.market_monitor import MarketMonitor
 from on1builder.utils.logger import setup_logging
@@ -96,7 +98,7 @@ class StrategyNet:
 
         self.learning_cfg = StrategyConfiguration()
         self._update_counter: int = 0
-        self._last_saved_weights: Optional[str] = None
+        self._last_saved_weights = ""  # Initialize to empty string
 
     async def initialize(self) -> None:
         """Load persisted weights from disk."""
@@ -122,7 +124,15 @@ class StrategyNet:
     def _save_weights(self) -> None:
         """Save strategy weights to disk if they have changed."""
         try:
-            current = json.dumps(self.weights, sort_keys=True)
+            # Convert NumPy arrays to regular Python lists for JSON serialization
+            serializable_weights = {}
+            for stype, weights in self.weights.items():
+                if hasattr(weights, 'tolist'):  # Check if it's a NumPy array or similar
+                    serializable_weights[stype] = weights.tolist()
+                else:
+                    serializable_weights[stype] = weights
+            
+            current = json.dumps(serializable_weights, sort_keys=True)
             if self._last_saved_weights != current:
                 self._WEIGHT_FILE.write_text(current)
                 self._last_saved_weights = current

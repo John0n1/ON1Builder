@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
+import os
 import time
 import tracemalloc
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 from eth_account import Account
 from web3 import AsyncWeb3
@@ -165,6 +168,7 @@ class MainCore:
             except Exception as e:
                 logger.warning(f"Error disconnecting web3 provider: {e}")
 
+        # First close components that have stop method
         for name, component in self.components.items():
             if hasattr(component, "stop") and callable(component.stop):
                 try:
@@ -172,6 +176,16 @@ class MainCore:
                     logger.debug(f"Component {name} stopped")
                 except Exception as e:
                     logger.error(f"Error stopping component {name}: {e}")
+        
+        # Special handling for APIConfig which needs close() to be called to clean up sessions
+        if "api_config" in self.components:
+            try:
+                api_config = self.components["api_config"]
+                if hasattr(api_config, "close") and callable(api_config.close):
+                    await api_config.close()
+                    logger.debug("API Config closed and cleaned up")
+            except Exception as e:
+                logger.error(f"Error closing API Config: {e}")
 
         self._bg = []
         logger.info("MainCore stopped")
@@ -188,7 +202,25 @@ class MainCore:
         if not self.account:
             raise StrategyExecutionError("Failed to create account")
 
+        # Initialize core data services first
         self.components["api_config"] = await self._mk_api_config()
+        self.components["abi_registry"] = await self._mk_abi_registry()
+        
+        # Initialize notification system
+        try:
+            self.components["notification_manager"] = await self._mk_notification_manager()
+        except Exception as e:
+            logger.warning(f"Notification manager initialization error: {e}")
+            logger.warning("Continuing without notification support")
+        
+        # Initialize persistence layer (optional, will auto-initialize if needed)
+        try:
+            self.components["db_manager"] = await self._mk_db_manager()
+        except Exception as e:
+            logger.warning(f"Database manager initialization error: {e}")
+            logger.warning("Continuing without database persistence")
+        
+        # Initialize core components
         self.components["nonce_core"] = await self._mk_nonce_core()
         self.components["safety_net"] = await self._mk_safety_net()
         self.components["transaction_core"] = await self._mk_txcore()
@@ -223,6 +255,73 @@ class MainCore:
 
     async def _mk_strategy_net(self) -> StrategyNet:
         return await self._create_strategy_net()
+
+    async def _mk_abi_registry(self) -> Any:
+        """Initialize and return the ABI Registry.
+        
+        The ABI Registry loads and manages smart contract ABIs for all components.
+        """
+        from on1builder.integrations.abi_registry import get_registry
+        
+        try:
+            # Use the specific resources/abi path for ABIs
+            base_path = Path(self.cfg.get("BASE_PATH", "."))
+            abi_path = base_path / "resources" / "abi"
+            
+            if not abi_path.exists():
+                logger.warning(f"ABI path not found: {abi_path}")
+                abi_path = base_path  # Fallback to base path
+            
+            # Handle non-ABI JSON files that might cause issues
+            strategy_weights_path = Path("strategy_weights.json")
+            if strategy_weights_path.exists():
+                # Temporarily rename the file to prevent loading it as an ABI
+                temp_path = Path("strategy_weights.json.bak")
+                strategy_weights_path.rename(temp_path)
+                
+                # Initialize with specific ABI path
+                registry = await get_registry(str(abi_path))
+                
+                # Restore the file
+                temp_path.rename(strategy_weights_path)
+            else:
+                # Standard initialization
+                registry = await get_registry(str(abi_path))
+            
+            logger.info(f"ABI Registry initialized with {len(registry.abis)} contract definitions")
+            return registry
+        except Exception as e:
+            logger.warning(f"ABI Registry initialization error: {e}")
+            logger.warning("Continuing with empty ABI registry")
+            
+            # Create an empty registry as fallback
+            from on1builder.integrations.abi_registry import ABIRegistry
+            return ABIRegistry()
+
+    async def _mk_db_manager(self) -> Any:
+        """Initialize and return the Database Manager.
+        
+        The Database Manager handles persistent storage of transaction history and profits.
+        """
+        from on1builder.persistence.db_manager import get_db_manager
+        
+        # Initialize with configuration
+        db_url = self.cfg.get("DATABASE_URL", "sqlite+aiosqlite:///on1builder.db")
+        db_manager = await get_db_manager(self.cfg, db_url)
+        logger.info("Database Manager initialized")
+        return db_manager
+
+    async def _mk_notification_manager(self) -> Any:
+        """Initialize and return the Notification Manager.
+        
+        This manages sending alerts and notifications through configured channels (Slack, Email, etc.)
+        """
+        from on1builder.utils.notifications import get_notification_manager
+        
+        # Initialize notification manager with our configuration
+        notification_manager = get_notification_manager(self.cfg)
+        logger.info("Notification Manager initialized")
+        return notification_manager
 
     async def _create_web3_connection(self) -> Optional[AsyncWeb3]:
         try:
@@ -279,7 +378,14 @@ class MainCore:
         return nonce_core
 
     async def _create_safety_net(self) -> SafetyNet:
-        safety_net = SafetyNet(self.web3, self.cfg, self.account)
+        # Pass reference to self (MainCore) to allow SafetyNet to access shared resources
+        safety_net = SafetyNet(
+            web3=self.web3, 
+            config=self.cfg, 
+            account=self.account,
+            api_config=self.components.get("api_config"),
+            main_core=self
+        )
         await safety_net.initialize()
         return safety_net
 
@@ -302,8 +408,48 @@ class MainCore:
         return market_monitor
 
     async def _create_txpool_monitor(self) -> TxpoolMonitor:
+        # Get the list of monitored tokens from config
+        monitored_tokens_config = self.cfg.get("MONITORED_TOKENS", [])
+        monitored_tokens = []
+        
+        # Check if the value is a string (likely a file path)
+        if isinstance(monitored_tokens_config, str):
+            # If it's a file path, try to load it
+            if os.path.exists(monitored_tokens_config):
+                try:
+                    # Try to load tokens from file
+                    with open(monitored_tokens_config, 'r') as f:
+                        token_data = json.load(f)
+                    
+                    # If it's the address2symbol.json format, get the top tokens 
+                    # by taking a slice of the keys (addresses) and values (symbols)
+                    if isinstance(token_data, dict):
+                        # Take top tokens (limit to avoid excessive monitoring)
+                        top_tokens = list(token_data.values())[:50]
+                        monitored_tokens.extend(top_tokens)
+                        logger.info(f"Loaded {len(monitored_tokens)} tokens from {monitored_tokens_config}")
+                except Exception as e:
+                    logger.error(f"Failed to load monitored tokens from {monitored_tokens_config}: {e}")
+        elif isinstance(monitored_tokens_config, list):
+            # If it's already a list, use it directly
+            monitored_tokens = monitored_tokens_config
+            
+        # If no valid tokens found, use defaults
+        if not monitored_tokens:
+            logger.warning("No monitored tokens defined or loaded, using default token list")
+            # Use some default tokens like ETH, WETH, etc.
+            monitored_tokens = ["ETH", "WETH", "USDC", "USDT", "DAI"]
+        
+        logger.info(f"Monitoring {len(monitored_tokens)} tokens: {', '.join(monitored_tokens[:10])}...")
+        
         txpool_monitor = TxpoolMonitor(
-            self.web3, self.cfg, self.components["market_monitor"]
+            web3=self.web3,
+            safety_net=self.components["safety_net"],
+            nonce_core=self.components["nonce_core"],
+            api_config=self.components["api_config"],
+            monitored_tokens=monitored_tokens,
+            configuration=self.cfg,
+            market_monitor=self.components["market_monitor"]
         )
         await txpool_monitor.initialize()
         return txpool_monitor

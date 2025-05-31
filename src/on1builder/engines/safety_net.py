@@ -37,6 +37,7 @@ class SafetyNet:
         config: Configuration,
         account: Any,
         api_config: Optional[APIConfig] = None,
+        main_core: Optional[Any] = None,  # Reference to MainCore for shared resources
     ) -> None:
         """Initialize SafetyNet.
 
@@ -45,6 +46,7 @@ class SafetyNet:
             config: Global configuration
             account: Account object or address string
             api_config: APIConfig instance (optional)
+            main_core: MainCore reference for shared resources (optional)
         """
         self.web3 = web3
         self.config = config
@@ -54,6 +56,8 @@ class SafetyNet:
         )
         # Use injected APIConfig or fallback to config.api_config
         self.api_config = api_config or config.api_config
+        # Store reference to main_core for access to shared resources
+        self.main_core = main_core
 
         # Circuit breaker state
         self.circuit_broken: bool = False
@@ -197,9 +201,18 @@ class SafetyNet:
             oracle_addr = self.config.get("GAS_PRICE_ORACLE")
             if oracle_addr:
                 try:
-                    from on1builder.integrations.abi_registry import get_registry
-
-                    registry = await get_registry(self.config.get("BASE_PATH", "."))
+                    # Try to use shared registry if available
+                    registry = None
+                    if hasattr(self, "main_core") and hasattr(self.main_core, "components") and "abi_registry" in self.main_core.components:
+                        registry = self.main_core.components["abi_registry"]
+                        logger.debug("Using shared ABI registry from MainCore")
+                    
+                    # Fall back to local initialization if needed
+                    if registry is None:
+                        from on1builder.integrations.abi_registry import get_registry
+                        registry = await get_registry(self.config.get("BASE_PATH", "."))
+                        logger.debug("Using local ABI registry")
+                        
                     abi = registry.get_abi("gas_price_oracle")
                     if abi:
                         contract = self.web3.eth.contract(

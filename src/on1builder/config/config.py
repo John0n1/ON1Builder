@@ -47,6 +47,9 @@ class Configuration:
         "GRAPH_API_KEY": "",
         "UNISWAP_V2_SUBGRAPH_ID": "",
         "COINGECKO_API_KEY": "",
+        "COINMARKETCAP_API_KEY": "",
+        "CRYPTOCOMPARE_API_KEY": "",
+        "MONITORED_TOKENS": [],
         "DEBUG": False,
         "BASE_PATH": str(Path(__file__).resolve().parent.parent.parent.parent),
         "HTTP_ENDPOINT": "https://ethereum-rpc.publicnode.com",
@@ -271,6 +274,34 @@ class APIConfig:
         self.token_address_to_symbol: Dict[str, str] = {}
         self.token_symbol_to_address: Dict[str, str] = {}
         self.symbol_to_api_id: Dict[str, str] = {}
+        
+    def get_client_session(self) -> aiohttp.ClientSession:
+        """Returns the existing client session or creates a new one if needed.
+        
+        This method ensures a shared ClientSession is available for making HTTP requests.
+        It also increments the session user count to track active users.
+        
+        Returns:
+            aiohttp.ClientSession: A shared aiohttp client session
+        """
+        # Use the async method but run it in a new event loop if we're not in an async context
+        if self._session is None or self._session.closed:
+            # Since we can't use await here, we need to create a new event loop
+            # to run the _acquire_session coroutine
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(self._acquire_session())
+            finally:
+                loop.close()
+        return self._session
+        
+    async def close(self) -> None:
+        """Close the session and release resources.
+        
+        This method decrements the session user count and closes the session 
+        if there are no more active users. It should be called when done with the API.
+        """
+        await self._release_session()
 
     async def initialize(self) -> None:
         for var, attr, default in [
@@ -499,3 +530,4 @@ class APIConfig:
 
     def __repr__(self) -> str:
         return f"<APIConfig providers=[{', '.join(self.providers)}]>"
+
