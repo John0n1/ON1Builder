@@ -17,9 +17,8 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from on1builder.utils.logger import setup_logging
-
-logger = setup_logging("ABIRegistry", level="DEBUG")
+from on1builder.utils.logger import get_logger
+logger = get_logger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -188,8 +187,27 @@ class ABIRegistry:
 
         loaded, failed = 0, 0
         logger.info(f"Loading ABIs from {self.abi_path}")
+    def list_available_abis(self) -> List[str]:
+        """
+        Return a list of ABI names currently loaded in the registry.
+        """
+        return list(self.abis.keys())
+        
+        # Files to exclude from ABI loading (non-ABI JSON files)
+        excluded_files = {
+            "strategy_weights.json",
+            "token_list.json",
+            "config.json",
+            "metadata.json"
+        }
+        excluded_patterns = ["_config", "_settings", "_cache"]
 
         for file_path in self.abi_path.glob("*.json"):
+            # Skip excluded files
+            if file_path.name in excluded_files or any(pattern in file_path.name for pattern in excluded_patterns):
+                logger.debug(f"Skipping non-ABI file: {file_path.name}")
+                continue
+                
             name = file_path.stem
             if name.endswith("_abi"):
                 name = name[:-4]
@@ -205,7 +223,9 @@ class ABIRegistry:
                 data = json.loads(raw)
                 abi = data["abi"] if isinstance(data, dict) and "abi" in data else data
                 if not isinstance(abi, list):
-                    raise ValueError("Invalid ABI format")
+                    logger.warning(f"Skipping {file_path.name}: Invalid ABI format (not a list)")
+                    failed += 1
+                    continue
 
                 _GLOBAL_ABIS[name] = abi
                 sigs = self._extract_function_signatures(abi)

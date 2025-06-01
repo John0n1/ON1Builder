@@ -19,30 +19,49 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from eth_utils import to_checksum_address
 from web3 import AsyncWeb3
 
 from on1builder.config.config import Configuration
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("NonceCore", level="DEBUG")
+logger = get_logger(__name__)
 
 
 class NonceCore:
     """Manages nonces for Ethereum accounts, ensuring uniqueness and ordering."""
 
-    def __init__(self, web3: AsyncWeb3, configuration: Configuration) -> None:
+    def __init__(
+        self, 
+        web3: AsyncWeb3, 
+        configuration: Configuration,
+        main_core: Optional[Any] = None  # Reference to MainCore for shared resources
+    ) -> None:
         """
         Args:
             web3: AsyncWeb3 instance
             configuration: Global Configuration instance
+            main_core: Optional reference to MainCore for shared resources
         """
         self.web3 = web3
         # Tests may patch `get_onchain_nonce`; real account not directly used here
         self.account = configuration
         self.config = configuration
+        self.main_core = main_core
+
+        # Access shared components from main_core if available
+        self.db_manager = None
+        self.notification_manager = None
+        if main_core and hasattr(main_core, 'components'):
+            self.db_manager = main_core.components.get("db_manager")
+            if self.db_manager:
+                logger.debug("NonceCore: Using shared DatabaseManager from MainCore")
+                
+            self.notification_manager = main_core.components.get("notification_manager")
+            if self.notification_manager:
+                logger.debug("NonceCore: Using shared NotificationManager from MainCore")
 
         # In-memory caches
         self._nonces: Dict[str, int] = {}
@@ -58,8 +77,35 @@ class NonceCore:
         logger.info("NonceCore initialized")
 
     async def initialize(self) -> None:
-        """Placeholder for potential pre-fetching logic."""
+        """Perform any necessary initialization."""
         logger.info("Initializing NonceCore")
+        
+        # Verify web3 connection
+        try:
+            connected = await self.web3.is_connected()
+            if not connected:
+                logger.warning("NonceCore: Web3 connection not available")
+        except Exception as e:
+            logger.error(f"NonceCore: Error verifying Web3 connection: {e}")
+            
+        # Check if we have access to database
+        if self.db_manager and hasattr(self.db_manager, "load_nonce_state"):
+            try:
+                # Try to load previously persisted nonce state
+                nonce_state = await self.db_manager.load_nonce_state()
+                if nonce_state:
+                    # Only update with nonces from our current chain
+                    chain_id = await self.web3.eth.chain_id
+                    for address, data in nonce_state.items():
+                        if data.get("chain_id") == chain_id:
+                            # Use persisted nonce as a minimum value
+                            self._nonces[address] = data.get("nonce", 0)
+                            self._last_refresh[address] = time.time()
+                            logger.debug(f"Loaded persisted nonce for {address}: {data.get('nonce')}")
+            except Exception as e:
+                logger.warning(f"Failed to load persisted nonce state: {e}")
+                
+        logger.debug("NonceCore initialization completed")
 
     async def get_onchain_nonce(self, address: Optional[str] = None) -> int:
         """Fetch the pending nonce from-chain, with retry logic.
@@ -170,6 +216,20 @@ class NonceCore:
             "status": "pending",
         }
         logger.debug(f"Tracking tx {tx_hash} at nonce {nonce_used} for {checksum}")
+        
+        # Store nonce info in database if available
+        if self.db_manager and hasattr(self.db_manager, "store_nonce_state"):
+            try:
+                chain_id = await self.web3.eth.chain_id
+                await self.db_manager.store_nonce_state(checksum, {
+                    "nonce": nonce_used,
+                    "chain_id": chain_id,
+                    "last_update": time.time(),
+                    "tx_hash": tx_hash
+                })
+                logger.debug(f"Persisted nonce {nonce_used} for {checksum}")
+            except Exception as e:
+                logger.warning(f"Failed to persist nonce state: {e}")
 
         # Launch background monitor
         asyncio.create_task(self._monitor_transaction(tx_hash, checksum))
@@ -238,8 +298,31 @@ class NonceCore:
         return False
 
     async def close(self) -> None:
-        """Cleanup resources (no-op)."""
-        logger.debug("NonceCore closed")
+        """Clean up resources and persist final state."""
+        logger.debug("NonceCore shutting down")
+        
+        # Persist final nonce state if database is available
+        if self.db_manager and hasattr(self.db_manager, "store_nonce_state"):
+            try:
+                chain_id = await self.web3.eth.chain_id
+                # Store current nonce state for each address
+                for address, nonce in self._nonces.items():
+                    await self.db_manager.store_nonce_state(address, {
+                        "nonce": nonce,
+                        "chain_id": chain_id,
+                        "last_update": time.time(),
+                    })
+                logger.debug(f"Final nonce state persisted for {len(self._nonces)} addresses")
+            except Exception as e:
+                logger.warning(f"Failed to persist final nonce state: {e}")
+        
+        # Clear in-memory caches
+        self._nonces.clear()
+        self._last_refresh.clear()
+        if hasattr(self, "_tx_tracking"):
+            self._tx_tracking.clear()
+            
+        logger.info("NonceCore closed")
 
     async def stop(self) -> None:
         """Alias for close()."""

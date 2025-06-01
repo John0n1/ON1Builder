@@ -40,7 +40,8 @@ from on1builder.monitoring.txpool_monitor import TxpoolMonitor
 from on1builder.utils.logger import setup_logging
 from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 
-logger = setup_logging("MainCore", level="DEBUG")
+
+logger = setup_logging(__name__, level="DEBUG", log_dir="none")
 
 _POA_CHAINS: set[int] = {99, 100, 77, 7766, 56, 11155111}
 
@@ -304,10 +305,15 @@ class MainCore:
         The Database Manager handles persistent storage of transaction history and profits.
         """
         from on1builder.persistence.db_manager import get_db_manager
-        
         # Initialize with configuration
         db_url = self.cfg.get("DATABASE_URL", "sqlite+aiosqlite:///on1builder.db")
-        db_manager = await get_db_manager(self.cfg, db_url)
+        # Retrieve singleton DatabaseManager
+        db_manager = get_db_manager(self.cfg, db_url)
+        # Ensure tables are created
+        try:
+            await db_manager.initialize()
+        except Exception as e:
+            logger.warning(f"DatabaseManager initialization error: {e}")
         logger.info("Database Manager initialized")
         return db_manager
 
@@ -373,7 +379,11 @@ class MainCore:
         return None
 
     async def _create_nonce_core(self) -> NonceCore:
-        nonce_core = NonceCore(self.web3, self.cfg)
+        nonce_core = NonceCore(
+            web3=self.web3, 
+            configuration=self.cfg,
+            main_core=self  # Pass reference to MainCore for shared resources
+        )
         await nonce_core.initialize()
         return nonce_core
 
@@ -392,12 +402,16 @@ class MainCore:
     async def _create_transaction_core(self) -> TransactionCore:
         chain_id = await self.web3.eth.chain_id if self.web3 else 1
         tx_core = TransactionCore(
-            self.web3,
-            self.account,
-            self.cfg,
-            self.components["nonce_core"],
-            self.components["safety_net"],
+            web3=self.web3,
+            account=self.account,
+            configuration=self.cfg,
+            nonce_core=self.components.get("nonce_core"),
+            safety_net=self.components.get("safety_net"),
+            api_config=self.components.get("api_config"),
+            market_monitor=self.components.get("market_monitor"),
+            txpool_monitor=self.components.get("txpool_monitor"),
             chain_id=chain_id,
+            main_core=self  # Pass reference to MainCore for shared components
         )
         await tx_core.initialize()
         return tx_core
@@ -456,11 +470,12 @@ class MainCore:
 
     async def _create_strategy_net(self) -> StrategyNet:
         strategy_net = StrategyNet(
-            self.web3,
-            self.cfg,
-            self.components["transaction_core"],
-            self.components["safety_net"],
-            self.components["market_monitor"],
+            web3=self.web3,
+            config=self.cfg,
+            transaction_core=self.components["transaction_core"],
+            safety_net=self.components["safety_net"],
+            market_monitor=self.components["market_monitor"],
+            main_core=self  # Pass reference to MainCore for shared resources
         )
         await strategy_net.initialize()
         return strategy_net

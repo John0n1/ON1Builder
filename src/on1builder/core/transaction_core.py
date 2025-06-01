@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import time
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 
 from eth_account import Account
 from eth_account.datastructures import SignedTransaction
@@ -30,10 +30,14 @@ from web3 import AsyncWeb3
 from on1builder.config.config import Configuration, APIConfig
 from on1builder.core.nonce_core import NonceCore
 from on1builder.engines.safety_net import SafetyNet
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 
-logger = setup_logging("TransactionCore", level="DEBUG")
+# Use TYPE_CHECKING to resolve circular dependencies
+if TYPE_CHECKING:
+    from on1builder.integrations.abi_registry import ABIRegistry
+    from on1builder.persistence.db_manager import DatabaseManager
+logger = get_logger(__name__)
 
 
 class TransactionCore:
@@ -48,12 +52,13 @@ class TransactionCore:
         web3: AsyncWeb3,
         account: Account,
         configuration: Configuration,
+        nonce_core: Optional[NonceCore] = None,
+        safety_net: Optional[SafetyNet] = None,
         api_config: Optional[APIConfig] = None,
         market_monitor: Optional[Any] = None,
         txpool_monitor: Optional[Any] = None,
-        nonce_core: Optional[NonceCore] = None,
-        safety_net: Optional[SafetyNet] = None,
         chain_id: int = 1,
+        main_core: Optional[Any] = None,  # Reference to MainCore for shared resources
     ) -> None:
         """Initialize the TransactionCore."""
         self.web3 = web3
@@ -66,14 +71,63 @@ class TransactionCore:
         self.txpool_monitor = txpool_monitor
         self.nonce_core = nonce_core
         self.safety_net = safety_net
+        self.main_core = main_core  # Store reference to MainCore
+        
+        # Access shared components from main_core if available
+        self.abi_registry = None
+        self.db_manager = None
+        
+        if main_core and hasattr(main_core, 'components'):
+            # Get ABI Registry
+            self.abi_registry = main_core.components.get("abi_registry")
+            if self.abi_registry:
+                logger.debug("TransactionCore: Using shared ABIRegistry from MainCore")
+            
+            # Get DB Manager
+            self.db_manager = main_core.components.get("db_manager")
+            if self.db_manager:
+                logger.debug("TransactionCore: Using shared DatabaseManager from MainCore")
+                
+            # Get notification manager if available
+            self.notification_manager = main_core.components.get("notification_manager")
+            if self.notification_manager:
+                logger.debug("TransactionCore: Using shared NotificationManager from MainCore")
 
         self._pending_txs: Dict[str, Dict[str, Any]] = {}
 
         logger.debug(f"TransactionCore initialized for chain ID {chain_id}")
 
     async def initialize(self) -> bool:
-        """Perform any async initialization logic."""
+        """Perform async initialization logic."""
         logger.info("Initializing TransactionCore")
+        
+        # Validate web3 connection
+        try:
+            connected = await self.web3.is_connected()
+            if not connected:
+                logger.error("Web3 connection not available")
+                return False
+            logger.debug("Web3 connection verified")
+        except Exception as e:
+            logger.error(f"Error checking Web3 connection: {e}")
+            return False
+            
+        # If we have DB manager, ensure it's ready
+        if self.db_manager and hasattr(self.db_manager, "ensure_tables"):
+            try:
+                await self.db_manager.ensure_tables()
+                logger.debug("Database tables verified")
+            except Exception as e:
+                logger.warning(f"Error ensuring database tables: {e}")
+        
+        # Verify safety net
+        if self.safety_net is None:
+            logger.warning("No SafetyNet available, transactions will not be checked for safety")
+        
+        # Verify nonce core
+        if self.nonce_core is None:
+            logger.warning("No NonceCore available, using on-chain nonce tracking")
+            
         return True
 
     async def build_transaction(
@@ -178,10 +232,27 @@ class TransactionCore:
         """Perform safety checks, sign, send, and track a transaction."""
         # Safety check
         if self.safety_net:
-            safe, details = await self.safety_net.check_transaction_safety(tx)
-            if not safe:
-                logger.error(f"SafetyNet blocked tx: {details}")
-                raise StrategyExecutionError("Safety check failed")
+            try:
+                safe, details = await self.safety_net.check_transaction_safety(tx)
+                if not safe:
+                    error_msg = f"SafetyNet blocked tx: {details}"
+                    logger.error(error_msg)
+                    # Send notification if available
+                    if hasattr(self, 'notification_manager') and self.notification_manager:
+                        try:
+                            await self.notification_manager.send_alert(
+                                "Transaction Safety Check Failed",
+                                f"Transaction blocked: {details}",
+                                level="WARNING"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to send notification: {e}")
+                    raise StrategyExecutionError("Safety check failed")
+            except Exception as e:
+                if not isinstance(e, StrategyExecutionError):
+                    logger.error(f"Error during safety check: {e}")
+                    raise StrategyExecutionError(f"Safety check error: {e}")
+                raise
 
         original_price = tx.get("gasPrice", 0)
         is_eip1559 = "maxFeePerGas" in tx and "maxPriorityFeePerGas" in tx
@@ -207,6 +278,25 @@ class TransactionCore:
                 self._pending_txs[tx_hash] = {"tx": tx, "signed_tx": signed, "timestamp": time.time(), "status": "pending"}
                 if self.nonce_core and "nonce" in tx:
                     await self.nonce_core.track_transaction(tx_hash, tx["nonce"], self.address)
+                
+                # Store transaction in database if available
+                if self.db_manager and hasattr(self.db_manager, "store_transaction"):
+                    try:
+                        await self.db_manager.store_transaction({
+                            "tx_hash": tx_hash,
+                            "from_address": self.address,
+                            "to_address": tx.get("to", ""),
+                            "value": tx.get("value", 0),
+                            "gas_price": tx.get("gasPrice", 0),
+                            "gas_limit": tx.get("gas", 0),
+                            "nonce": tx.get("nonce", 0),
+                            "chain_id": self.chain_id,
+                            "timestamp": time.time(),
+                            "status": "pending"
+                        })
+                    except Exception as e:
+                        logger.warning(f"Failed to store transaction in DB: {e}")
+                        
                 logger.info(f"Transaction sent: {tx_hash}")
                 return tx_hash
             except Exception as e:
@@ -215,6 +305,16 @@ class TransactionCore:
                     await asyncio.sleep(retry_delay)
                 else:
                     logger.error(f"All attempts failed: {e}")
+                    # Send notification if available
+                    if hasattr(self, 'notification_manager') and self.notification_manager:
+                        try:
+                            await self.notification_manager.send_alert(
+                                "Transaction Execution Failed",
+                                f"All {retry_count} attempts failed. Error: {e}",
+                                level="ERROR"
+                            )
+                        except Exception as notify_err:
+                            logger.warning(f"Failed to send notification: {notify_err}")
                     raise StrategyExecutionError(f"Execution failed: {e}")
 
     async def wait_for_transaction_receipt(
@@ -408,11 +508,21 @@ class TransactionCore:
     async def stop(self) -> bool:
         """Gracefully stop TransactionCore."""
         logger.info("Stopping TransactionCore")
+        
+        # Close web3 provider if supported
         if hasattr(self.web3, "provider") and hasattr(self.web3.provider, "close"):
             try:
                 await self.web3.provider.close()
                 logger.info("Web3 provider closed")
             except Exception as e:
-                logger.warning(f"Error closing provider: {e}")
+                logger.warning(f"Error closing web3 provider: {e}")
+        
+        # Clear pending transactions
+        tx_count = len(self._pending_txs)
         self._pending_txs.clear()
+        logger.debug(f"Cleared {tx_count} pending transactions")
+        
+        # Note: Don't close database or other shared resources here
+        # Those are managed by MainCore and closed from there
+        
         return True

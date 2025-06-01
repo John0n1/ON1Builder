@@ -26,8 +26,8 @@ License: MIT
 __title__ = "on1builder"
 __description__ = "Multi-chain blockchain transaction execution framework"
 __url__ = "https://github.com/john0n1/ON1Builder"
-__version_info__ = (2, 1, 0)
-__version__ = "2.1.0"
+__version_info__ = (2, 1, 1)
+__version__ = "2.1.1"
 __author__ = "john0n1"
 __author_email__ = "john@on1.no"
 __license__ = "MIT"
@@ -47,10 +47,11 @@ from on1builder.engines.strategy_net import StrategyNet
 from on1builder.monitoring.txpool_monitor import TxpoolMonitor
 from on1builder.monitoring.market_monitor import MarketMonitor
 from on1builder.persistence.db_manager import DatabaseManager, get_db_manager
-from on1builder.integrations.abi_registry import get_registry as get_abi_registry
-from on1builder.utils.logger import setup_logging
-from on1builder.utils.notifications import send_alert
+from on1builder.integrations.abi_registry import ABIRegistry, get_registry as get_abi_registry
+from on1builder.utils.logger import setup_logging, get_logger, bind_logger_context
+from on1builder.utils.notifications import NotificationManager, get_notification_manager, send_alert
 from on1builder.utils.strategyexecutionerror import StrategyExecutionError
+from on1builder.utils.container import Container, get_container
 
 __all__ = [
     "cli",  
@@ -69,8 +70,15 @@ __all__ = [
     "MarketMonitor",
     "DatabaseManager",
     "get_db_manager",
+    "ABIRegistry",
     "get_abi_registry",
     "setup_logging",
+    "get_logger",
+    "bind_logger_context",
+    "NotificationManager",
+    "get_notification_manager",
     "send_alert",
     "StrategyExecutionError",
+    "Container",
+    "get_container",
 ]

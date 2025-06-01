@@ -1,62 +1,105 @@
 [project]
 name = "on1builder"
-version = "2.1.0"
+version = "2.1.1"
 description = "Multi-chain blockchain transaction execution framework"
-readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.12,<3.14"
-authors = [
-  { name = "john0n1", email = "john@on1.no" },
-]
-license = "MIT"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "ON1Builder Team", email = "john@on1.no" }]
 keywords = ["mev", "blockchain", "ethereum", "async", "mempool"]
+requires-python = ">=3.12,<3.14"
 dependencies = [
-  "aiohttp>=3.12.1",
-  "asyncio>=3.4.3",
-  "attrs>=25.3.0",
-  "eth-account>=0.13.7",
-  "eth-hash>=0.5.2",
-  "eth-keyfile>=0.7.0",
-  "eth-keys>=0.4.0",
-  "eth-rlp>=0.3.0",
-  "eth-typing>=3.5.0",
-  "eth-utils>=5.3.0",
-  "eth_abi>=4.2.1",
-  "pydantic>=2.11.5",
-  "psutil>=7.0.0",
-  "python-dotenv>=1.1.0",
-  "sqlalchemy>=2.0.41",
-  "web3>=7.12.0",
-  "typer>=0.16.0",
-  "pyyaml>=6.0.0",
-]
-classifiers = [
-  "Development Status :: 5 - Production/Stable",
-  "Intended Audience :: Developers",
-  "Topic :: Software Development :: Libraries",
-  "Topic :: System :: Monitoring",
-  "Programming Language :: Python :: 3.12",
-  "Operating System :: OS Independent",
+    "aiohttp>=3.12.1",
+    "aiosqlite>=0.19.0",
+    "attrs>=25.3.0",
+    "cachetools>=5.3.0",
+    "eth-account>=0.13.7",
+    "eth-hash>=0.5.2",
+    "eth-keyfile>=0.7.0",
+    "eth-keys>=0.4.0",
+    "eth-rlp>=0.3.0",
+    "eth-typing>=3.5.0",
+    "eth-utils>=5.3.0",
+    "eth_abi>=4.2.1",
+    "joblib>=1.3.2",
+    "pandas>=2.1.0",
+    "pydantic>=2.11.5",
+    "psutil>=7.0.0",
+    "python-dotenv>=1.1.0",
+    "sqlalchemy>=2.0.41",
+    "web3>=7.12.0",
+    "typer>=0.16.0",
+    "pyyaml>=6.0.0",
+    "questionary>=1.10.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "black>=23.7.0",
+    "isort>=5.12.0",
+    "mypy>=1.10.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.22.0",
+    "pytest-cov>=4.1.0",
+    "flake8>=6.1.0",
+    "bandit>=1.7.4",
+    "safety>=2.4.0",
+]
+
+
 [project.urls]
-Homepage = "https://on1.no"
-Repository = "https://github.com/john0n1/ON1Builder"
-Tracker = "https://github.com/john0n1/ON1Builder/issues"
+Homepage      = "https://example.com"
+Repository    = "https://github.com/john0n1/ON1Builder"
+Documentation = "https://example.com/docs"
+
+[tool.poetry]
+packages = [{ include = "on1builder", from = "src" }]
+
+# Include extra non-code files in distributions
+include = [
+  "configs/**/*.yaml",
+  "resources/**/*",
+  ".env.example",
+  "requirements.txt",
+  "setup.py",
+  "setup_dev.sh",
+]
+
+[tool.poetry.dependencies]
+python        = ">=3.12,<3.14"
+aiohttp       = ">=3.12.1"
+attrs         = ">=25.3.0"
+eth-account   = ">=0.13.7"
+eth-hash      = ">=0.5.2"
+eth-keyfile   = ">=0.7.0"
+eth-keys      = ">=0.4.0"
+eth-rlp       = ">=0.3.0"
+eth-typing    = ">=3.5.0"
+eth-utils     = ">=5.3.0"
+eth_abi       = ">=4.2.1"
+pydantic      = ">=2.11.5"
+psutil        = ">=7.0.0"
+python-dotenv = ">=1.1.0"
+sqlalchemy    = ">=2.0.41"
+web3          = ">=7.12.0"
+typer         = ">=0.16.0"
+pyyaml        = ">=6.0.0"
+questionary   = "^1.10.0"
+
+[poetry.group.dev.dependencies]
+black           = ">=23.7.0"
+isort           = ">=5.12.0"
+mypy            = ">=1.10.0"
+pytest          = ">=8.3.0"
+pytest-asyncio  = ">=0.22.0"
+pytest-cov      = ">=4.1.0"
+flake8          = ">=6.1.0"
+bandit          = ">=1.7.4"
+safety          = ">=2.4.0"
 
 [project.scripts]
 on1builder = "on1builder.__main__:main"
 
-[tool.setuptools.package-data]
-"*" = ["*.json", "*.yaml", "*.yml", "*.md"]
-
-[tool.black]
-line-length = 88
-target-version = ["py312"]
-
-[tool.isort]
-profile = "black"
-
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires    = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 

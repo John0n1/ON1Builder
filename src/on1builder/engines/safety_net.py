@@ -18,14 +18,22 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+import os
+from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from web3 import AsyncWeb3
 
 from on1builder.config.config import APIConfig, Configuration
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
+from dotenv import load_dotenv
 
-logger = setup_logging("SafetyNet", level="DEBUG")
+load_dotenv()
+
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from on1builder.integrations.abi_registry import ABIRegistry
+
+logger = get_logger(__name__)
 
 
 class SafetyNet:
@@ -79,6 +87,13 @@ class SafetyNet:
         """Initialize SafetyNet; verify web3 connection."""
         # cfg.api_config already initialized by MainCore
         self.api_config = self.api_config or self.config.api_config
+
+        # Get shared ABIRegistry from MainCore if available
+        self.abi_registry = None
+        if self.main_core and hasattr(self.main_core, 'components'):
+            self.abi_registry = self.main_core.components.get("abi_registry")
+            if self.abi_registry:
+                logger.debug("SafetyNet: Using shared ABIRegistry from MainCore")
 
         if await self.web3.is_connected():
             logger.info("SafetyNet: Web3 connection active")

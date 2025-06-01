@@ -28,9 +28,9 @@ if TYPE_CHECKING:
     from on1builder.core.transaction_core import TransactionCore
 from on1builder.engines.safety_net import SafetyNet
 from on1builder.monitoring.market_monitor import MarketMonitor
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("StrategyNet", level="DEBUG")
+logger = get_logger(__name__)
 
 
 class StrategyPerformanceMetrics:
@@ -71,6 +71,7 @@ class StrategyNet:
         transaction_core: TransactionCore,
         safety_net: SafetyNet,
         market_monitor: MarketMonitor,
+        main_core: Optional[Any] = None,  # Reference to MainCore for shared resources
     ) -> None:
         self.web3 = web3
         self.cfg = config
@@ -78,6 +79,18 @@ class StrategyNet:
         self.safety_net = safety_net
         self.market_monitor = market_monitor
         self.api_config = config.api_config
+        self.main_core = main_core  # Store reference to MainCore
+
+        # Set up access to shared components if MainCore is provided
+        self.db_manager = None
+        self.abi_registry = None
+        if main_core and hasattr(main_core, 'components'):
+            self.db_manager = main_core.components.get("db_manager")
+            self.abi_registry = main_core.components.get("abi_registry")
+            if self.db_manager:
+                logger.debug("StrategyNet: Using shared DB manager from MainCore")
+            if self.abi_registry:
+                logger.debug("StrategyNet: Using shared ABI registry from MainCore")
 
         # Supported strategy types and their function lists
         self._registry: Dict[str, List[Callable[[Dict[str, Any]], asyncio.Future]]] = {

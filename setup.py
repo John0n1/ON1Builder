@@ -12,7 +12,7 @@ with io.open(os.path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="on1builder",
-    version="2.1.0",
+    version="2.1.1",
     description="Multi-chain blockchain transaction execution framework",
     long_description=long_description,
     long_description_content_type="text/markdown",

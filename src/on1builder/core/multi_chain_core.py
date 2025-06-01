@@ -17,9 +17,9 @@ from typing import Any, Dict, List, Optional
 
 from on1builder.config.config import MultiChainConfiguration
 from on1builder.engines.chain_worker import ChainWorker
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("MultiChainCore", level="INFO")
+logger = get_logger(__name__)
 
 
 class MultiChainCore:
@@ -131,7 +131,8 @@ class MultiChainCore:
     ) -> bool:
         """Initialize a single ChainWorker."""
         try:
-            worker = ChainWorker(chain_cfg, self.config)
+            # Pass self reference to ChainWorker for shared components
+            worker = ChainWorker(chain_cfg, self.config, main_core=self)
             ok = await worker.initialize()
             if ok:
                 self.workers[chain_id] = worker

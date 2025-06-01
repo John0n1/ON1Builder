@@ -18,3 +18,10 @@ prune *.pyc
 prune .git
 prune .github
 prune .vscode
+prune .env 
+prune .pytest_cache
+prune .mypy_cache
+prune .coverage
+prune .idea
+prune .DS_Store
+prune build.sh

@@ -22,9 +22,9 @@ from on1builder.config.config import APIConfig, Configuration
 from on1builder.core.nonce_core import NonceCore
 from on1builder.engines.safety_net import SafetyNet
 from on1builder.monitoring.market_monitor import MarketMonitor
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("TxpoolMonitor", level="DEBUG")
+logger = get_logger(__name__)
 
 
 class TxpoolMonitor:
@@ -96,6 +96,17 @@ class TxpoolMonitor:
         self._tx_cache.clear()
         self._running = False
         
+        # Ensure we have a session for API access if needed
+        self.client_session = None
+        if self.api_config and not getattr(self.api_config, "session", None):
+            try:
+                import aiohttp
+                self.client_session = aiohttp.ClientSession()
+                setattr(self.api_config, "session", self.client_session)
+                logger.debug("Created new client session for API access")
+            except ImportError:
+                logger.warning("aiohttp not available, external API access may be limited")
+        
         # Verify we can connect to the node
         try:
             # Check basic connection by getting the latest block
@@ -116,9 +127,12 @@ class TxpoolMonitor:
                 filt = await self.web3.eth.filter("pending")
                 await filt.get_new_entries()  # Test if it works
                 logger.info("Node supports pending transaction filters")
+                # Store the filter for cleanup later
+                self._pending_filter = filt
             except Exception as e:
                 logger.info(f"Node doesn't support pending filters: {e}")
                 logger.info("Will fall back to block polling if needed")
+                self._pending_filter = None
                 
         except Exception as e:
             logger.warning(f"Error during TxpoolMonitor initialization: {e}")
@@ -150,33 +164,87 @@ class TxpoolMonitor:
         self._running = False
         logger.info("TxpoolMonitor: stopping…")
 
-        # Stop all background tasks
+        # Set stop event first to unblock any waiting tasks
+        self._stop_event.set()
+        
+        # Cancel all background tasks
         for t in self._tasks:
-            t.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
-        self._tasks.clear()
-        
-        # Clear cached data
-        self._tx_cache.clear()
-        self._processed_hashes.clear()
-        
-        # Make sure queues are empty
-        while not self._tx_hash_queue.empty():
-            try:
-                self._tx_hash_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
+            if not t.done() and not t.cancelled():
+                try:
+                    t.cancel()
+                    logger.debug(f"Cancelled task: {t.get_name()}")
+                except Exception as e:
+                    logger.warning(f"Error cancelling task {t.get_name()}: {e}")
                 
-        while not self._tx_analysis_queue.empty():
+        # Wait for tasks to complete cancellation with timeout
+        if self._tasks:
             try:
-                self._tx_analysis_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-
-        # Close any additional resources if needed
-        # (For future extension - no resources to close currently)
-        
-        logger.info("TxpoolMonitor: stopped")
+                await asyncio.wait(self._tasks, timeout=5.0)
+                logger.debug("Tasks cancel wait completed")
+            except asyncio.TimeoutError:
+                logger.warning("Timeout waiting for tasks to cancel")
+            except Exception as e:
+                logger.error(f"Error waiting for tasks to cancel: {e}")
+            
+        # Clear all data structures
+        try:
+            # Clear queues
+            while not self._tx_hash_queue.empty():
+                try:
+                    self._tx_hash_queue.get_nowait()
+                    self._tx_hash_queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            
+            while not self._tx_analysis_queue.empty():
+                try:
+                    self._tx_analysis_queue.get_nowait()
+                    self._tx_analysis_queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
+                
+            while not self.profitable_transactions.empty():
+                try:
+                    self.profitable_transactions.get_nowait()
+                    self.profitable_transactions.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            
+            # Clear sets and dictionaries
+            self._processed_hashes.clear()
+            self._tx_cache.clear()
+            self.processed_txs.clear()
+            self.tx_queue.clear()
+            
+            # Clear tasks list
+            self._tasks.clear()
+            
+        except Exception as e:
+            logger.error(f"Error clearing resources: {e}")
+            
+        # Close any web3 filters we might have created
+        try:
+            if hasattr(self, '_pending_filter') and self._pending_filter:
+                await self.web3.eth.uninstall_filter(self._pending_filter.filter_id)
+                logger.debug("Uninstalled pending filter")
+        except Exception as e:
+            logger.warning(f"Error uninstalling filter: {e}")
+            
+        # Close client session if we created it
+        if hasattr(self, 'client_session') and self.client_session is not None:
+            try:
+                await self.client_session.close()
+                logger.debug("Closed client session")
+                self.client_session = None
+                
+                # Remove reference from api_config if we set it there
+                if self.api_config and hasattr(self.api_config, "session"):
+                    if getattr(self.api_config, "session", None) == self.client_session:
+                        setattr(self.api_config, "session", None)
+            except Exception as e:
+                logger.warning(f"Error closing client session: {e}")
+            
+        logger.info("TxpoolMonitor: successfully stopped")
 
     async def _collect_hashes(self) -> None:
         """Collect tx hashes via pending-filter, direct txpool access, or block polling."""
@@ -472,6 +540,41 @@ class TxpoolMonitor:
             return True
         except Exception as e:
             logger.error(f"Health check failed: {e}")
+            return False
+
+    async def check_health(self) -> bool:
+        """Check if this component is healthy and functioning properly.
+        
+        Returns:
+            bool: True if healthy, False if unhealthy
+        """
+        try:
+            # Check web3 connection
+            if not await self.web3.is_connected():
+                logger.warning("TxpoolMonitor health check failed: web3 connection issue")
+                return False
+            
+            # Check if running
+            if not self._running:
+                # It's okay if we're not running yet - just report the status
+                logger.debug("TxpoolMonitor not running (may be intentional)")
+                return True
+            
+            # Check if tasks are alive
+            if self._tasks:
+                all_alive = True
+                for task in self._tasks:
+                    if task.done() or task.cancelled():
+                        logger.warning(f"TxpoolMonitor task {task.get_name()} is not running")
+                        all_alive = False
+                if not all_alive:
+                    return False
+            
+            # If we got this far, we're healthy
+            return True
+            
+        except Exception as e:
+            logger.error(f"TxpoolMonitor health check error: {e}")
             return False
 
     async def _monitor_memory(self) -> None:

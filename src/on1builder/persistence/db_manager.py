@@ -21,9 +21,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from on1builder.config.config import Configuration
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("DatabaseManager", level="DEBUG")
+logger = get_logger(__name__)
 
 # Try to enable SQLAlchemy ORM; otherwise disable DB features
 try:
@@ -51,7 +51,7 @@ if HAS_SQLALCHEMY:
         gas_used: Optional[int] = Column(Integer, nullable=True)
         block_number: Optional[int] = Column(Integer, nullable=True)
         status: Optional[bool] = Column(Boolean, nullable=True)
-        timestamp: datetime.datetime = Column(DateTime, default=datetime.datetime.utcnow)
+        timestamp: datetime.datetime = Column(DateTime, default=datetime.datetime.now)
         data: Optional[str] = Column(Text, nullable=True)
 
         def to_dict(self) -> Dict[str, Any]:
@@ -106,7 +106,7 @@ class DatabaseManager:
         self._session_factory: Optional[sessionmaker] = None
 
         if not self._db_url:
-            data_dir = Path(self.config.get("DATA_DIR", "data/db"))
+            data_dir = Path(self.config.get("DATA_DIR", "resources/database"))
             data_dir.mkdir(parents=True, exist_ok=True)
             self._db_url = f"sqlite+aiosqlite:///{data_dir}/on1builder.db"
 
@@ -199,6 +199,13 @@ class DatabaseManager:
             session.add(rec)
             await session.commit()
             return rec.id
+    def check_connection(self) -> bool:
+        """Simple health check for the database connection."""
+        try:
+            # If SQLAlchemy engine is available, assume connection is OK
+            return self._engine is not None
+        except Exception:
+            return False
 
     async def get_transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
         """Fetch a transaction by hash."""

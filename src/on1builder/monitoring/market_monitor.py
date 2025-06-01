@@ -27,9 +27,9 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Union
 
 from on1builder.config.config import APIConfig, Configuration
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("MarketMonitor", level="DEBUG")
+logger = get_logger(__name__)
 
 
 def track(metric_name: str):

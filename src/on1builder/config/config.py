@@ -33,9 +33,9 @@ import yaml
 from cachetools import TTLCache
 from dotenv import load_dotenv
 
-from on1builder.utils.logger import setup_logging
+from on1builder.utils.logger import get_logger
 
-logger = setup_logging("Config", level="DEBUG")
+logger = get_logger(__name__)
 
 
 class Configuration:
@@ -514,6 +514,37 @@ class APIConfig:
                     await asyncio.sleep(delay)
         return None
 
+    @classmethod
+    async def get_price_history(
+        cls, token: str, vs: str = "usd", days: int = 30
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Fetch historical price data for a token."""
+        t_norm = cls._norm(token)
+        key = f"ph:{t_norm}:{vs}:{days}"
+        if key in cls.price_cache:
+            return cls.price_cache[key]
+
+        prices = []
+        for prov in cls.providers.values():
+            if not prov.historical_url:
+                continue
+            try:
+                data = await cls._request(
+                    prov,
+                    prov.historical_url.format(id=cls.symbol_to_api_id.get(t_norm, t_norm.lower())),
+                    params={"vs_currency": vs, "days": days}
+                )
+                if data and "prices" in data:
+                    prices.extend(data["prices"])
+            except Exception as e:
+                logger.debug(f"Error fetching historical data from {prov.name}: {e}")
+
+        if not prices:
+            return None
+
+        cls.price_cache[key] = prices
+        return prices
+    
     @staticmethod
     def _headers(prov: Provider) -> Dict[str, str]:
         if prov.name == "coingecko" and prov.api_key:

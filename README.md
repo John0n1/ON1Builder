@@ -1,167 +1,242 @@
-# ON1Builder 
-*Multi-Chain MEV Transaction Execution Framework*  
+# ON1Builder
+
+[![PyPI version](https://img.shields.io/pypi/v/on1builder.svg?color=green&logo=pypi&logoColor=white&style=flat)](https://pypi.org/project/on1builder/)
+[![license](https://img.shields.io/badge/License-MIT-green.svg?logo=github)](LICENSE)
+[![python](https://img.shields.io/badge/Python-3.12--14%2B-green.svg?logo=python&logoColor=green&style=flat)](pyproject.toml)
 
 
+> **Multi-Chain MEV Transaction Execution Framework** 
+> Asynchronous engine for scanning mempools, analyzing on-chain & market data, and dispatching profitable MEV trades **across any EVM chain** – complete with safety-nets, RL-powered strategy selection, and an interactive terminal experience.
 
-- [Getting Started Guide](docs/guides/getting_started.md)
-- [Installation Guide](docs/guides/installation.md)
-- [Configuration Guide](docs/guides/configuration.md)
-- [Running Guide](docs/guides/running.md)
-- [Monitoring Guide](docs/guides/monitoring.md)
-- [Troubleshooting Guide](docs/guides/troubleshooting.md)
-> ⚠️ **Warning:** This project is in **alpha** development phase and undergoing rapid iteration. Expect breaking changes and incomplete features.
-
-[![PyPI version](https://img.shields.io/pypi/v/on1builder.svg?color=cyan&logo=pypi&logoColor=pink&style=flat)](https://pypi.org/project/on1builder/)
-[![license](https://img.shields.io/badge/License-MIT-blue.svg?logo=refinedgithub)](LICENSE)
-[![python](https://img.shields.io/badge/Python-3.12--14%2B-blue.svg?logo=python&logoColor=blue&style=flat)](pyproject.toml)
-[![docs](https://img.shields.io/badge/Docs--&--instructions-white.svg?logo=readthedocs&logoColor=brown&style=flat)](https://john0n1.github.io/ON1Builder/)
-
-
-> Asynchronous engine for scanning mempools, analyzing on-chain
-> & market data, and dispatching profitable MEV trades **across any EVM chain** –
-> with first-class safety-nets, RL-powered strategy selection, pluggable ABIs and
-> a fully async SQL persistence layer.
-
-## Key Features
-| Category | Highlights |
-|----------|------------|
-| **Multi-Chain** | `MultiChainCore` spawns a *worker* per chain with shared safety & metrics. |
-| **MEV Strategies** | Front-run, back-run, sandwich (+ flash-loan variants) – auto-selected by `StrategyNet` (ε-greedy with reward shaping). |
-| **Robust Safety** | `SafetyNet` enforces balance, gas, value, slippage, duplicate-tx & dynamic congestion checks – activates circuit-breaker + alerting. |
-| **Mempool & Markets** | `TxpoolMonitor` filters pending txs; `MarketMonitor` streams price / volume / volatility; both feed the RL agent. |
-| **Nonce-safe** | `NonceCore` guarantees sequential, thread-safe nonces even under high concurrency. |
-| **Dynamic ABIs** | Hot-loads JSON ABIs, validates required functions, maps 4-byte selectors. |
-| **Persistence** | `DatabaseManager` (SQLAlchemy async) records every tx & profit for dashboards (Grafana/Prometheus configs shipped). |
-| **Pluggable** | Ultra-light DI `Container` for circular deps, plus clean module boundaries. |
-
----
-
-## Project Layout
-```
-
-src/on1builder/               ← main Python package
-├── cli/                      ← Typer & argparse entrypoints
-├── config/                   ← Configuration helpers (YAML + .env)
-├── core/                     ← Main/MultiChain/Nonce/Transaction cores
-├── engines/                  ← SafetyNet, ChainWorker, StrategyNet …
-├── integrations/             ← ABI registry + external adapters
-├── monitoring/               ← Txpool & market monitors
-├── persistence/              ← DatabaseManager (async SQLAlchemy)
-└── utils/                    ← Logger, notifications, DI container, …
-resources/                    ← ABIs, Solidity contracts, tokens, ML data
-configs/                      ← Example YAMLs, Grafana & Prometheus bundles
-docs/                         ← Sphinx docs (rendered at gh-pages)
-setup_dev.sh                  ← one-liner dev bootstrap
-setup.py                      ← setup 
-README.md                     ← you-are-here
-pyproject.toml                ← Poetry build / deps
-requirements.txt              ← slim runtime-only requirements
-
-````
+⚠️ **Warning:** This project is in **alpha** development phase and undergoing rapid iteration. Expect breaking changes and incomplete features.
 
 ---
 
 ## Quick Start
 
+The **easiest way** to enter ON1Builder Framework is through our interactive ignition system:
+
 ```bash
-# 1. clone & enter
-git clone https://github.com/john0n1/ON1Builder.git && cd ON1Builder
+# 1. Clone and enter the ignition system
+git clone https://github.com/john0n1/ON1Builder.git
+cd ON1Builder
+python ignition.py
+# 2. Follow the prompts:
+#    - Select "Install and set up dependencies"
 
-# 2. bootstrap (installs Poetry + venv + deps + .env)
-./scripts/setup_dev.sh
+### Alternative (Traditional CLI)
 
-# 3. dry-run on a single chain
+If you prefer the traditional approach:
+
+```bash
+# 1. Setup environment
+./setup_dev.sh
+
+# 2. Run directly
 on1builder run -c configs/chains/config.yaml --dry-run
+```
 
-# 4. go multi-chain (reads chains:[] list in YAML)
-on1builder run --multi-chain
+---
 
-# 5. mempool / market monitor only
-on1builder monitor --chain ethereum
-````
+## What Makes ON1Builder Special
 
-**Configuration** lives in YAML (`configs/chains/*.yaml`) + `.env`.
-Generate a template with:
+|  Feature |  Description |
+|------------|------------|
+| **Auto-Setup** | One-click dependency installation, virtual environment setup, and configuration |
+| **Multi-Chain** | `MultiChainCore` spawns workers per chain with shared safety & metrics |
+| **MEV Strategies** | Front-run, back-run, sandwich (+ flash-loan variants) with RL-powered auto-selection |
+| **Robust Safety** | `SafetyNet` with balance, gas, slippage checks + circuit-breaker alerts |
+| **Real-time Monitoring** | Mempool & market monitors feeding live data to RL agents |
+| **Nonce-safe** | Thread-safe nonce management under high concurrency |
+| **Dynamic ABIs** | Hot-loadable JSON ABIs with automatic validation |
+| **Full Persistence** | Async SQLAlchemy recording every transaction for analytics |
 
+---
+
+## Project Structure
+
+```
+ON1Builder/
+├── ignition.py              ← MAIN ENTRY POINT
+├── src/on1builder/          ← Core Python package
+│   ├──  cli/                ← Command-line interfaces  
+│   ├── config/             ← Configuration management
+│   ├── core/                ← Main execution engines
+│   ├── engines/             ← Safety, strategy, and worker engines
+│   ├── integrations/        ← ABI registry & external adapters
+│   ├── monitoring/          ← Mempool & market monitors
+│   ├── persistence/         ← Database management
+│   └── utils/              ← Logging, notifications, utilities
+├── configs/                 ← Configuration templates
+├── resources/              ← ABIs, contracts, token data
+├── docs/                    ← Documentation
+└── docker-compose.yml       ← Development environment
+```
+
+---
+
+## Interactive Features
+
+### Dependency Management
+The ignition system automatically:
+- Checks for required packages
+- Installs missing dependencies
+- Sets up Python virtual environments
+- Configures development environment
+- Provides fallback systems for missing packages
+
+### Menu System
+Navigate through beautiful terminal menus:
+- **Install and set up dependencies** - One-click setup
+- **Launch ON1Builder** - Start the MEV engine
+- **Configure Settings** - Interactive configuration
+- **View System Status** - Health checks and diagnostics
+- **Manage Configuration Files** - Edit and create configs
+- **View Logs** - Real-time log monitoring
+- **Help & Documentation** - Built-in help system
+
+---
+
+## Getting Started Guide
+
+### Method 1: (Recommended)
 ```bash
+# Enter the Matrix
+python ignition.py
+
+# Follow the prompts:
+# 1. Select "Install and set up dependencies"
+# 2. Let it set up everything automatically
+# 3. Configure your settings
+# 4. Launch ON1Builder!
+```
+
+### Method 2: Manual Setup
+```bash
+# 1. Clone the repository
+git clone https://github.com/john0n1/ON1Builder.git
+cd ON1Builder
+
+# 2. Run setup script
+chmod +x setup_dev.sh
+./setup_dev.sh
+
+# 3. Activate virtual environment (if created)
+source venv/bin/activate  # Linux/Mac
+# or
+venv\Scripts\activate     # Windows
+
+# 4. Install dependencies
+pip install -r requirements.txt
+pip install -e .
+
+# 5. Configure your settings
+cp configs/chains/example_config.yaml configs/chains/my_config.yaml
+# Edit my_config.yaml with your settings
+
+# 6. Set up environment variables
+cp .env.example .env
+# Edit .env with your private keys and RPC URLs
+
+# 7. Launch via ignition (recommended)
+python ignition.py
+
+# OR launch directly
+on1builder run -c configs/chains/my_config.yaml
+```
+
+---
+
+## Configuration
+
+Configuration is handled through:
+- **YAML files** in `configs/chains/`
+- **Environment variables** in `.env` (for secrets)
+- **Interactive setup** via ignition.py
+
+### Quick Config Commands
+```bash
+# Generate template config
 on1builder config init > my_chain.yaml
-```
 
-Validate before boot:
-
-```bash
+# Validate configuration
 on1builder config validate my_chain.yaml
+
+# Or use the interactive system
+python ignition.py
+# → Select "Manage Configuration Files"
 ```
 
 ---
 
-## CLI Usage
+## Development
 
-| Command                                | Purpose                                   |
-| -------------------------------------- | ----------------------------------------- |
-| `on1builder run …`                     | start the full bot (default single chain) |
-| `on1builder run --multi-chain`         | read multiple chains and launch workers   |
-| `on1builder monitor …`                 | run only Market + Txpool monitors         |
-| `on1builder config validate file.yaml` | static YAML sanity-check                  |
+### Requirements
+- **Python ≥ 3.12** 
+- **Poetry** (optional, for advanced dependency management)
+- **Git**
 
-See `on1builder --help` for all flags.
+### Development Setup
+```bash
+# Use ignition for automatic setup
+python ignition.py
+
+# Or manual setup
+poetry install --with dev
+pre-commit install
+pytest -q
+```
+
+### VS Code Integration
+- Pre-configured settings in `.vscode/`
+- Automatic Python environment detection
+- Integrated debugging and testing
 
 ---
 
-## Developer Guide
-
-### 1 · Environment
-
-* **Python ≥ 3.12** (async-friendly).
-* Install extras for lint/test:
-
-  ```bash
-  poetry install --with dev
-  ```
-
-### 2 · Pre-Commit
+## Docker & Monitoring
 
 ```bash
-pre-commit install   # black, isort, flake8, mypy on every commit
-```
-
-### 3 · Tests
-
-```bash
-pytest -q  # async-aware tests live in tests/
-```
-
-### 4 · Docs Live-Reload
-
-```bash
-cd docs
-make livehtml  # → http://127.0.0.1:8000
-```
-
-### 5 · Docker Compose (Node + Prometheus + Grafana)
-
-```bash
+# Start full stack (Grafana + Prometheus + Node)
 docker compose up -d
+
+# Access Grafana dashboard
+# → http://localhost:3000
 ```
-
-Connect Grafana → `http://localhost:3000` (dashboard config shipped at `configs/grafana/`).
-
-### 6 · VS Code
-
-`.vscode/settings.json` already points to Poetry venv, sets `python.analysis.typeCheckingMode` to *strict*.
 
 ---
 
 ## Security & Support
 
-* **Production keys**: always load via `.env`; never commit secrets.
-* Bug / security issue? Email `security@on1.no` *(GPG key in SECURITY.md)*.
-* Join the Discord: [https://discord.gg/on1builder](https://discord.gg/on1builder) – channels #dev and #mev-strategies.
+- **Production keys**: Always use `.env` files; never commit secrets
+- **Bug reports**: Create GitHub issues or email `security@on1.no`
+- **Community**: Join our Discord at [https://discord.gg/on1builder](https://discord.gg/on1builder)
+- **Security issues**: Use GPG key in [SECURITY.md](SECURITY.md)
+
+---
+
+## Contributing
+
+We welcome contributions!
+
+1. Fork the repository
+2. Use `python ignition.py` to set up your development environment
+3. Create a feature branch
+4. Make your changes
+5. Run tests via ignition system
+6. Submit a pull request
 
 ---
 
 ## License
 
-> MIT © 2025 John0n1/ON1Builder – contributions welcome!
-> See [LICENSE](LICENSE) for full text.
+```
+
+MIT © 2025 John0n1/ON1Builder
+See LICENSE for full terms
+```
+
+---
+
+*"There is no spoon... only profitable MEV opportunities."* 🥄
 

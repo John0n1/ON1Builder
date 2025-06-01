@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 """
-ON1Builder - Persistence Module Management
+ON1Builder - Persistence Module
 ===========================
 
-Manages database connections and operations for persisting transaction data
-and monitoring information.
+Manages database connections and operations for persisting transaction data,
+monitoring information, strategy performance metrics, and system state.
+Provides tools for data access, querying, and managing database connections.
+
 ==========================
 License: MIT
 =========================
@@ -17,4 +19,7 @@ see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder
 
 from .db_manager import DatabaseManager, get_db_manager
 
-__all__ = ["DatabaseManager", "get_db_manager"]
+__all__ = [
+    "DatabaseManager", 
+    "get_db_manager"
+]
