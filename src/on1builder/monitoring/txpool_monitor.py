@@ -254,25 +254,28 @@ class TxpoolMonitor:
             # 2. Pending transaction filter (standard Web3 approach)
             # 3. Block polling (fallback/most compatible)
             
+            logger.info("🚀 Starting transaction collection...")
+            
             # First try direct txpool access
             txpool_supported = await self._check_txpool_support()
             
             if txpool_supported:
-                logger.info("Using direct txpool_content API for mempool monitoring")
+                logger.info("📊 Using direct txpool_content API for mempool monitoring")
                 await self._collect_from_txpool()
             else:
                 # Try pending filter next
                 try:
+                    logger.info("🔄 Attempting to use pending transaction filter...")
                     filt = await self.web3.eth.filter("pending")
-                    logger.debug("Using pending-tx filter for mempool monitoring")
+                    logger.info("✅ Using pending-tx filter for mempool monitoring")
                     await self._collect_from_filter(filt)
-                except Exception:
+                except Exception as filter_error:
                     # Fall back to block polling as last resort
-                    filt = None
-                    logger.warning("No pending filters or txpool access—falling back to block polling")
+                    logger.warning(f"❌ Pending filter failed: {filter_error}")
+                    logger.info("📦 Falling back to block polling for transaction monitoring")
                     await self._collect_from_blocks()
         except asyncio.CancelledError:
-            pass
+            logger.info("Transaction collection task cancelled")
         except Exception as e:
             logger.exception(f"Fatal error in _collect_hashes: {e}")
             raise
@@ -284,14 +287,27 @@ class TxpoolMonitor:
             bool: True if txpool is supported, False otherwise
         """
         try:
+            logger.debug("🔍 Testing txpool_content API support...")
             # Attempt to call txpool_content with empty params
             result = await self.web3.manager.coro_request(
                 "txpool_content", []
             )
             # If we get a result with the expected structure, txpool is supported
-            return result is not None and 'result' in result and 'pending' in result['result']
+            is_supported = result is not None and 'result' in result and 'pending' in result['result']
+            
+            if is_supported:
+                pending_count = len(result['result'].get('pending', {}))
+                queued_count = len(result['result'].get('queued', {}))
+                logger.info(f"✅ Txpool API supported! Found {pending_count} pending, {queued_count} queued transactions")
+            else:
+                logger.info("💡 Txpool API not available - will use alternative monitoring methods")
+                logger.debug(f"Response structure: {result}")
+                
+            return is_supported
         except Exception as e:
-            logger.debug(f"txpool_content not supported: {e}")
+            logger.info(f"💡 Txpool API not available: {e}")
+            if "method not found" in str(e).lower():
+                logger.debug("Note: Using a Geth node or node with txpool API support enables more efficient monitoring")
             return False
 
     async def _collect_from_txpool(self) -> None:
@@ -300,23 +316,34 @@ class TxpoolMonitor:
         This is the most direct method to monitor pending transactions,
         but requires a node that supports the txpool_content API.
         """
+        logger.info("Starting txpool collection - monitoring mempool directly")
+        collection_count = 0
+        
         while self._running:
             try:
                 # Get all pending transactions from the txpool
                 pending_txs = await self.get_pending_transactions()
                 
-                # Process each transaction
-                for tx in pending_txs:
-                    if 'hash' in tx and tx['hash']:
-                        tx_hash = tx['hash']
-                        if isinstance(tx_hash, bytes):
-                            tx_hash = tx_hash.hex()
+                if pending_txs:
+                    logger.info(f"🔍 Found {len(pending_txs)} pending transactions in mempool")
+                    
+                    # Process each transaction
+                    for tx in pending_txs:
+                        if 'hash' in tx and tx['hash']:
+                            tx_hash = tx['hash']
+                            if isinstance(tx_hash, bytes):
+                                tx_hash = tx_hash.hex()
+                                
+                            # Store the transaction in our cache
+                            self._tx_cache[tx_hash] = tx
                             
-                        # Store the transaction in our cache
-                        self._tx_cache[tx_hash] = tx
-                        
-                        # Enqueue the hash for analysis
-                        await self._enqueue_hash(tx_hash)
+                            # Enqueue the hash for analysis
+                            await self._enqueue_hash(tx_hash)
+                            collection_count += 1
+                            
+                    logger.info(f"📊 Enqueued {len(pending_txs)} transactions for analysis (total: {collection_count})")
+                else:
+                    logger.debug("No pending transactions found in mempool")
                         
                 # Use an appropriate polling interval
                 poll_interval = self.configuration.get("TXPOOL_POLL_INTERVAL", 2.0)
@@ -357,6 +384,7 @@ class TxpoolMonitor:
             return
         self._processed_hashes.add(tx_hash)
         await self._tx_hash_queue.put(tx_hash)
+        logger.debug(f"📥 Enqueued transaction hash for analysis: {tx_hash[:10]}...")
 
     async def _analysis_dispatcher(self) -> None:
         """Dispatch analysis tasks for incoming hashes."""
@@ -364,7 +392,10 @@ class TxpoolMonitor:
             try:
                 tx_hash = await self._tx_hash_queue.get()
                 await self._semaphore.acquire()
-                asyncio.create_task(self._process_transaction_safe(tx_hash))
+                # Store task reference to avoid fire-and-forget warning
+                task = asyncio.create_task(self._process_transaction_safe(tx_hash))
+                # Add error callback to handle unhandled exceptions
+                task.add_done_callback(lambda t: None if t.exception() is None else logger.error(f"Unhandled error in task: {t.exception()}"))
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -382,16 +413,23 @@ class TxpoolMonitor:
 
     async def _analyse_transaction(self, tx_hash: str) -> None:
         """Fetch, prioritize, and check profitability of a tx."""
+        logger.debug(f"🔍 Analyzing transaction: {tx_hash[:10]}...")
+        
         tx = await self._fetch_transaction(tx_hash)
         if not tx:
+            logger.debug(f"❌ Could not fetch transaction data for {tx_hash[:10]}...")
             return
 
         priority = self._calc_priority(tx)
         await self._tx_analysis_queue.put((priority, tx_hash))
+        logger.debug(f"📊 Transaction {tx_hash[:10]}... queued with priority {priority}")
 
         result = await self._is_profitable(tx_hash, tx)
         if result:
+            logger.info(f"💰 PROFITABLE TRANSACTION FOUND: {tx_hash[:10]}... - Strategy: {result.get('strategy_type', 'unknown')}")
             await self.profitable_transactions.put(result)
+        else:
+            logger.debug(f"📉 Transaction {tx_hash[:10]}... not profitable")
 
     async def _fetch_transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
         """Retrieve tx data, with retries on not-found.
@@ -601,10 +639,6 @@ class TxpoolMonitor:
                 f"{len(self.tx_queue)} queued"
             )
 
-    async def stop_monitoring(self) -> None:
-        """Alias for stop()."""
-        await self.stop()
-
     async def get_pending_transactions(self) -> List[Dict[str, Any]]:
         """Fetch all current pending transactions from the txpool.
         
@@ -617,6 +651,7 @@ class TxpoolMonitor:
         pending_txs = []
         
         try:
+            logger.debug("🔗 Calling txpool_content RPC method...")
             # Call the non-standard RPC method to get txpool content
             txpool_content = await self.web3.manager.coro_request(
                 "txpool_content", []
@@ -625,6 +660,7 @@ class TxpoolMonitor:
             # Extract pending transactions from the result
             if txpool_content and 'result' in txpool_content:
                 pending_data = txpool_content['result'].get('pending', {})
+                logger.debug(f"📊 Txpool response: {len(pending_data)} sender addresses with pending transactions")
                 
                 # Process each pending transaction
                 for sender_address, nonce_dict in pending_data.items():
@@ -656,7 +692,17 @@ class TxpoolMonitor:
                         # Cache the transaction
                         if 'hash' in tx_data:
                             self._tx_cache[tx_data['hash']] = processed_tx
+                            
+                logger.debug(f"✅ Processed {len(pending_txs)} transactions from txpool")
+            else:
+                logger.warning("❌ Txpool response missing 'result' or 'pending' data")
+                logger.debug(f"Txpool response structure: {txpool_content}")
+                        
         except Exception as e:
-            logger.warning(f"Failed to fetch txpool content: {e}")
+            logger.warning(f"❌ Failed to fetch txpool content: {e}")
+            # Log more details about the error
+            if "method not found" in str(e).lower() or "txpool" in str(e).lower():
+                logger.warning("🚨 Node does not support txpool_content method - falling back to filter/polling")
             
+        logger.debug(f"📤 Returning {len(pending_txs)} pending transactions")
         return pending_txs

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import time
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Set
 
@@ -93,11 +92,9 @@ class ChainWorker:
             "transaction_count": 0,
             "total_profit_eth": 0.0,
             "total_gas_spent_eth": 0.0,
-            "requests_per_second": 0.0,
             "health_status": "initializing"
         }
         self._last_metrics_ts = time.time()
-        self._requests = 0
 
     async def initialize(self) -> bool:
         """Initialize Web3, account, configs, DB, cores and monitors."""
@@ -507,11 +504,6 @@ class ChainWorker:
         elapsed = now - self._last_metrics_ts
         self._last_metrics_ts = now
         
-        # Update request rate
-        if elapsed > 0:
-            self.metrics["requests_per_second"] = self._requests / elapsed
-        self._requests = 0
-        
         try:
             # Update block number
             self.metrics["last_block_number"] = await self.web3.eth.block_number
@@ -544,18 +536,6 @@ class ChainWorker:
         logger.debug(f"[{self.chain_name}] Updated metrics: balance={self.metrics['wallet_balance_eth']:.4f} ETH, " + 
                      f"gas={self.metrics['last_gas_price_gwei']:.2f} gwei, " +
                      f"block={self.metrics['last_block_number']}")
-
-    # — Opportunity scanning stub —
-
-    async def _periodic_opportunities(self) -> None:
-        interval = self.chain_cfg.get("OPPORTUNITY_CHECK_INTERVAL", 60)
-        while self.running:
-            try:
-                # placeholder for actual opportunity logic
-                logger.debug(f"[{self.chain_name}] Scanning opportunities…")
-            except Exception as e:
-                logger.error(f"Opportunity scan error: {e}")
-            await asyncio.sleep(interval)
 
     # — Web3 setup & verify —
 

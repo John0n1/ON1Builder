@@ -21,14 +21,13 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import time
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-import joblib
-import pandas as pd
 import yaml
 from cachetools import TTLCache
 from dotenv import load_dotenv
@@ -47,30 +46,19 @@ class Configuration:
         "GRAPH_API_KEY": "",
         "UNISWAP_V2_SUBGRAPH_ID": "",
         "COINGECKO_API_KEY": "",
-        "COINMARKETCAP_API_KEY": "",
-        "CRYPTOCOMPARE_API_KEY": "",
         "MONITORED_TOKENS": [],
         "DEBUG": False,
         "BASE_PATH": str(Path(__file__).resolve().parent.parent.parent.parent),
         "HTTP_ENDPOINT": "https://ethereum-rpc.publicnode.com",
         "WEBSOCKET_ENDPOINT": "wss://ethereum-rpc.publicnode.com",
         "IPC_ENDPOINT": None,
-        "C-CHAIN_HTTP_ENDPOINT": "",
-        "C-CHAIN_WEBSOCKET_ENDPOINT": "",
-        "P-CHAIN_HTTP_ENDPOINT": "",
-        "X-CHAIN_HTTP_ENDPOINT": "",
-        "SUI_HTTP_ENDPOINT": "",
-        "SUI_WEBSOCKET_ENDPOINT": "",
-        "SOLANA_HTTP_ENDPOINT": "",
-        "SOLANA_WEBSOCKET_ENDPOINT": "",
-        "SOLANA_YELLOWSTONE_GRPC_ENDPOINT": "",
         "SAFETYNET_CACHE_TTL": 60,
         "SAFETYNET_GAS_PRICE_TTL": 10,
         "MAX_GAS_PRICE_GWEI": 100,
         "MIN_PROFIT": 0.001,
         "MEMPOOL_RETRY_DELAY": 0.5,
         "MEMPOOL_MAX_RETRIES": 3,
-        "MARKET_CACHE_TTL": 60,  # <- Fixed: no duplicates
+        "MARKET_CACHE_TTL": 60,
         "MEMPOOL_MAX_PARALLEL_TASKS": 10,
         "WALLET_KEY": "<WALLET_KEY>",
         "TRANSACTION_RETRY_COUNT": 3,
@@ -108,9 +96,14 @@ class Configuration:
         self._validate()
 
     def __getattr__(self, name):
+        # Allow properties to be accessed normally
+        if name == 'api_config':
+            if not self._api_config:
+                self._api_config = APIConfig(self)
+            return self._api_config
         if name in self._config:
             return self._config[name]
-        raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
+        raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'. Did you mean: '{name}'?")
 
     def __setattr__(self, name, value):
         if name.startswith("_") or name == "config_path":
@@ -152,6 +145,7 @@ class Configuration:
             logger.error(f"Failed to load config YAML from {path}: {e}")
 
     def _load_from_env(self):
+        # Load known config keys
         for key in self._config:
             env_val = os.getenv(key)
             if env_val:
@@ -172,6 +166,17 @@ class Configuration:
                     logger.debug(f"Loaded {key}=<REDACTED>")
                 else:
                     logger.debug(f"Loaded {key}={self._config[key]}")
+
+        # Load API keys that might not be in defaults
+        api_keys = [
+            "COINGECKO_API_KEY", "COINMARKETCAP_API_KEY", "CRYPTOCOMPARE_API_KEY",
+            "ETHERSCAN_API_KEY", "INFURA_PROJECT_ID", "INFURA_API_KEY"
+        ]
+        for key in api_keys:
+            env_val = os.getenv(key)
+            if env_val:
+                self._config[key] = env_val
+                logger.debug(f"Loaded API key {key}=<REDACTED>")
 
         # WALLET_KEY (hardcode mask)
         if os.getenv("WALLET_KEY"):
@@ -274,8 +279,13 @@ class APIConfig:
         self.token_address_to_symbol: Dict[str, str] = {}
         self.token_symbol_to_address: Dict[str, str] = {}
         self.symbol_to_api_id: Dict[str, str] = {}
+        self.symbol_to_token_name: Dict[str, str] = {}
+        self.token_name_to_symbol: Dict[str, str] = {}
         
-    def get_client_session(self) -> aiohttp.ClientSession:
+        # Load token mappings synchronously on initialization
+        self._load_token_mappings_sync()
+        
+    async def get_client_session(self) -> aiohttp.ClientSession:
         """Returns the existing client session or creates a new one if needed.
         
         This method ensures a shared ClientSession is available for making HTTP requests.
@@ -284,24 +294,10 @@ class APIConfig:
         Returns:
             aiohttp.ClientSession: A shared aiohttp client session
         """
-        # Use the async method but run it in a new event loop if we're not in an async context
+        # Ensure we have a session available
         if self._session is None or self._session.closed:
-            # Since we can't use await here, we need to create a new event loop
-            # to run the _acquire_session coroutine
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(self._acquire_session())
-            finally:
-                loop.close()
+            await self._acquire_session()
         return self._session
-        
-    async def close(self) -> None:
-        """Close the session and release resources.
-        
-        This method decrements the session user count and closes the session 
-        if there are no more active users. It should be called when done with the API.
-        """
-        await self._release_session()
 
     async def initialize(self) -> None:
         for var, attr, default in [
@@ -359,17 +355,25 @@ class APIConfig:
                 rate_limit=50 if self.cfg.get("COINGECKO_API_KEY") else 10,
                 weight=0.8 if self.cfg.get("COINGECKO_API_KEY") else 0.5,
             ),
-            "uniswap_subgraph": Provider(
-                name="uniswap_subgraph",
-                base_url=f"https://gateway.thegraph.com/api/{g_api}/subgraphs/id/{uni_id}",
-                rate_limit=5,
-                weight=0.3,
+            "coinmarketcap": Provider(
+                name="coinmarketcap",
+                base_url="https://pro-api.coinmarketcap.com/v1",
+                price_url="/cryptocurrency/quotes/latest",
+                historical_url="/cryptocurrency/quotes/historical",
+                volume_url="/cryptocurrency/quotes/latest",
+                api_key=self.cfg.get("COINMARKETCAP_API_KEY", ""),
+                rate_limit=333 if self.cfg.get("COINMARKETCAP_API_KEY") else 10,
+                weight=0.6,
             ),
-            "dexscreener": Provider(
-                name="dexscreener",
-                base_url="https://api.dexscreener.com/latest/dex",
-                rate_limit=10,
-                weight=0.3,
+            "cryptocompare": Provider(
+                name="cryptocompare",
+                base_url="https://min-api.cryptocompare.com/data",
+                price_url="/price",
+                historical_url="/v2/histoday",
+                volume_url="/top/totalvolfull",
+                api_key=self.cfg.get("CRYPTOCOMPARE_API_KEY", ""),
+                rate_limit=300 if self.cfg.get("CRYPTOCOMPARE_API_KEY") else 100,
+                weight=0.4,
             ),
             "coinpaprika": Provider(
                 name="coinpaprika",
@@ -380,6 +384,191 @@ class APIConfig:
                 weight=0.3,
             ),
         }
+
+    def _create_api_id_mappings(self) -> None:
+        """Create API-specific token ID mappings for different providers using loaded token data."""
+        
+        # Initialize provider mappings
+        coingecko_mappings = {}
+        coinpaprika_mappings = {}
+        cryptocompare_mappings = {}
+        coinmarketcap_mappings = {}
+        binance_mappings = {}
+        
+        # Use symbol to token name mapping to create provider-specific IDs
+        if hasattr(self, 'symbol_to_token_name') and self.symbol_to_token_name:
+            for symbol, token_name in self.symbol_to_token_name.items():
+                if token_name is None:  # Skip None entries
+                    continue
+                    
+                symbol_upper = symbol.upper()
+                token_lower = token_name.lower()
+                
+                # CoinGecko uses specific API IDs (lowercase, hyphenated)
+                if symbol_upper == 'ETH':
+                    coingecko_id = 'ethereum'
+                elif symbol_upper == 'BTC':
+                    coingecko_id = 'bitcoin'
+                elif symbol_upper == 'USDT':
+                    coingecko_id = 'tether'
+                elif symbol_upper == 'USDC':
+                    coingecko_id = 'usd-coin'
+                elif symbol_upper == 'WETH':
+                    coingecko_id = 'weth'
+                elif symbol_upper == 'WBTC':
+                    coingecko_id = 'wrapped-bitcoin'
+                elif symbol_upper == 'LINK':
+                    coingecko_id = 'chainlink'
+                elif symbol_upper == 'UNI':
+                    coingecko_id = 'uniswap'
+                elif symbol_upper == 'AAVE':
+                    coingecko_id = 'aave'
+                elif symbol_upper == 'DAI':
+                    coingecko_id = 'dai'
+                elif symbol_upper == 'MATIC':
+                    coingecko_id = 'matic-network'
+                elif symbol_upper == 'SHIB':
+                    coingecko_id = 'shiba-inu'
+                elif symbol_upper == 'PEPE':
+                    coingecko_id = 'pepe'
+                elif symbol_upper == 'ARB':
+                    coingecko_id = 'arbitrum'
+                elif symbol_upper == 'stETH':
+                    coingecko_id = 'staked-ether'
+                elif symbol_upper == 'wstETH':
+                    coingecko_id = 'wrapped-steth'
+                else:
+                    # For unknown tokens, try to make a reasonable ID
+                    coingecko_id = token_lower.replace(' ', '-').replace('(', '').replace(')', '')
+                    
+                coingecko_mappings[symbol_upper] = coingecko_id
+                
+                # CoinPaprika uses symbol-name format, but needs correct format
+                if symbol_upper == 'ETH':
+                    paprika_id = 'eth-ethereum'
+                elif symbol_upper == 'BTC':
+                    paprika_id = 'btc-bitcoin'
+                elif symbol_upper == 'USDT':
+                    paprika_id = 'usdt-tether'
+                elif symbol_upper == 'USDC':
+                    paprika_id = 'usdc-usd-coin'
+                elif symbol_upper == 'DAI':
+                    paprika_id = 'dai-dai'
+                elif symbol_upper == 'WETH':
+                    paprika_id = 'weth-weth'
+                elif symbol_upper == 'LINK':
+                    paprika_id = 'link-chainlink'
+                elif symbol_upper == 'UNI':
+                    paprika_id = 'uni-uniswap'
+                elif symbol_upper == 'AAVE':
+                    paprika_id = 'aave-aave'
+                else:
+                    # Fallback to a reasonable format
+                    paprika_id = f"{symbol.lower()}-{token_lower.replace(' ', '-')}"
+                coinpaprika_mappings[symbol_upper] = paprika_id
+                
+                # CryptoCompare uses simple symbols (uppercase)
+                cryptocompare_mappings[symbol_upper] = symbol_upper
+                
+                # CoinMarketCap uses symbol mapping (they have internal IDs, but symbols work for many)
+                coinmarketcap_mappings[symbol_upper] = symbol_upper
+                
+                # Binance uses symbol pairs (most against USDT)
+                if symbol_upper not in ['USDT', 'USDC', 'DAI', 'BUSD']:
+                    binance_mappings[symbol_upper] = f"{symbol_upper}USDT"
+        
+        # Fallback to minimal hardcoded mappings if JSON data not available
+        if not coingecko_mappings:
+            coingecko_mappings = {
+                'ETH': 'ethereum', 'BTC': 'bitcoin', 'USDT': 'tether', 
+                'USDC': 'usd-coin', 'DAI': 'dai', 'WETH': 'weth',
+                'LINK': 'chainlink', 'UNI': 'uniswap', 'AAVE': 'aave'
+            }
+            coinpaprika_mappings = {
+                'ETH': 'eth-ethereum', 'BTC': 'btc-bitcoin', 'USDT': 'usdt-tether',
+                'USDC': 'usdc-usd-coin', 'DAI': 'dai-dai', 'LINK': 'link-chainlink'
+            }
+            cryptocompare_mappings = {
+                'ETH': 'ETH', 'BTC': 'BTC', 'USDT': 'USDT', 'USDC': 'USDC', 'DAI': 'DAI'
+            }
+            coinmarketcap_mappings = {
+                'ETH': 'ETH', 'BTC': 'BTC', 'USDT': 'USDT', 'USDC': 'USDC', 'DAI': 'DAI'
+            }
+            binance_mappings = {
+                'ETH': 'ETHUSDT', 'BTC': 'BTCUSDT', 'LINK': 'LINKUSDT', 'UNI': 'UNIUSDT'
+            }
+        
+        # Always ensure we have the essential tokens, even if missing from JSON
+        essential_tokens = {
+            'ETH': ('ethereum', 'eth-ethereum', 'ETH', 'ETH', 'ETHUSDT'),
+            'BTC': ('bitcoin', 'btc-bitcoin', 'BTC', 'BTC', 'BTCUSDT'),
+        }
+        
+        for symbol, (gecko_id, paprika_id, crypto_id, cmc_id, binance_id) in essential_tokens.items():
+            if symbol not in coingecko_mappings:
+                coingecko_mappings[symbol] = gecko_id
+            if symbol not in coinpaprika_mappings:
+                coinpaprika_mappings[symbol] = paprika_id
+            if symbol not in cryptocompare_mappings:
+                cryptocompare_mappings[symbol] = crypto_id
+            if symbol not in coinmarketcap_mappings:
+                coinmarketcap_mappings[symbol] = cmc_id
+            if symbol not in binance_mappings:
+                binance_mappings[symbol] = binance_id
+        
+        # Store provider-specific mappings
+        self.symbol_to_api_id = {
+            'coingecko': coingecko_mappings,
+            'coinpaprika': coinpaprika_mappings,
+            'cryptocompare': cryptocompare_mappings,
+            'coinmarketcap': coinmarketcap_mappings,
+            'binance': binance_mappings,
+        }
+        
+        logger.debug(f"Created dynamic API ID mappings: CoinGecko({len(coingecko_mappings)}), "
+                    f"CoinPaprika({len(coinpaprika_mappings)}), CryptoCompare({len(cryptocompare_mappings)}), "
+                    f"CoinMarketCap({len(coinmarketcap_mappings)}), Binance({len(binance_mappings)})")
+
+    def _load_token_mappings_sync(self) -> None:
+        """Load token mappings from JSON files synchronously."""
+        import json
+        
+        base_path = os.path.join(self.cfg.BASE_PATH, "resources", "tokens", f"chainid-{getattr(self.cfg, 'chain_id', 1)}")
+        
+        try:
+            # Load address to symbol mapping
+            address_to_symbol_path = os.path.join(base_path, "address2symbol.json")
+            if os.path.exists(address_to_symbol_path):
+                with open(address_to_symbol_path, 'r') as f:
+                    self.token_address_to_symbol = json.load(f)
+                logger.debug(f"Loaded {len(self.token_address_to_symbol)} address->symbol mappings")
+            
+            # Load symbol to address mapping
+            symbol_to_address_path = os.path.join(base_path, "symbol2address.json")
+            if os.path.exists(symbol_to_address_path):
+                with open(symbol_to_address_path, 'r') as f:
+                    self.token_symbol_to_address = json.load(f)
+                logger.debug(f"Loaded {len(self.token_symbol_to_address)} symbol->address mappings")
+            
+            # Load symbol to token name mapping
+            symbol_to_token_path = os.path.join(base_path, "symbol2token.json")
+            if os.path.exists(symbol_to_token_path):
+                with open(symbol_to_token_path, 'r') as f:
+                    self.symbol_to_token_name = json.load(f)
+                logger.debug(f"Loaded {len(self.symbol_to_token_name)} symbol->token mappings")
+            
+            # Load token name to symbol mapping
+            token_to_symbol_path = os.path.join(base_path, "token2symbol.json")
+            if os.path.exists(token_to_symbol_path):
+                with open(token_to_symbol_path, 'r') as f:
+                    self.token_name_to_symbol = json.load(f)
+                logger.debug(f"Loaded {len(self.token_name_to_symbol)} token->symbol mappings")
+            
+            # Create API ID mappings for different providers
+            self._create_api_id_mappings()
+            
+        except Exception as e:
+            logger.error(f"Failed to load token mappings: {e}")
 
     async def _populate_token_maps(self) -> None:
         addresses = await self.cfg._load_json_safe(self.cfg.TOKEN_ADDRESSES, "TOKEN_ADDRESSES") or {}
@@ -437,7 +626,7 @@ class APIConfig:
                 return fallback
             return None
 
-        weighted = sum(p * w for p, w in zip(prices, weights)) / sum(weights)
+        weighted = sum(p * Decimal(str(w)) for p, w in zip(prices, weights)) / Decimal(str(sum(weights)))
         val = Decimal(str(weighted))
         self.price_cache[key] = val
         return val
@@ -466,21 +655,47 @@ class APIConfig:
     ) -> Optional[Decimal]:
         try:
             if prov.name == "binance":
-                symbol = f"{token.replace('W', '')}USDT"
+                # Use API mapping for Binance
+                binance_mappings = self.symbol_to_api_id.get('binance', {})
+                symbol = binance_mappings.get(token, f"{token}USDT")
                 data = await self._request(prov, prov.price_url, params={"symbol": symbol})
                 return Decimal(data["price"]) if data and "price" in data else None
 
             if prov.name == "coingecko":
-                token_id = self.symbol_to_api_id.get(token, token.lower())
+                # Use proper CoinGecko API IDs
+                coingecko_mappings = self.symbol_to_api_id.get('coingecko', {})
+                token_id = coingecko_mappings.get(token, token.lower())
                 params = {"ids": token_id, "vs_currencies": vs}
                 data = await self._request(prov, prov.price_url, params=params)
                 return Decimal(str(data[token_id][vs])) if data and token_id in data else None
 
             if prov.name == "coinpaprika":
-                token_id = self.symbol_to_api_id.get(token, token)
+                # Use proper CoinPaprika ticker IDs
+                coinpaprika_mappings = self.symbol_to_api_id.get('coinpaprika', {})
+                token_id = coinpaprika_mappings.get(token, f"{token.lower()}-{token.lower()}")
                 endpoint = prov.price_url.format(id=token_id)
                 data = await self._request(prov, endpoint)
-                return Decimal(str(data["quotes"][vs.upper()]["price"])) if data else None
+                return Decimal(str(data["quotes"][vs.upper()]["price"])) if data and "quotes" in data and vs.upper() in data["quotes"] else None
+
+            if prov.name == "cryptocompare":
+                # CryptoCompare uses simple symbol mapping
+                cryptocompare_mappings = self.symbol_to_api_id.get('cryptocompare', {})
+                from_symbol = cryptocompare_mappings.get(token, token)
+                params = {"fsym": from_symbol, "tsyms": vs.upper()}
+                data = await self._request(prov, prov.price_url, params=params)
+                return Decimal(str(data[vs.upper()])) if data and vs.upper() in data else None
+
+            if prov.name == "coinmarketcap":
+                # CoinMarketCap uses symbol mapping
+                coinmarketcap_mappings = self.symbol_to_api_id.get('coinmarketcap', {})
+                symbol = coinmarketcap_mappings.get(token, token)
+                params = {"symbol": symbol, "convert": vs.upper()}
+                data = await self._request(prov, prov.price_url, params=params)
+                if data and "data" in data and symbol in data["data"]:
+                    quote_data = data["data"][symbol]["quote"].get(vs.upper())
+                    if quote_data:
+                        return Decimal(str(quote_data["price"]))
+                return None
 
             return None
         except Exception as e:
@@ -514,24 +729,33 @@ class APIConfig:
                     await asyncio.sleep(delay)
         return None
 
-    @classmethod
     async def get_price_history(
-        cls, token: str, vs: str = "usd", days: int = 30
+        self, token: str, vs: str = "usd", days: int = 30
     ) -> Optional[List[Dict[str, Any]]]:
         """Fetch historical price data for a token."""
-        t_norm = cls._norm(token)
+        t_norm = self._norm(token)
         key = f"ph:{t_norm}:{vs}:{days}"
-        if key in cls.price_cache:
-            return cls.price_cache[key]
+        if key in self.price_cache:
+            return self.price_cache[key]
 
         prices = []
-        for prov in cls.providers.values():
+        for prov in self.providers.values():
             if not prov.historical_url:
                 continue
             try:
-                data = await cls._request(
+                # Get the appropriate API ID for the provider
+                if prov.name == "coingecko":
+                    coingecko_mappings = self.symbol_to_api_id.get('coingecko', {})
+                    api_id = coingecko_mappings.get(t_norm, t_norm.lower())
+                elif prov.name == "coinpaprika":
+                    coinpaprika_mappings = self.symbol_to_api_id.get('coinpaprika', {})
+                    api_id = coinpaprika_mappings.get(t_norm, f"{t_norm.lower()}-{t_norm.lower()}")
+                else:
+                    api_id = t_norm.lower()
+                
+                data = await self._request(
                     prov,
-                    prov.historical_url.format(id=cls.symbol_to_api_id.get(t_norm, t_norm.lower())),
+                    prov.historical_url.format(id=api_id),
                     params={"vs_currency": vs, "days": days}
                 )
                 if data and "prices" in data:
@@ -542,7 +766,7 @@ class APIConfig:
         if not prices:
             return None
 
-        cls.price_cache[key] = prices
+        self.price_cache[key] = prices
         return prices
     
     @staticmethod
@@ -551,6 +775,8 @@ class APIConfig:
             return {"x-cg-pro-api-key": prov.api_key}
         if prov.name == "coinmarketcap" and prov.api_key:
             return {"X-CMC_PRO_API_KEY": prov.api_key}
+        if prov.name == "cryptocompare" and prov.api_key:
+            return {"authorization": f"Apikey {prov.api_key}"}
         return {}
 
     def get_token_symbol(self, address: str) -> Optional[str]:
@@ -559,6 +785,143 @@ class APIConfig:
     def get_token_address(self, symbol: str) -> Optional[str]:
         return self.token_symbol_to_address.get(symbol.upper())
 
-    def __repr__(self) -> str:
-        return f"<APIConfig providers=[{', '.join(self.providers)}]>"
+    async def get_market_volatility(self, token: str, hours: int = 24) -> Optional[float]:
+        """Calculate price volatility for a token over the specified time period."""
+        try:
+            # Get recent price history
+            history = await self.get_price_history(token, days=max(1, hours // 24))
+            if not history or len(history) < 2:
+                return None
+            
+            # Extract prices and calculate volatility
+            prices = [float(price[1]) for price in history[-min(hours, len(history)):]]
+            if len(prices) < 2:
+                return None
+            
+            # Calculate standard deviation of price changes
+            price_changes = [
+                (prices[i] - prices[i-1]) / prices[i-1] 
+                for i in range(1, len(prices))
+            ]
+            
+            if not price_changes:
+                return 0.0
+            
+            mean_change = sum(price_changes) / len(price_changes)
+            variance = sum((change - mean_change) ** 2 for change in price_changes) / len(price_changes)
+            volatility = variance ** 0.5
+            
+            logger.debug(f"Calculated volatility for {token}: {volatility:.4f}")
+            return volatility
+            
+        except Exception as e:
+            logger.debug(f"Error calculating volatility for {token}: {e}")
+            return None
+
+    async def get_volume_trend(self, token: str, vs: str = "usd") -> Optional[Dict[str, float]]:
+        """Get volume trend information for a token."""
+        cache_key = f"vol_trend:{self._norm(token)}:{vs}"
+        if cache_key in self.volume_cache:
+            return self.volume_cache[cache_key]
+        
+        try:
+            volumes = []
+            for prov in self.providers.values():
+                if not prov.volume_url:
+                    continue
+                
+                vol_data = await self._get_volume_from_provider(prov, token, vs)
+                if vol_data:
+                    volumes.append(vol_data)
+            
+            if not volumes:
+                return None
+            
+            # Calculate weighted average
+            total_weight = sum(prov.weight for prov in self.providers.values() if prov.volume_url)
+            if total_weight == 0:
+                return None
+            
+            avg_volume = sum(vol * prov.weight for vol, prov in zip(volumes, self.providers.values()) if prov.volume_url) / total_weight
+            
+            trend_data = {
+                "current_volume": avg_volume,
+                "volume_24h": avg_volume,  # Simplified - could be enhanced with historical comparison
+                "trend": 0.0  # Neutral trend, could be enhanced with trend calculation
+            }
+            
+            self.volume_cache[cache_key] = trend_data
+            return trend_data
+            
+        except Exception as e:
+            logger.debug(f"Error getting volume trend for {token}: {e}")
+            return None
+
+    async def _get_volume_from_provider(self, prov: Provider, token: str, vs: str) -> Optional[float]:
+        """Get volume data from a specific provider."""
+        try:
+            if prov.name == "binance":
+                binance_mappings = self.symbol_to_api_id.get('binance', {})
+                symbol = binance_mappings.get(token, f"{token}USDT")
+                data = await self._request(prov, prov.volume_url, params={"symbol": symbol})
+                return float(data["volume"]) if data and "volume" in data else None
+                
+            elif prov.name == "coingecko":
+                coingecko_mappings = self.symbol_to_api_id.get('coingecko', {})
+                token_id = coingecko_mappings.get(token, token.lower())
+                params = {"ids": token_id, "vs_currencies": vs}
+                data = await self._request(prov, "/simple/price", params=params)
+                return float(data[token_id][f"{vs}_24h_vol"]) if data and token_id in data and f"{vs}_24h_vol" in data[token_id] else None
+                
+            elif prov.name == "cryptocompare":
+                # CryptoCompare volume data
+                cryptocompare_mappings = self.symbol_to_api_id.get('cryptocompare', {})
+                from_symbol = cryptocompare_mappings.get(token, token)
+                params = {"fsym": from_symbol, "tsym": vs.upper(), "limit": 1}
+                data = await self._request(prov, "/v2/histoday", params=params)
+                if data and "Data" in data and "Data" in data["Data"] and len(data["Data"]["Data"]) > 0:
+                    return float(data["Data"]["Data"][0]["volumeto"])
+                return None
+                
+            elif prov.name == "coinmarketcap":
+                # CoinMarketCap volume data
+                coinmarketcap_mappings = self.symbol_to_api_id.get('coinmarketcap', {})
+                symbol = coinmarketcap_mappings.get(token, token)
+                params = {"symbol": symbol, "convert": vs.upper()}
+                data = await self._request(prov, prov.volume_url, params=params)
+                if data and "data" in data and symbol in data["data"]:
+                    quote_data = data["data"][symbol]["quote"].get(vs.upper())
+                    if quote_data and "volume_24h" in quote_data:
+                        return float(quote_data["volume_24h"])
+                return None
+                
+            # Binance, CoinGecko, CryptoCompare, and CoinMarketCap provide reliable volume data
+            # CoinPaprika doesn't have direct volume endpoints in their free tier
+            
+            return None
+        except Exception as e:
+            logger.debug(f"Error getting volume from {prov.name}: {e}")
+            return None
+
+    async def get_market_summary(self, tokens: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get comprehensive market summary for multiple tokens."""
+        summary = {}
+        
+        for token in tokens:
+            try:
+                price = await self.get_real_time_price(token)
+                volatility = await self.get_market_volatility(token)
+                volume_data = await self.get_volume_trend(token)
+                
+                summary[token] = {
+                    "price": float(price) if price else None,
+                    "volatility": volatility,
+                    "volume_24h": volume_data.get("volume_24h") if volume_data else None,
+                    "last_updated": time.time()
+                }
+            except Exception as e:
+                logger.debug(f"Error getting market summary for {token}: {e}")
+                summary[token] = {"error": str(e)}
+        
+        return summary
 

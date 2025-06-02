@@ -147,8 +147,11 @@ class DatabaseManager:
             return None
 
         async with self._session_factory() as session:
-            # Try existing
-            existing = await session.get(Transaction, tx_hash)
+            # Try existing - search by tx_hash field, not primary key
+            result = await session.execute(
+                select(Transaction).where(Transaction.tx_hash == tx_hash)
+            )
+            existing = result.scalar_one_or_none()
             if existing:
                 if gas_used is not None:
                     existing.gas_used = gas_used

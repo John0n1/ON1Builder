@@ -501,14 +501,6 @@ class NotificationManager:
         self._client_session = None
 
 
-# Helper for accessing time (used for timestamps)
-def import_time():
-    """Import time module dynamically to avoid circular imports."""
-    import time
-
-    return time
-
-
 # Global singleton notification manager
 _notification_manager: Optional[NotificationManager] = None
 

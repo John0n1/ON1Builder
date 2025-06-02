@@ -518,7 +518,14 @@ class SafetyNet:
     async def estimate_gas(self, tx: Dict[str, Any]) -> int:
         """Estimate gas usage with a safety margin."""
         try:
-            tx_copy = tx.copy()
+            # Handle different transaction object types (dict, AttributeDict, etc.)
+            if hasattr(tx, 'copy'):
+                # Regular dict with copy method
+                tx_copy = tx.copy()
+            else:
+                # AttributeDict or other dict-like object - convert to regular dict
+                tx_copy = dict(tx)
+                
             for key in ("nonce", "gasPrice", "gas", "maxFeePerGas", "maxPriorityFeePerGas"):
                 tx_copy.pop(key, None)
             tx_copy.setdefault("value", 0)

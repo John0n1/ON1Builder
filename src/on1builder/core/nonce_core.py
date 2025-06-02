@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
 
 from eth_utils import to_checksum_address
 from web3 import AsyncWeb3
@@ -259,6 +259,10 @@ class NonceCore:
                     await self.reset_nonce(address)
                     return
 
+            except asyncio.CancelledError:
+                logger.debug(f"Transaction monitoring for {tx_hash} was cancelled")
+                self._tx_tracking[tx_hash]["status"] = "cancelled"
+                return
             except Exception as e:
                 retries += 1
                 if retries >= self._max_retries:
@@ -325,19 +329,19 @@ class NonceCore:
         logger.info("NonceCore closed")
 
     async def stop(self) -> None:
-        """Alias for close()."""
+        """Stop and cleanup NonceCore."""
         await self.close()
 
-    async def refresh_nonce(self, address: Optional[str] = None) -> int:
-        """Alias for `reset_nonce`."""
-        return await self.reset_nonce(address)
-
-    async def sync_nonce_with_chain(self, address: Optional[str] = None) -> int:
-        """Synchronize local cache with on-chain nonce (alias for reset)."""
-        logger.info("Synchronizing nonce with chain")
-        return await self.reset_nonce(address)
-
-    async def reset(self, address: Optional[str] = None) -> int:
-        """Alias for `reset_nonce` to maintain compatibility."""
-        logger.info("Resetting nonce tracking")
-        return await self.reset_nonce(address)
+    async def reset_nonce(self, address: Optional[str] = None) -> int:
+        """Reset cached nonce by fetching fresh value from chain."""
+        async with self._nonce_lock:
+            checksum = to_checksum_address(address or self.config.WALLET_ADDRESS)
+            logger.debug(f"Resetting nonce for {checksum}")
+            
+            # Fetch fresh nonce from chain
+            fresh_nonce = await self.get_onchain_nonce(checksum)
+            self._nonces[checksum] = fresh_nonce
+            self._last_refresh[checksum] = time.time()
+            
+            logger.info(f"Nonce reset for {checksum}: {fresh_nonce}")
+            return fresh_nonce

@@ -11,9 +11,9 @@ License: MIT
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -187,15 +187,10 @@ class ABIRegistry:
 
         loaded, failed = 0, 0
         logger.info(f"Loading ABIs from {self.abi_path}")
-    def list_available_abis(self) -> List[str]:
-        """
-        Return a list of ABI names currently loaded in the registry.
-        """
-        return list(self.abis.keys())
         
         # Files to exclude from ABI loading (non-ABI JSON files)
         excluded_files = {
-            "strategy_weights.json",
+            "resources/ml_data/strategy_weights.json",
             "token_list.json",
             "config.json",
             "metadata.json"
@@ -266,6 +261,12 @@ class ABIRegistry:
             signature = f"{name}({calldata})"
             sigs[name] = signature
         return sigs
+
+    def list_available_abis(self) -> List[str]:
+        """
+        Return a list of ABI names currently loaded in the registry.
+        """
+        return list(self.abis.keys())
 
     def get_abi(self, name: str) -> Optional[List[Dict[str, Any]]]:
         """

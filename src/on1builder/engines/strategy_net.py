@@ -51,18 +51,19 @@ class StrategyPerformanceMetrics:
 class StrategyConfiguration:
     """Tunable hyper-parameters for learning."""
 
-    decay_factor: float = 0.95
-    base_learning_rate: float = 0.01
-    exploration_rate: float = 0.10
-    min_weight: float = 0.10
-    max_weight: float = 10.0
+    def __init__(self, config: Configuration):
+        # Load from config or use defaults
+        self.decay_factor: float = config.get("STRATEGY_DECAY_FACTOR", 0.95)
+        self.base_learning_rate: float = config.get("STRATEGY_LEARNING_RATE", 0.01)
+        self.exploration_rate: float = config.get("STRATEGY_EXPLORATION_RATE", 0.10)
+        self.min_weight: float = config.get("STRATEGY_MIN_WEIGHT", 0.10)
+        self.max_weight: float = config.get("STRATEGY_MAX_WEIGHT", 10.0)
+        self.market_weight: float = config.get("STRATEGY_MARKET_WEIGHT", 0.3)  # Weight for market conditions
+        self.gas_weight: float = config.get("STRATEGY_GAS_WEIGHT", 0.2)  # Weight for gas conditions
 
 
 class StrategyNet:
     """Chooses & executes the best strategy via lightweight reinforcement learning."""
-
-    _WEIGHT_FILE = Path("strategy_weights.json")
-    _SAVE_EVERY = 25  # save to disk every N updates
 
     def __init__(
         self,
@@ -80,6 +81,12 @@ class StrategyNet:
         self.market_monitor = market_monitor
         self.api_config = config.api_config
         self.main_core = main_core  # Store reference to MainCore
+
+        # Configurable weight file path
+        weights_dir = Path(config.get("STRATEGY_WEIGHTS_DIR", "."))
+        weights_dir.mkdir(exist_ok=True)
+        self._WEIGHT_FILE = weights_dir / "resources/ml_data/strategy_weights.json"
+        self._SAVE_EVERY = config.get("STRATEGY_SAVE_INTERVAL", 25)  # configurable save interval
 
         # Set up access to shared components if MainCore is provided
         self.db_manager = None
@@ -109,7 +116,7 @@ class StrategyNet:
             for stype, funcs in self._registry.items()
         }
 
-        self.learning_cfg = StrategyConfiguration()
+        self.learning_cfg = StrategyConfiguration(config)
         self._update_counter: int = 0
         self._last_saved_weights = ""  # Initialize to empty string
 
@@ -188,13 +195,30 @@ class StrategyNet:
         strategies: List[Callable[[Dict[str, Any]], asyncio.Future]],
         strategy_type: str,
     ) -> Callable[[Dict[str, Any]], asyncio.Future]:
-        """ε-greedy selection over softmaxed weights."""
+        """ε-greedy selection over softmaxed weights with market condition adjustments."""
         if random.random() < self.learning_cfg.exploration_rate:
             choice = random.choice(strategies)
             logger.debug(f"Exploration chose {choice.__name__} for {strategy_type}")
             return choice
 
-        w = self.weights[strategy_type]
+        # Get base weights
+        w = self.weights[strategy_type].copy()
+        
+        # Adjust weights based on market conditions
+        try:
+            market_adjustment = await self._get_market_condition_adjustment(strategy_type)
+            gas_adjustment = await self._get_gas_condition_adjustment(strategy_type)
+            
+            # Apply adjustments with configurable weights
+            w = w * (1.0 + 
+                    self.learning_cfg.market_weight * market_adjustment +
+                    self.learning_cfg.gas_weight * gas_adjustment)
+            
+        except Exception as e:
+            logger.debug(f"Error applying market adjustments: {e}")
+            # Continue with base weights if adjustment fails
+
+        # Softmax selection
         exp_w = np.exp(w - w.max())
         probs = exp_w / exp_w.sum()
         idx = np.random.choice(len(strategies), p=probs)
@@ -242,10 +266,47 @@ class StrategyNet:
             self._save_weights()
 
     def _calc_reward(self, success: bool, profit: Decimal, exec_time: float) -> float:
-        """Compute reward: +profit if success, −0.05 if fail, −0.01 * time always."""
-        reward = float(profit) if success else -0.05
-        reward -= 0.01 * exec_time
-        return reward
+        """Compute reward: profit-based with time and success penalties/bonuses.
+        
+        Enhanced reward function that considers:
+        - Profit magnitude (primary factor)
+        - Execution time penalty
+        - Success/failure bonus/penalty
+        - Diminishing returns for very high profits
+        """
+        base_reward = 0.0
+        
+        if success:
+            # Profit-based reward with diminishing returns
+            profit_float = float(profit)
+            if profit_float > 0:
+                # Use log scale for large profits to prevent extreme rewards
+                base_reward = min(profit_float, 2.0 * np.log(profit_float + 1.0))
+            else:
+                # Small penalty for zero profit success
+                base_reward = -0.01
+            
+            # Success bonus
+            base_reward += 0.05
+        else:
+            # Failure penalty scaled by expected profit potential
+            base_reward = -0.10
+        
+        # Time penalty (encourage faster execution)
+        time_penalty = 0.01 * min(exec_time, 30.0)  # Cap time penalty at 30 seconds
+        
+        # Gas efficiency bonus/penalty (if available)
+        gas_penalty = 0.0
+        try:
+            if hasattr(self.txc, 'last_gas_used') and self.txc.last_gas_used:
+                # Normalize gas usage and apply small penalty for high gas
+                normalized_gas = min(1.0, self.txc.last_gas_used / 500_000)
+                gas_penalty = 0.02 * normalized_gas
+        except Exception:
+            pass  # Ignore gas penalty if not available
+        
+        total_reward = base_reward - time_penalty - gas_penalty
+        return float(np.clip(total_reward, -1.0, 5.0))  # Reasonable reward bounds
 
     def _strategy_index(self, stype: str, name: str) -> int:
         """Find index of a strategy by function name."""
@@ -271,3 +332,127 @@ class StrategyNet:
         except Exception as e:
             logger.error(f"StrategyNet health check failed: {e}")
             return False
+
+    async def _get_market_condition_adjustment(self, strategy_type: str) -> float:
+        """Calculate market condition adjustment factor for strategy weights.
+        
+        Returns adjustment factor (-1.0 to 1.0) based on current market conditions.
+        Positive values favor the strategy, negative values discourage it.
+        """
+        try:
+            # Get current market data
+            if not self.market_monitor or not hasattr(self.market_monitor, 'get_market_state'):
+                return 0.0
+            
+            market_state = await self.market_monitor.get_market_state()
+            if not market_state:
+                return 0.0
+            
+            volatility = market_state.get('volatility', 0.0)
+            volume = market_state.get('volume', 0.0)
+            trend = market_state.get('trend', 0.0)  # -1 to 1, bearish to bullish
+            
+            # Strategy-specific market condition preferences
+            if strategy_type == "front_run":
+                # Front-running works better in high volatility, moderate volume
+                return min(1.0, volatility * 2.0 - 0.5 + volume * 0.3)
+            elif strategy_type == "sandwich_attack":
+                # Sandwich attacks work better in high volume, moderate volatility
+                return min(1.0, volume * 1.5 + volatility * 0.5 - 0.3)
+            elif strategy_type == "back_run":
+                # Back-running works well in trending markets
+                return min(1.0, abs(trend) * 1.2 + volatility * 0.3)
+            else:
+                # Default: slight preference for stable conditions
+                return max(-0.5, min(0.5, 0.5 - volatility))
+                
+        except Exception as e:
+            logger.debug(f"Error calculating market adjustment: {e}")
+            return 0.0
+
+    async def _get_gas_condition_adjustment(self, strategy_type: str) -> float:
+        """Calculate gas condition adjustment factor for strategy weights.
+        
+        Returns adjustment factor (-1.0 to 1.0) based on current gas conditions.
+        """
+        try:
+            # Get current gas price from Web3
+            current_gas = await self.web3.eth.gas_price
+            current_gas_gwei = float(current_gas) / 1e9
+            
+            # Define gas thresholds
+            low_gas_threshold = 20.0  # gwei
+            high_gas_threshold = 100.0  # gwei
+            
+            # Normalize gas price to 0-1 scale
+            gas_factor = min(1.0, max(0.0, (current_gas_gwei - low_gas_threshold) / 
+                                        (high_gas_threshold - low_gas_threshold)))
+            
+            # Strategy-specific gas preferences
+            if strategy_type in ["front_run", "sandwich_attack"]:
+                # These strategies are sensitive to gas costs, prefer low gas
+                return 1.0 - gas_factor * 1.5  # Strong penalty for high gas
+            elif strategy_type == "back_run":
+                # Back-running is less time-sensitive, moderate gas preference
+                return 0.5 - gas_factor * 0.8
+            else:
+                # Default: slight preference for lower gas
+                return 0.2 - gas_factor * 0.5
+                
+        except Exception as e:
+            logger.debug(f"Error calculating gas adjustment: {e}")
+            return 0.0
+
+    def get_strategy_performance(self) -> Dict[str, Dict[str, Any]]:
+        """Get comprehensive performance metrics for all strategies."""
+        performance = {}
+        
+        for strategy_type, metrics in self.metrics.items():
+            weights = self.weights[strategy_type]
+            strategies = self.get_strategies(strategy_type)
+            
+            strategy_details = []
+            for i, strategy_func in enumerate(strategies):
+                strategy_details.append({
+                    "name": strategy_func.__name__,
+                    "weight": float(weights[i]) if i < len(weights) else 1.0,
+                    "selection_probability": float(
+                        np.exp(weights[i] - weights.max()) / 
+                        np.exp(weights - weights.max()).sum()
+                    ) if len(weights) > i else 0.0
+                })
+            
+            performance[strategy_type] = {
+                "total_executions": metrics.total_executions,
+                "successes": metrics.successes,
+                "failures": metrics.failures,
+                "success_rate": metrics.success_rate,
+                "total_profit": float(metrics.profit),
+                "avg_execution_time": metrics.avg_execution_time,
+                "strategies": strategy_details,
+                "exploration_rate": self.learning_cfg.exploration_rate
+            }
+        
+        return performance
+
+    async def reset_learning_state(self) -> None:
+        """Reset all learning weights and metrics (useful for testing or recalibration)."""
+        logger.warning("Resetting StrategyNet learning state")
+        
+        # Reset weights to uniform
+        for stype in self.weights:
+            self.weights[stype] = np.ones(len(self.get_strategies(stype)), dtype=float)
+        
+        # Reset metrics
+        for metrics in self.metrics.values():
+            metrics.successes = 0
+            metrics.failures = 0
+            metrics.profit = Decimal("0")
+            metrics.total_executions = 0
+            metrics.avg_execution_time = 0.0
+        
+        self._update_counter = 0
+        
+        # Save reset state
+        self._save_weights()
+        logger.info("StrategyNet learning state reset complete")

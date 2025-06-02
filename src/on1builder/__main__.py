@@ -316,8 +316,10 @@ def status_command(
             logger.info("Configuration file syntax is valid")
             
             # Display some basic config info
-            logger.info(f"Chain ID: {cfg.chain_id}")
-            logger.info(f"Web3 Provider: {cfg.web3_provider}")
+            logger.info(f"HTTP Endpoint: {cfg.HTTP_ENDPOINT}")
+            logger.info(f"WebSocket Endpoint: {cfg.WEBSOCKET_ENDPOINT}")
+            logger.info(f"Min Profit: {cfg.MIN_PROFIT}")
+            logger.info(f"Max Gas Price: {cfg.MAX_GAS_PRICE_GWEI} Gwei")
         except Exception as e:
             logger.error(f"Configuration file has errors: {e}")
     else:
@@ -342,14 +344,70 @@ def status_command(
     except Exception as e:
         logger.error(f"ABI Registry error: {e}")
     
-    # Strategy listing not implemented in CLI status
-    logger.debug("Strategy listing not available in status command")
+    # Strategy listing 
+    try:
+        logger.info("=" * 40)
+        logger.info("Available Strategies")
+        logger.info("=" * 40)
+        
+        # Get strategy information from StrategyNet registry
+        strategies = {
+            "eth_transaction": {
+                "name": "ETH Transaction",
+                "description": "Basic Ethereum transaction handling",
+                "methods": ["handle_eth_transaction"]
+            },
+            "front_run": {
+                "name": "Front Run",
+                "description": "Front-running strategy for MEV opportunities",
+                "methods": ["front_run"]
+            },
+            "back_run": {
+                "name": "Back Run", 
+                "description": "Back-running strategy for transaction extraction",
+                "methods": ["back_run"]
+            },
+            "sandwich_attack": {
+                "name": "Sandwich Attack",
+                "description": "Sandwich attack strategy for DEX transactions",
+                "methods": ["execute_sandwich_attack"]
+            }
+        }
+        
+        for strategy_type, strategy_info in strategies.items():
+            logger.info(f"📋 {strategy_info['name']} ({strategy_type})")
+            logger.info(f"   Description: {strategy_info['description']}")
+            logger.info(f"   Methods: {', '.join(strategy_info['methods'])}")
+            
+            # Try to get performance metrics if available
+            try:
+                # Check if strategy weights file exists
+                from pathlib import Path
+                weights_file = Path("resources/ml_data/strategy_weights.json")
+                if weights_file.exists():
+                    import json
+                    with open(weights_file, 'r') as f:
+                        weights_data = json.load(f)
+                        if strategy_type in weights_data:
+                            logger.info(f"   Status: ✅ Configured (weights loaded)")
+                        else:
+                            logger.info(f"   Status: ⚠️  Default weights")
+                else:
+                    logger.info(f"   Status: 🆕 Not yet trained")
+            except Exception as e:
+                logger.debug(f"Could not load strategy metrics: {e}")
+                logger.info(f"   Status: ❓ Unknown")
+            logger.info("")
+            
+        logger.info(f"Total strategies available: {len(strategies)}")
+        
+    except Exception as e:
+        logger.error(f"Error listing strategies: {e}")
+        logger.debug("Strategy listing failed - StrategyNet may not be properly configured")
     
     logger.info("=" * 80)
     logger.info("Status check complete")
     logger.info("=" * 80)
-
-
 def main():
     """
     Main entry point when executed directly from the command line.

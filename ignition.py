@@ -1040,7 +1040,7 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
             try:
                 rows, cols = os.popen('stty size', 'r').read().split()
                 rows, cols = int(rows), int(cols)
-            except:
+            except (ValueError, OSError, AttributeError):
                 pass
             
             # Initialize falling streams

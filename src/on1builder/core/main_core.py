@@ -41,7 +41,7 @@ from on1builder.utils.logger import setup_logging
 from on1builder.utils.strategyexecutionerror import StrategyExecutionError
 
 
-logger = setup_logging(__name__, level="DEBUG", log_dir="none")
+logger = setup_logging(__name__, level="DEBUG", log_dir="logs")
 
 _POA_CHAINS: set[int] = {99, 100, 77, 7766, 56, 11155111}
 
@@ -106,10 +106,16 @@ class MainCore:
                     web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
                     logger.info(f"Applied PoA middleware for chain ID {chain_id}")
 
-                if hasattr(web3.is_connected, "__await__"):
-                    connected = await web3.is_connected()
-                else:
-                    connected = web3.is_connected()
+                # Always use async version for consistency
+                try:
+                    if hasattr(web3.is_connected, "__await__"):
+                        connected = await web3.is_connected()
+                    else:
+                        # Wrap sync call in async context
+                        connected = web3.is_connected()
+                except Exception as e:
+                    logger.warning(f"Failed to check Web3 connection: {e}")
+                    connected = False
 
                 if connected:
                     self.web3 = web3
@@ -131,11 +137,21 @@ class MainCore:
         self._running_evt.set()
         self._bg = []
 
+        logger.info("🚀 ON1Builder MainCore is now RUNNING!")
+        logger.info("📊 Starting background monitoring tasks...")
+
         if "txpool_monitor" in self.components:
             self._bg.append(asyncio.create_task(self.components["txpool_monitor"].start_monitoring(), name="MM_run"))
+            logger.info("✅ TxpoolMonitor task started")
 
         self._bg.append(asyncio.create_task(self._tx_processor(), name="TX_proc"))
+        logger.info("✅ Transaction processor task started")
+        
         self._bg.append(asyncio.create_task(self._heartbeat(), name="Heartbeat"))
+        logger.info("✅ Heartbeat task started")
+
+        logger.info("🔄 All background tasks running - ON1Builder is actively monitoring...")
+        logger.info("⏹️  Press Ctrl+C to stop the application")
 
         try:
             await asyncio.shield(self._stop_evt.wait())
@@ -274,10 +290,10 @@ class MainCore:
                 abi_path = base_path  # Fallback to base path
             
             # Handle non-ABI JSON files that might cause issues
-            strategy_weights_path = Path("strategy_weights.json")
+            strategy_weights_path = Path("resources/ml_data/strategy_weights.json")
             if strategy_weights_path.exists():
                 # Temporarily rename the file to prevent loading it as an ABI
-                temp_path = Path("strategy_weights.json.bak")
+                temp_path = Path("resources/ml_data/strategy_weights.json.bak")
                 strategy_weights_path.rename(temp_path)
                 
                 # Initialize with specific ABI path
@@ -481,12 +497,14 @@ class MainCore:
         return strategy_net
 
     async def _heartbeat(self) -> None:
-        interval = getattr(self.cfg, "HEARTBEAT_INTERVAL", 60)
+        interval = getattr(self.cfg, "HEARTBEAT_INTERVAL", 30)  # Reduced from 60 to 30 seconds
         memory_report_interval = getattr(self.cfg, "MEMORY_REPORT_INTERVAL", 300)
         health_check_interval = getattr(self.cfg, "HEALTH_CHECK_INTERVAL", 10)
 
         last_memory_report = 0
         last_health_check = 0
+        
+        logger.info(f"Heartbeat started - interval: {interval}s, health checks: {health_check_interval}s")
 
         while not self._stop_evt.is_set():
             try:
@@ -499,7 +517,7 @@ class MainCore:
                     await self._report_memory_usage()
                     last_memory_report = current_time
 
-                logger.debug("MainCore heartbeat - System operational")
+                logger.info("💓 MainCore heartbeat - System operational and monitoring...")
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 logger.info("Heartbeat task cancelled")
@@ -510,10 +528,65 @@ class MainCore:
 
     async def _tx_processor(self) -> None:
         interval = getattr(self.cfg, "TX_PROCESSOR_INTERVAL", 5)
+        logger.info(f"Transaction processor started with {interval}s interval")
+        
         while not self._stop_evt.is_set():
             try:
-                logger.debug("Transaction processor checking for new transactions")
+                # Check if we have the required components
+                txpool_monitor = self.components.get("txpool_monitor")
+                strategy_net = self.components.get("strategy_net")
+                
+                if not txpool_monitor or not strategy_net:
+                    logger.warning("Missing required components for transaction processing")
+                    await asyncio.sleep(interval)
+                    continue
+                
+                # Process any profitable transactions found by TxpoolMonitor
+                processed_count = 0
+                try:
+                    # Check for profitable transactions (non-blocking)
+                    while not txpool_monitor.profitable_transactions.empty():
+                        try:
+                            profitable_tx = await asyncio.wait_for(
+                                txpool_monitor.profitable_transactions.get(), 
+                                timeout=0.1
+                            )
+                            
+                            if profitable_tx:
+                                logger.info(f"💰 Found profitable transaction: {profitable_tx['tx_hash'][:10]}...")
+                                logger.info(f"📊 Strategy type: {profitable_tx.get('strategy_type', 'unknown')}")
+                                
+                                # Execute the strategy
+                                success = await strategy_net.execute_best_strategy(
+                                    profitable_tx['tx'], 
+                                    profitable_tx.get('strategy_type', 'front_run')
+                                )
+                                
+                                if success:
+                                    logger.info(f"✅ Successfully executed strategy for {profitable_tx['tx_hash'][:10]}...")
+                                    processed_count += 1
+                                else:
+                                    logger.warning(f"❌ Failed to execute strategy for {profitable_tx['tx_hash'][:10]}...")
+                                    
+                                # Mark as done
+                                txpool_monitor.profitable_transactions.task_done()
+                                
+                        except asyncio.TimeoutError:
+                            # No more transactions available
+                            break
+                        except Exception as e:
+                            logger.error(f"Error processing profitable transaction: {e}")
+                            
+                except Exception as e:
+                    logger.debug(f"No profitable transactions in queue: {e}")
+                
+                if processed_count > 0:
+                    logger.info(f"📈 Processed {processed_count} profitable transactions this cycle")
+                else:
+                    logger.debug("Transaction processor checking for new transactions... (no profitable txs found)")
+                
                 await asyncio.sleep(interval)
+                
             except asyncio.CancelledError:
                 logger.info("Transaction processor task cancelled")
                 break

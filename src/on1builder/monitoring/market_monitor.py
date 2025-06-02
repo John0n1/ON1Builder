@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import random
 import time
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Union
@@ -265,6 +264,9 @@ class MarketMonitor:
                     tasks.append(self.get_token_volume(token))
                 # fire off all at once
                 await asyncio.gather(*tasks)
+            except asyncio.CancelledError:
+                logger.debug("Market data update loop was cancelled")
+                break
             except Exception as e:
                 logger.error(f"Error in market data update loop: {e}")
             await asyncio.sleep(interval)
