@@ -1,8 +1,8 @@
 # ON1Builder
 
 [![PyPI version](https://img.shields.io/pypi/v/on1builder.svg?color=green&logo=pypi&logoColor=white&style=flat)](https://pypi.org/project/on1builder/)
-[![license](https://img.shields.io/badge/License-MIT-green.svg?logo=github)](LICENSE)
-[![python](https://img.shields.io/badge/Python-3.12--14%2B-green.svg?logo=python&logoColor=green&style=flat)](pyproject.toml)
+[![license](https://img.shields.io/badge/License-MIT-blue.svg?logo=github)](LICENSE)
+[![python](https://img.shields.io/badge/Python-3.12--14%2B-green.svg?logo=python&logoColor=cyan&style=flat)](pyproject.toml)
 
 
 > **Multi-Chain MEV Transaction Execution Framework** 
@@ -16,26 +16,27 @@
 
 The **easiest way** to enter ON1Builder Framework is through our interactive ignition system:
 
+### 1. Clone and enter the ignition system
 ```bash
-# 1. Clone and enter the ignition system
 git clone https://github.com/john0n1/ON1Builder.git
 cd ON1Builder
 python ignition.py
-# 2. Follow the prompts:
-#    - Select "Install and set up dependencies"
+```
+### 2. Follow the prompts:
+- Select "Install and set up dependencies"
 
 ### Alternative (Traditional CLI)
 
 If you prefer the traditional approach:
 
+### 1. Setup environment
 ```bash
-# 1. Setup environment
 ./setup_dev.sh
-
-# 2. Run directly
-on1builder run -c configs/chains/config.yaml --dry-run
 ```
-
+### 2. Run directly
+```bash
+on1builder run --env .env 
+```
 ---
 
 ## What Makes ON1Builder Special
