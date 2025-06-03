@@ -17,17 +17,3 @@ updates:
       python-dependencies:
         patterns:
           - "*"
-
-  # GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    target-branch: "master"
-    reviewers:
-      - "John0n1"
-    assignees:
-      - "John0n1"
-    labels:
-      - "dependencies"
-      - "github-actions"
