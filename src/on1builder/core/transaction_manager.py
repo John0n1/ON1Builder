@@ -68,7 +68,7 @@ class TransactionManager:
         self.account = account
         self.address = account.address
         self.configuration = configuration
-        self.external_api_manager = external_api_manager
+        self.external_api_manager = external_api_manager or getattr(configuration, 'api', None)
         self.market_monitor = market_monitor
         self.txpool_monitor = txpool_monitor
         self.nonce_manager = nonce_manager
