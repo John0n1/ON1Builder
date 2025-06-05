@@ -84,7 +84,7 @@ def validate_command(
         # Validate main configuration structure
         if multi_chain:
             # Multi-chain validation
-            chains = config("chains", [])
+            chains = config.get("chains", [])
             if not chains:
                 errors.append("Multi-chain config must have 'chains' section")
 
