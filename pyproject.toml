@@ -1,6 +1,6 @@
 [project]
 name = "on1builder"
-version = "2.1.1"
+version = "2.1.2"
 description = "Multi-chain blockchain transaction execution framework"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -8,43 +8,73 @@ authors = [{ name = "ON1Builder Team", email = "john@on1.no" }]
 keywords = ["mev", "blockchain", "ethereum", "async", "mempool"]
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "aiohttp>=3.12.1",
-    "aiosqlite>=0.19.0",
-    "attrs>=25.3.0",
-    "cachetools>=5.3.0",
-    "eth-account>=0.13.7",
-    "eth-hash>=0.5.2",
-    "eth-keyfile>=0.7.0",
-    "eth-keys>=0.4.0",
-    "eth-rlp>=0.3.0",
-    "eth-typing>=3.5.0",
-    "eth-utils>=5.3.0",
-    "eth_abi>=4.2.1",
-    "joblib>=1.3.2",
-    "pandas>=2.1.0",
-    "pydantic>=2.11.5",
-    "psutil>=7.0.0",
-    "python-dotenv>=1.1.0",
-    "sqlalchemy>=2.0.41",
-    "web3>=7.12.0",
-    "typer>=0.16.0",
-    "pyyaml>=6.0.0",
-    "questionary>=1.10.0",
+  "aiohappyeyeballs>=2.6.1",
+  "aiohttp>=3.12.9",
+  "aiosignal>=1.3.2",
+  "aiosqlite>=0.19.0",
+  "annotated-types>=0.7.0",
+  "anyio>=4.9.0",
+  "attrs>=25.3.0",
+  "bitarray>=3.4.2",
+  "cachetools>=6.0.0",
+  "certifi>=2025.4.26",
+  "cffi>=1.17.1",
+  "charset-normalizer>=3.4.2",
+  "ckzg",
+  "click>=8.2.1",
+  "cryptography>=45.0.3",
+  "cytoolz>=1.0.1",
+  "eth-account>=0.13.7",
+  "eth-hash>=0.7.1",
+  "eth-keyfile>=0.8.1",
+  "eth-keys>=0.7.0",
+  "eth-rlp>=2.2.0",
+  "eth-typing>=5.2.1",
+  "eth-utils>=5.3.0",
+  "eth_abi>=5.2.0",
+  "hexbytes>=1.3.1",
+  "httpcore>=1.0.9",
+  "httpx>=0.28.1",
+  "idna>=3.10",
+  "joblib>=1.3.2",
+  "numpy>=2.2.6",
+  "pandas>=2.1.0",
+  "parsimonious>=0.10.0",
+  "psutil>=7.0.0",
+  "pycryptodome>=3.23.0",
+  "pydantic>=2.11.5",
+  "pydantic_core>=2.33.2",
+  "python-dotenv>=1.1.0",
+  "pyunormalize>=16.0.0",
+  "pyyaml>=6.0.2",
+  "questionary>=2.1.0",
+  "regex>=2024.11.6",
+  "requests>=2.32.3",
+  "rich>=14.0.0",
+  "rlp>=4.1.0",
+  "sqlalchemy>=2.0.41",
+  "toolz>=1.0.0",
+  "typer>=0.16.0",
+  "typing_extensions>=4.14.0",
+  "urllib3>=2.4.0",
+  "web3>=7.12.0",
+  "websockets>=15.0.1"
 ]
+dynamic = ["readme", "requires-python"]
+
 
 [project.optional-dependencies]
 dev = [
-    "black>=23.7.0",
-    "isort>=5.12.0",
-    "mypy>=1.10.0",
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.22.0",
-    "pytest-cov>=4.1.0",
-    "flake8>=6.1.0",
-    "bandit>=1.7.4",
-    "safety>=2.4.0",
+  "black>=23.7.0",
+  "isort>=5.12.0",
+  "mypy>=1.10.0",
+  "pytest>=8.3.5",
+  "pytest-asyncio>=0.22.0",
+  "pytest-cov>=4.1.0",
+  "flake8>=6.1.0",
+  "bandit>=1.7.4",
+  "safety>=2.4.0"
 ]
-
 
 [project.urls]
 Homepage      = "https://example.com"
@@ -59,37 +89,69 @@ include = [
   "configs/**/*.yaml",
   "resources/**/*",
   ".env.example",
-  "requirements.txt",
   "setup.py",
   "setup_dev.sh",
 ]
 
 [tool.poetry.dependencies]
 python        = ">=3.12,<3.14"
-aiohttp       = ">=3.12.1"
+aiohappyeyeballs = ">=2.6.1"
+aiohttp       = ">=3.12.9"
+aiosignal     = ">=1.3.2"
+aiosqlite     = ">=0.19.0"
+annotated-types = ">=0.7.0"
+anyio         = ">=4.9.0"
 attrs         = ">=25.3.0"
+bitarray      = ">=3.4.2"
+cachetools    = ">=6.0.0"
+certifi       = ">=2025.4.26"
+cffi          = ">=1.17.1"
+charset-normalizer = ">=3.4.2"
+ckzg          = "*"
+click         = ">=8.2.1"
+cryptography  = ">=45.0.3"
+cytoolz       = ">=1.0.1"
 eth-account   = ">=0.13.7"
-eth-hash      = ">=0.5.2"
-eth-keyfile   = ">=0.7.0"
-eth-keys      = ">=0.4.0"
-eth-rlp       = ">=0.3.0"
-eth-typing    = ">=3.5.0"
+eth-hash      = ">=0.7.1"
+eth-keyfile   = ">=0.8.1"
+eth-keys      = ">=0.7.0"
+eth-rlp       = ">=2.2.0"
+eth-typing    = ">=5.2.1"
 eth-utils     = ">=5.3.0"
-eth_abi       = ">=4.2.1"
-pydantic      = ">=2.11.5"
+eth_abi       = ">=5.2.0"
+hexbytes      = ">=1.3.1"
+httpcore      = ">=1.0.9"
+httpx         = ">=0.28.1"
+idna          = ">=3.10"
+joblib        = ">=1.3.2"
+numpy         = ">=2.2.6"
+pandas        = ">=2.1.0"
+parsimonious  = ">=0.10.0"
 psutil        = ">=7.0.0"
+pycryptodome  = ">=3.23.0"
+pydantic      = ">=2.11.5"
+pydantic_core = ">=2.33.2"
 python-dotenv = ">=1.1.0"
+pyunormalize  = ">=16.0.0"
+pyyaml        = ">=6.0.2"
+questionary   = ">=2.1.0"
+regex         = ">=2024.11.6"
+requests      = ">=2.32.3"
+rich          = ">=14.0.0"
+rlp           = ">=4.1.0"
 sqlalchemy    = ">=2.0.41"
-web3          = ">=7.12.0"
+toolz         = ">=1.0.0"
 typer         = ">=0.16.0"
-pyyaml        = ">=6.0.0"
-questionary   = "^1.10.0"
+typing_extensions = ">=4.14.0"
+urllib3       = ">=2.4.0"
+web3          = ">=7.12.0"
+websockets    = ">=15.0.1"
 
 [poetry.group.dev.dependencies]
 black           = ">=23.7.0"
 isort           = ">=5.12.0"
 mypy            = ">=1.10.0"
-pytest          = ">=8.3.0"
+pytest          = ">=8.3.5"
 pytest-asyncio  = ">=0.22.0"
 pytest-cov      = ">=4.1.0"
 flake8          = ">=6.1.0"
@@ -102,4 +164,3 @@ on1builder = "on1builder.__main__:main"
 [build-system]
 requires    = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-

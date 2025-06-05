@@ -13,7 +13,7 @@ services:
       - PYTHONPATH=/app/src
     ports:
       - "8000:8000"
-    command: python ignition.py
+    command: python -m on1builder run --config /app/configs/chains/ethereum_mainnet.yaml
     restart: unless-stopped
 
   redis:
