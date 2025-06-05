@@ -238,7 +238,8 @@ class NotificationService:
                     await self._send_discord(message, level, details, config)
                     success = True
             except Exception as e:
-                logger.error(f"Failed to send {level} notification via {channel}. Check logs for details.")
+                sanitized_channel = channel if channel in ["email", "slack", "telegram", "discord", "console"] else "unknown"
+                logger.error(f"Failed to send {level} notification via {sanitized_channel}. Check logs for details.")
 
         return success
 
