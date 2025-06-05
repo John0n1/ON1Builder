@@ -52,7 +52,18 @@ data/logs/
 test_data/
 tests/auto_generated/
 data/
+tests/
+# Ignore coverage reports
+coverage.xml
+.coverage.*
+*.coverage
+    *.coverage.*    
 
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Ignore Jupyter Notebook metadata
+*.ipynb
+.env
 # Local configurations
 .hypothesis/
 .tox/

@@ -8,14 +8,18 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy build dependencies first for better caching
 COPY pyproject.toml .
 COPY setup.py .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install -e .
+# Install Poetry
+RUN pip install poetry==1.6.1
+
+# Configure Poetry to not create virtual environment
+RUN poetry config virtualenvs.create false
+
+# Install dependencies
+RUN poetry install --only=main --no-dev
 
 # Copy the rest of the application
 COPY . .
@@ -27,4 +31,4 @@ RUN mkdir -p logs configs
 ENV PYTHONPATH=/app/src
 
 # Default command
-CMD ["python", "ignition.py"]
+CMD ["python", "-m", "on1builder", "run"]

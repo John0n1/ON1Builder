@@ -1,0 +1,62 @@
+# =============================================================================
+# ON1Builder – Ethereum Mainnet Configuration
+# -----------------------------------------------------------------------------
+# Chain-specific settings for Ethereum Mainnet (Chain ID: 1)
+# =============================================================================
+
+chain_id: 1
+chain_name: "ethereum_mainnet"
+
+# RPC Endpoints
+rpc_url: "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
+websocket_url: "wss://mainnet.infura.io/v3/YOUR_PROJECT_ID"
+
+# Backup endpoints (optional)
+backup_rpc_urls:
+  - "https://eth-mainnet.alchemyapi.io/v2/YOUR_API_KEY"
+  - "https://rpc.ankr.com/eth"
+
+# Chain-specific settings
+network_type: "mainnet"
+is_poa: false  # Ethereum mainnet is not Proof of Authority
+
+# Gas settings for Ethereum mainnet
+gas_settings:
+  max_gas_price: 100000000000  # 100 gwei (higher for mainnet)
+  priority_fee: 2000000000  # 2 gwei
+  gas_limit_multiplier: 1.1
+
+# Contract addresses specific to Ethereum mainnet
+contracts:
+  # Uniswap V2
+  uniswap_v2_router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+  uniswap_v2_factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+  
+  # Aave V3
+  aave_v3_pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
+  aave_v3_pool_data_provider: "0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3"
+  
+  # WETH
+  weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+
+# Monitoring settings
+monitoring:
+  block_confirmation_count: 2
+  mempool_monitor_enabled: true
+  market_monitor_enabled: true
+
+# Strategy settings specific to Ethereum mainnet  
+strategies:
+  enabled_strategies:
+    - "eth_transaction"
+    - "front_run"
+    - "back_run"
+    - "sandwich_attack"
+  
+  # MEV settings
+  mev_enabled: true
+  flashloan_enabled: true
+  
+  # Profit thresholds (in ETH)
+  min_profit_eth: 0.01
+  min_profit_usd: 50.0

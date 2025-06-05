@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-01-17T00:00:00Z",
+  "strategies": {
+    "eth_transaction": {
+      "weight": 1.0,
+      "confidence": 0.8,
+      "performance_metrics": {
+        "success_rate": 0.95,
+        "avg_profit": 0.02,
+        "avg_gas_used": 21000
+      }
+    },
+    "front_run": {
+      "weight": 0.7,
+      "confidence": 0.6,
+      "performance_metrics": {
+        "success_rate": 0.75,
+        "avg_profit": 0.05,
+        "avg_gas_used": 150000
+      }
+    },
+    "back_run": {
+      "weight": 0.8,
+      "confidence": 0.7,
+      "performance_metrics": {
+        "success_rate": 0.82,
+        "avg_profit": 0.03,
+        "avg_gas_used": 120000
+      }
+    },
+    "sandwich_attack": {
+      "weight": 0.5,
+      "confidence": 0.4,
+      "performance_metrics": {
+        "success_rate": 0.60,
+        "avg_profit": 0.08,
+        "avg_gas_used": 200000
+      }
+    }
+  },
+  "global_settings": {
+    "min_profit_threshold": 0.01,
+    "max_gas_price": 50000000000,
+    "risk_tolerance": 0.7
+  }
+}

@@ -12,7 +12,7 @@ with io.open(os.path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="on1builder",
-    version="2.1.1",
+    version="2.1.2",
     description="Multi-chain blockchain transaction execution framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -24,26 +24,6 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     include_package_data=True,
-    install_requires=[
-        "aiohttp>=3.12.1",
-        "asyncio>=3.4.3",
-        "attrs>=25.3.0",
-        "eth-account>=0.13.7",
-        "eth-hash>=0.5.2",
-        "eth-keyfile>=0.7.0",
-        "eth-keys>=0.4.0",
-        "eth-rlp>=0.3.0",
-        "eth-typing>=3.5.0",
-        "eth-utils>=5.3.0",
-        "eth_abi>=4.2.1",
-        "pydantic>=2.11.5",
-        "psutil>=7.0.0",
-        "python-dotenv>=1.1.0",
-        "sqlalchemy>=2.0.41",
-        "web3>=7.12.0",
-        "typer>=0.16.0",
-        "pyyaml>=6.0.0",
-    ],
     entry_points={
         "console_scripts": [
             "on1builder=on1builder.__main__:main",

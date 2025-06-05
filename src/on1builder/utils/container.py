@@ -11,11 +11,10 @@ License: MIT
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 from typing import Any, Callable, Dict, Optional, Set, TypeVar
 
-from on1builder.utils.logger import get_logger
+from ..utils.logging_config import get_logger
 
 T = TypeVar("T")
 
@@ -33,7 +32,7 @@ class Container:
         self._factories: Dict[str, Callable[..., Any]] = {}
         self._resolving: Dict[str, bool] = {}
         self._dependencies: Dict[str, Set[str]] = {}  # Track component dependencies
-        self._main_core: Optional[Any] = None  # Reference to MainCore
+        self._main_orchestrator: Optional[Any] = None  # Reference to MainOrchestrator
 
     def register(self, key: str, instance: Any) -> None:
         """Register a concrete instance under a key."""
@@ -44,16 +43,16 @@ class Container:
         """Register a factory for lazy instantiation under a key."""
         self._factories[key] = factory
         logger.debug(f"Registered factory '{key}'")
-        
-    def register_main_core(self, main_core: Any) -> None:
-        """Register the MainCore instance for shared resource access."""
-        self._main_core = main_core
-        self.register("main_core", main_core)
-        logger.debug("Registered MainCore instance")
-        
-    def get_main_core(self) -> Optional[Any]:
-        """Get the registered MainCore instance if available."""
-        return self._main_core
+
+    def register_main_orchestrator(self, main_orchestrator: Any) -> None:
+        """Register the MainOrchestrator instance for shared resource access."""
+        self._main_orchestrator = main_orchestrator
+        self.register("main_orchestrator", main_orchestrator)
+        logger.debug("Registered MainOrchestrator instance")
+
+    def get_main_orchestrator(self) -> Optional[Any]:
+        """Get the registered MainOrchestrator instance if available."""
+        return self._main_orchestrator
 
     def get(self, key: str) -> Any:
         """Resolve and return the component for `key`, instantiating if needed.
@@ -74,26 +73,26 @@ class Container:
             try:
                 factory = self._factories[key]
                 sig = inspect.signature(factory)
-                
-                # Check if factory requires container or main_core params
+
+                # Check if factory requires container or main_orchestrator params
                 kwargs = {}
                 if "container" in sig.parameters:
                     kwargs["container"] = self
-                if "main_core" in sig.parameters and self._main_core:
-                    kwargs["main_core"] = self._main_core
-                    
+                if "main_orchestrator" in sig.parameters and self._main_orchestrator:
+                    kwargs["main_orchestrator"] = self._main_orchestrator
+
                 # Track dependencies
                 if key not in self._dependencies:
                     self._dependencies[key] = set()
-                    
+
                 if kwargs:
                     instance = factory(**kwargs)
                     # Record dependencies
-                    if "main_core" in kwargs:
-                        self._dependencies[key].add("main_core")
+                    if "main_orchestrator" in kwargs:
+                        self._dependencies[key].add("main_orchestrator")
                 else:
                     instance = factory()
-                    
+
                 self._instances[key] = instance
                 return instance
             finally:
@@ -114,34 +113,34 @@ class Container:
 
     async def close(self) -> None:
         """Call `.close()` or `.stop()` on all registered instances that provide it.
-        
+
         Components are closed in dependency-order to ensure proper cleanup.
         """
         # Process in reverse dependency order (least dependent components first)
         closed_components = set()
-        
+
         # First pass: close any components that don't have stop/close methods
         # to prevent them from being repeatedly visited
         for key, instance in list(self._instances.items()):
             if not hasattr(instance, "close") and not hasattr(instance, "stop"):
                 closed_components.add(key)
-                
+
         # Continue until all components are closed
         while len(closed_components) < len(self._instances):
             for key, instance in list(self._instances.items()):
                 if key in closed_components:
                     continue
-                    
+
                 # Check if this component depends on any unclosed components
                 dependencies = self._dependencies.get(key, set())
                 if not dependencies.issubset(closed_components):
                     # Some dependencies not closed yet, skip this one
                     continue
-                
+
                 # Close this component
                 await self._close_component(key, instance)
                 closed_components.add(key)
-                
+
         logger.info(f"Closed {len(closed_components)} components")
 
     async def _close_component(self, key: str, instance: Any) -> None:
@@ -155,7 +154,7 @@ class Container:
                 else:
                     instance.stop()
                 return
-                
+
             # Fall back to close() for compatibility
             if hasattr(instance, "close") and callable(instance.close):
                 logger.debug(f"Closing component '{key}'")
@@ -170,6 +169,7 @@ class Container:
 
 # Global singleton container
 _container: Container = Container()
+
 
 def get_container() -> Container:
     """Get the global container singleton."""

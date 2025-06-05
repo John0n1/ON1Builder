@@ -4,7 +4,8 @@
 """
 ON1Builder – ABIRegistry
 ========================
-A lightweight ABI registry for Ethereum smart contracts.
+A lightweight ABI registry for Ethereum        # 4) Fallback to module-relative
+        return p1  # Return the expected path even if it doesn't existtracts.
 Loads and validates ABI JSON files from a specified directory.
 License: MIT
 """
@@ -17,7 +18,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from on1builder.utils.logger import get_logger
+from ..utils.logging_config import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -38,7 +40,12 @@ _REQUIRED: Dict[str, set[str]] = {
         "addLiquidity",
         "getAmountsOut",
     },
-    "aave_flashloan": {"fn_RequestFlashLoan", "executeOperation", "ADDRESSES_PROVIDER", "POOL"},
+    "aave_flashloan": {
+        "fn_RequestFlashLoan",
+        "executeOperation",
+        "ADDRESSES_PROVIDER",
+        "POOL",
+    },
     "aave": {"admin", "implementation", "upgradeTo", "upgradeToAndCall"},
 }
 
@@ -117,7 +124,9 @@ class ABIRegistry:
                 if new_path.exists():
                     self.abi_path = new_path
                 else:
-                    logger.warning(f"Provided ABI path not found: {abi_path}, using {self.abi_path}")
+                    logger.warning(
+                        f"Provided ABI path not found: {abi_path}, using {self.abi_path}"
+                    )
 
             if not self.abis and self.abi_path.exists():
                 self.load_abis()
@@ -155,27 +164,22 @@ class ABIRegistry:
             Path: A best-guess path for `resources/abi`.
         """
         module_dir = Path(__file__).parent
-        # 1) Project root / resources/abi
-        root = module_dir.parent.parent.parent
-        p1 = root / "resources" / "abi"
+        # 1) Module-relative resources/abi (new structure)
+        p1 = module_dir.parent / "resources" / "abi"
         if p1.exists():
             return p1
-        # 2) BASE_PATH env
+        # 2) Project root / resources/abi (old structure for backward compatibility)
+        root = module_dir.parent.parent.parent
+        p2 = root / "resources" / "abi"
+        if p2.exists():
+            return p2
+        # 3) BASE_PATH env
         if "BASE_PATH" in os.environ:
-            p2 = Path(os.environ["BASE_PATH"]) / "resources" / "abi"
-            if p2.exists():
-                return p2
-        # 3) module-relative resources/abi
-        p3 = module_dir.parent / "resources" / "abi"
-        if p3.exists():
-            return p3
-        # 4) ABI_PATH env
-        if "ABI_PATH" in os.environ:
-            p4 = Path(os.environ["ABI_PATH"])
-            if p4.exists():
-                return p4
-        logger.warning("Using fallback ABI path: resources/abi")
-        return Path("resources/abi")
+            p3 = Path(os.environ["BASE_PATH"]) / "resources" / "abi"
+            if p3.exists():
+                return p3
+        # 4) Fallback to module-relative
+        return p1  # Return the expected path even if it doesn't exist
 
     def load_abis(self) -> None:
         """
@@ -187,22 +191,24 @@ class ABIRegistry:
 
         loaded, failed = 0, 0
         logger.info(f"Loading ABIs from {self.abi_path}")
-        
+
         # Files to exclude from ABI loading (non-ABI JSON files)
         excluded_files = {
             "resources/ml_data/strategy_weights.json",
             "token_list.json",
             "config.json",
-            "metadata.json"
+            "metadata.json",
         }
         excluded_patterns = ["_config", "_settings", "_cache"]
 
         for file_path in self.abi_path.glob("*.json"):
             # Skip excluded files
-            if file_path.name in excluded_files or any(pattern in file_path.name for pattern in excluded_patterns):
+            if file_path.name in excluded_files or any(
+                pattern in file_path.name for pattern in excluded_patterns
+            ):
                 logger.debug(f"Skipping non-ABI file: {file_path.name}")
                 continue
-                
+
             name = file_path.stem
             if name.endswith("_abi"):
                 name = name[:-4]
@@ -218,7 +224,9 @@ class ABIRegistry:
                 data = json.loads(raw)
                 abi = data["abi"] if isinstance(data, dict) and "abi" in data else data
                 if not isinstance(abi, list):
-                    logger.warning(f"Skipping {file_path.name}: Invalid ABI format (not a list)")
+                    logger.warning(
+                        f"Skipping {file_path.name}: Invalid ABI format (not a list)"
+                    )
                     failed += 1
                     continue
 
@@ -280,8 +288,11 @@ class ABIRegistry:
         """
         key = name[:-4] if name.endswith("_abi") else name
         if key not in _GLOBAL_ABIS:
-            # Attempt on-the-fly load
+            # Attempt on-the-fly load, try both naming conventions
             path = self.abi_path / f"{key}.json"
+            if not path.exists():
+                path = self.abi_path / f"{key}_abi.json"
+
             if path.exists():
                 self.load_abis()
             else:
@@ -340,25 +351,48 @@ class ABIRegistry:
             return False
         return True
 
-    def find_tokens_path(self, chain_id: int = 1) -> Dict[str, Path]:
+    def find_tokens_path(self) -> Path:
         """
-        Locate the token JSON files directory for a chain.
-
-        Args:
-            chain_id: Blockchain chain ID.
+        Locate the consolidated token JSON file.
 
         Returns:
-            Dict[str, Path]: Keys "address2token", "symbol2address", "address2symbol".
+            Path: Path to all_chains_tokens.json
         """
-        base = self.abi_path.parent.parent / "tokens" / f"chainid-{chain_id}"
-        if not base.exists():
+        tokens_path = self.abi_path.parent / "tokens" / "all_chains_tokens.json"
+        if not tokens_path.exists():
             env = os.getenv("TOKEN_PATH")
-            base = Path(env) / f"chainid-{chain_id}" if env else base
-        return {
-            "address2token": base / "address2token.json",
-            "symbol2address": base / "symbol2address.json",
-            "address2symbol": base / "address2symbol.json",
-        }
+            if env:
+                tokens_path = Path(env) / "all_chains_tokens.json"
+        return tokens_path
+
+    async def _load_token_data(self) -> List[Dict[str, Any]]:
+        """
+        Load and cache the consolidated token data.
+
+        Returns:
+            List[Dict[str, Any]]: Token data from all_chains_tokens.json
+        """
+        if not hasattr(self, "_token_data"):
+            tokens_path = self.find_tokens_path()
+            if not tokens_path.exists():
+                logger.warning(f"Token data file not found: {tokens_path}")
+                self._token_data = []
+                return self._token_data
+
+            try:
+                import asyncio
+
+                def read_json_file(path):
+                    with open(path, "r") as f:
+                        return json.load(f)
+
+                self._token_data = await asyncio.to_thread(read_json_file, tokens_path)
+                logger.info(f"Loaded {len(self._token_data)} tokens from {tokens_path}")
+            except Exception as e:
+                logger.error(f"Failed to load token data from {tokens_path}: {e}")
+                self._token_data = []
+
+        return self._token_data
 
     async def get_token_addresses(self, chain_id: int = 1) -> Dict[str, str]:
         """
@@ -370,15 +404,16 @@ class ABIRegistry:
         Returns:
             Dict[str, str]: e.g. {"WETH": "0x..."}.
         """
-        path = self.find_tokens_path(chain_id)["symbol2address"]
-        if not path.exists():
-            logger.warning(f"Missing symbol2address file: {path}")
-            return {}
-        try:
-            return json.loads(path.read_text())
-        except Exception as e:
-            logger.error(f"Failed reading {path}: {e}")
-            return {}
+        token_data = await self._load_token_data()
+        result = {}
+
+        for token in token_data:
+            addresses = token.get("addresses", {})
+            address = addresses.get(str(chain_id))
+            if address and token.get("symbol"):
+                result[token["symbol"].upper()] = address
+
+        return result
 
     async def get_token_symbols(self, chain_id: int = 1) -> Dict[str, str]:
         """
@@ -390,17 +425,18 @@ class ABIRegistry:
         Returns:
             Dict[str, str]: e.g. {"0x...": "WETH"}.
         """
-        path = self.find_tokens_path(chain_id)["address2symbol"]
-        if not path.exists():
-            logger.warning(f"Missing address2symbol file: {path}")
-            return {}
-        try:
-            return json.loads(path.read_text())
-        except Exception as e:
-            logger.error(f"Failed reading {path}: {e}")
-            return {}
+        token_data = await self._load_token_data()
+        result = {}
 
-    def get_token_address(self, symbol: str, chain_id: int = 1) -> Optional[str]:
+        for token in token_data:
+            addresses = token.get("addresses", {})
+            address = addresses.get(str(chain_id))
+            if address and token.get("symbol"):
+                result[address.lower()] = token["symbol"]
+
+        return result
+
+    async def get_token_address(self, symbol: str, chain_id: int = 1) -> Optional[str]:
         """
         Look up a token address by symbol.
 
@@ -412,15 +448,16 @@ class ABIRegistry:
             Optional[str]: Address string, or None.
         """
         symbol = symbol.upper()
-        mapping = (self.find_tokens_path(chain_id)["symbol2address"])
-        try:
-            data = json.loads(mapping.read_text())
-        except Exception as e:
-            logger.error(f"Failed loading {mapping}: {e}")
-            return None
-        return data.get(symbol)
+        token_data = await self._load_token_data()
 
-    def get_token_symbol(self, address: str, chain_id: int = 1) -> Optional[str]:
+        for token in token_data:
+            if token.get("symbol", "").upper() == symbol:
+                addresses = token.get("addresses", {})
+                return addresses.get(str(chain_id))
+
+        return None
+
+    async def get_token_symbol(self, address: str, chain_id: int = 1) -> Optional[str]:
         """
         Look up a token symbol by address.
 
@@ -431,12 +468,13 @@ class ABIRegistry:
         Returns:
             Optional[str]: Symbol, or None.
         """
-        addr = address.lower()
-        mapping = self.find_tokens_path(chain_id)["address2symbol"]
-        try:
-            data = json.loads(mapping.read_text())
-        except Exception as e:
-            logger.error(f"Failed loading {mapping}: {e}")
-            return None
-        # Normalize keys to lowercase for lookup
-        return data.get(addr) or {k.lower(): v for k, v in data.items()}.get(addr)
+        address = address.lower()
+        token_data = await self._load_token_data()
+
+        for token in token_data:
+            addresses = token.get("addresses", {})
+            token_address = addresses.get(str(chain_id))
+            if token_address and token_address.lower() == address:
+                return token.get("symbol")
+
+        return None
