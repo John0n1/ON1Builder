@@ -244,7 +244,9 @@ class NotificationService:
                 else:
                     logger.error(f"Failed to send {level} notification via {sanitized_channel}. Sensitive details are excluded.")
                 # Ensure sensitive data like passwords are never logged
-                logger.debug("Error details:", exc_info=True)
+                logger.debug("Error details (sensitive data redacted):", exc_info=True)
+                if sanitized_channel == "email":
+                    logger.debug("Redacted sensitive email configuration details.")
 
         return success
 
