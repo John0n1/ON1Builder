@@ -238,7 +238,7 @@ class NotificationService:
                     await self._send_discord(message, level, details, config)
                     success = True
             except Exception as e:
-                sanitized_channel = channel if channel in ["email", "slack", "telegram", "discord", "console"] else "unknown"
+                sanitized_channel = channel if channel in ALLOWED_CHANNELS else "unknown"
                 if sanitized_channel == "email":
                     logger.error(f"Failed to send {level} notification via email. Sensitive details are excluded.")
                 else:
