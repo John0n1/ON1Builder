@@ -184,12 +184,12 @@ class Ignition:
             console.print(Panel.fit(
                 "[bold yellow]ON1Builder Ignition[/bold yellow]\n"
                 "[dim]Interactive console launcher for ON1Builder[/dim]",
-                title="v2.1.1",
+                title="v2.1.2",
                 border_style="yellow",
             ))
         else:
             print("=" * 50)
-            print("     ON1Builder Ignition v2.1.1")
+            print("     ON1Builder Ignition v2.1.2")
             print("Interactive console launcher for ON1Builder")
             print("=" * 50)
         console.print()

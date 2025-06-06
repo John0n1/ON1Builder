@@ -1,6 +1,6 @@
 [project]
 name = "on1builder"
-version = "2.1.2"
+version = "2.1.1"
 description = "Multi-chain blockchain transaction execution framework"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -20,7 +20,7 @@ dependencies = [
   "certifi>=2025.4.26",
   "cffi>=1.17.1",
   "charset-normalizer>=3.4.2",
-  "ckzg",
+  "ckzg>=2.1.1",
   "click>=8.2.1",
   "cryptography>=45.0.3",
   "cytoolz>=1.0.1",
@@ -107,7 +107,7 @@ cachetools    = ">=6.0.0"
 certifi       = ">=2025.4.26"
 cffi          = ">=1.17.1"
 charset-normalizer = ">=3.4.2"
-ckzg          = "*"
+ckzg          = ">=2.1.1"
 click         = ">=8.2.1"
 cryptography  = ">=45.0.3"
 cytoolz       = ">=1.0.1"

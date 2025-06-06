@@ -13,7 +13,7 @@ COPY pyproject.toml .
 COPY setup.py .
 
 # Install Poetry
-RUN pip install poetry==1.6.1
+RUN pip install poetry
 
 # Configure Poetry to not create virtual environment
 RUN poetry config virtualenvs.create false

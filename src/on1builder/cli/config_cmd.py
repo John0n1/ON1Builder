@@ -84,7 +84,7 @@ def validate_command(
         # Validate main configuration structure
         if multi_chain:
             # Multi-chain validation
-            chains = config.get("chains", [])
+            chains = config("chains", [])
             if not chains:
                 errors.append("Multi-chain config must have 'chains' section")
 
@@ -100,17 +100,13 @@ def validate_command(
                         errors.append(f"Chain #{i}: missing required field '{field}'")
         else:
             # Single chain validation
-            required_fields = ["chain_id", "rpc_url"]
             if chain_config:
                 # Validate chain-specific config
+                required_fields = ["chain_id", "rpc_url"]
                 for field in required_fields:
                     if field not in chain_cfg:
                         errors.append(f"Chain config: missing required field '{field}'")
-            else:
-                # Validate main configuration
-                for field in required_fields:
-                    if field not in config:
-                        errors.append(f"Main config: missing required field '{field}'")
+
         if errors:
             for err in errors:
                 typer.secho(f"❌ {err}", fg=typer.colors.RED)

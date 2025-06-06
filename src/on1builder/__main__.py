@@ -22,7 +22,7 @@ import typer
 # Import CLI modules
 from .cli.config_cmd import app as config_app
 from .cli.run_cmd import app as run_app
-from .cli.status_cmd import status_command
+from .cli.status_cmd import app as status_app
 from .utils.logging_config import get_logger, setup_logging
 
 # Create main app
@@ -36,7 +36,7 @@ app = typer.Typer(
 # Add sub-commands
 app.add_typer(config_app, name="config")
 app.add_typer(run_app, name="run")
-app.command(name="status")(status_command)
+app.add_typer(status_app, name="status")
 
 
 @app.callback()

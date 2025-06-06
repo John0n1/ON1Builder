@@ -192,7 +192,7 @@ class ChainWorker:
                 web3=self.web3,
                 config=self.config,
                 account=self.account,
-                external_api_manager=self.api_config,
+                api_config=self.api_config,
                 main_orchestrator=self.main_orchestrator,
             )
             await self.safety_guard.initialize()

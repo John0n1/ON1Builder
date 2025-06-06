@@ -50,9 +50,8 @@ data/logs/
 
 # Test data that should be generated at runtime
 test_data/
-tests/auto_generated/
 data/
-tests/
+
 # Ignore coverage reports
 coverage.xml
 .coverage.*
