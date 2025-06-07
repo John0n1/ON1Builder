@@ -238,7 +238,7 @@ class NotificationService:
                     await self._send_discord(message, level, details, config)
                     success = True
             except Exception as e:
-                logger.error(f"Failed to send {level} notification via {channel}. An error occurred.")
+                logger.error("Failed to send notification. An error occurred.")
 
         return success
 
