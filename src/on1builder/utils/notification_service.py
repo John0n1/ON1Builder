@@ -240,7 +240,7 @@ class NotificationService:
             except Exception as e:
                 logger.error(
                     f"Failed to send notification via {channel} at level {level}. An error occurred.",
-                    extra={"channel": channel, "level": level, "error": str(e)},
+                    extra={"channel": channel, "level": level, "error": "An error occurred. Details are omitted for security."},
                 )
         return success
 
