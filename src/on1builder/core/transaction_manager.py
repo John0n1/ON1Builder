@@ -25,11 +25,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 from eth_account import Account
 from eth_account.datastructures import SignedTransaction
+from eth_account.signers.local import LocalAccount
 from eth_typing import Address, ChecksumAddress, HexStr
 from web3 import AsyncWeb3, Web3
 from web3.types import TxParams, TxReceipt, TxData, Wei, LogReceipt, _Hash32
 from eth_utils.conversions import to_hex
-from typing import cast
 
 from ..config.settings import GlobalSettings
 from ..engines.safety_guard import SafetyGuard
@@ -54,7 +54,7 @@ class TransactionManager:
     def __init__(
         self,
         web3: AsyncWeb3,
-        account: Account,
+        account: LocalAccount,
         configuration: GlobalSettings,
         nonce_manager: Optional[NonceManager] = None,
         safety_guard: Optional[SafetyGuard] = None,
@@ -70,8 +70,8 @@ class TransactionManager:
         self.web3 = web3
         self.chain_id = chain_id
         self.account = account
-        # Extract address using Any type to bypass type checker
-        self.address = cast(ChecksumAddress, cast(Any, account).address)
+        # Extract address from LocalAccount
+        self.address = cast(ChecksumAddress, account.address)
         self.configuration = configuration
         self.external_api_manager = external_api_manager
         self.market_monitor = market_monitor
