@@ -223,25 +223,7 @@ class NotificationService:
             if channel == "console":
                 success = True
                 continue
-
-            try:
-                if channel == "slack":
-                    await self._send_slack(message, level, details, config)
-                    success = True
-                elif channel == "email":
-                    await self._send_email(message, level, details, config)
-                    success = True
-                elif channel == "telegram":
-                    await self._send_telegram(message, level, details, config)
-                    success = True
-                elif channel == "discord":
-                    await self._send_discord(message, level, details, config)
-                    success = True
-            except Exception as e:
-                logger.error(f"Failed to send {level} notification via {channel}: {e}")
-
-        return success
-
+                
     async def send_alert(
         self, message: str, level: str = "ERROR", details: Dict[str, Any] = None
     ) -> bool:
