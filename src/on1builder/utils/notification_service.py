@@ -223,33 +223,7 @@ class NotificationService:
             if channel == "console":
                 success = True
                 continue
-
-            try:
-                if channel == "slack":
-                    await self._send_slack(message, level, details, config)
-                    success = True
-                elif channel == "email":
-                    await self._send_email(message, level, details, config)
-                    success = True
-                elif channel == "telegram":
-                    await self._send_telegram(message, level, details, config)
-                    success = True
-                elif channel == "discord":
-                    await self._send_discord(message, level, details, config)
-                    success = True
-            except Exception as e:
-                sanitized_channel = channel if channel in ALLOWED_CHANNELS else "unknown"
-                if sanitized_channel == "email":
-                    logger.error(f"Failed to send {level} notification via email. Sensitive details are excluded.")
-                else:
-                    logger.error(f"Failed to send {level} notification via {sanitized_channel}. Sensitive details are excluded.")
-                # Ensure sensitive data like passwords are never logged
-                logger.debug("Error details (sensitive data redacted):", exc_info=True)
-                if sanitized_channel == "email":
-                    logger.debug("Redacted sensitive email configuration details.")
-
-        return success
-
+                
     async def send_alert(
         self, message: str, level: str = "ERROR", details: Dict[str, Any] = None
     ) -> bool:

@@ -26,8 +26,8 @@ License: MIT
 __title__ = "on1builder"
 __description__ = "Multi-chain blockchain transaction execution framework"
 __url__ = "https://github.com/john0n1/ON1Builder"
-__version_info__ = (2, 1, 1)
-__version__ = "2.1.2"
+__version_info__ = (2, 1, 3)
+__version__ = "2.1.3"
 __author__ = "john0n1"
 __author_email__ = "john@on1.no"
 __license__ = "MIT"

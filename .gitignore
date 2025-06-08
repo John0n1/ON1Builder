@@ -45,14 +45,10 @@ data/logs/
 
 # Jupyter Notebook checkpoints
 
-# Keep poetry.lock out of git to reduce conflicts
-# poetry.lock
-
 # Test data that should be generated at runtime
 test_data/
-tests/auto_generated/
 data/
-tests/
+
 # Ignore coverage reports
 coverage.xml
 .coverage.*

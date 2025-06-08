@@ -43,20 +43,20 @@ fi
 # 5) add ~/.local/bin to PATH in this session
 export PATH="$HOME/.local/bin:$PATH"
 
-# 6) install Poetry if missing
-if ! command -v poetry &>/dev/null; then
-  echo "🔄 Installing Poetry…"
-  curl -sSL https://install.python-poetry.org | python3 -
-  export PATH="$HOME/.local/bin:$PATH"
+# 6) create virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+  echo "🔄 Creating virtual environment..."
+  python3 -m venv venv
 fi
 
-# 7) create & activate the virtualenv
-python3 -m poetry env use python3
-eval "$(python3 -m poetry env info -p >/dev/null 2>&1 && python3 -m poetry shell || echo "source $(python3 -m poetry env info -p)/bin/activate")"
+# 7) activate the virtualenv
+echo "🔄 Activating virtual environment..."
+source venv/bin/activate
 
 # 8) install project dependencies
-echo "📦 Installing dependencies via Poetry…"
-python3 -m poetry install --no-interaction
+echo "📦 Installing dependencies via pip..."
+pip install --upgrade pip
+pip install -e ".[dev]"
 
 # 9) copy .env if needed
 if [ ! -f .env ] && [ -f configs/.env.example ]; then
@@ -74,5 +74,5 @@ if [ -f .env ]; then
 fi
 
 echo "✅ Development environment ready!"
-echo "   • To enter venv any time:   python3 -m poetry shell"
+echo "   • To enter venv any time:   source venv/bin/activate"
 echo "   • To run the CLI:           on1builder --help"
