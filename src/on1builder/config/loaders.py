@@ -158,7 +158,13 @@ class ConfigLoader:
             if env_val is not None:
                 try:
                     if value_type == bool:
-                        config[config_key] = env_val.lower() in ("true", "1", "yes")
+                        lower_val = env_val.lower()
+                        if lower_val in ("true", "1", "yes"):
+                            config[config_key] = True
+                        elif lower_val in ("false", "0", "no"):
+                            config[config_key] = False
+                        else:
+                            raise ValueError(f"Invalid boolean value: {env_val}")
                     elif value_type == int:
                         config[config_key] = int(env_val)
                     elif value_type == float:
@@ -220,14 +226,14 @@ def load_configuration(
     try:
         # Load global configuration
         global_config = loader.load_global_config(config_path)
-        config_dict = global_config.dict()
+        config_dict = global_config.model_dump()
 
         # If chain is specified, try to load chain-specific config
         if chain:
             try:
                 chain_config = loader.load_chain_config(chain)
                 # Merge chain config into global config
-                config_dict.update(chain_config.dict())
+                config_dict.update(chain_config.model_dump())
             except Exception as e:
                 logger.warning(f"Failed to load chain config for {chain}: {e}")
 

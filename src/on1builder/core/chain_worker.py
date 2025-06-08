@@ -4,7 +4,13 @@
 """
 ON1Builder – Chain Worker
 =========================
-Handles operations for a specific blockchain: init, monitoring, tx management.
+Handles operations for a specific blockchain: init, monitoring, t            self.safety_guard = SafetyGuard(
+                web3=self.web3,
+                config=self.config,
+                account=self.account,
+                external_api_manager=self.api_manager,
+                main_orchestrator=self.main_orchestrator,
+            )ement.
 License: MIT
 """
 
@@ -67,7 +73,7 @@ class ChainWorker:
 
         # Components
         self.web3: Optional[AsyncWeb3] = None
-        self.account: Optional[Account] = None
+        self.account: Optional[Any] = None  # eth_account.Account object
         self.api_config: Optional[ExternalAPIManager] = None
         self.db: Optional[DatabaseInterface] = None
         self.nonce_manager: Optional[NonceManager] = None
@@ -120,6 +126,7 @@ class ChainWorker:
             self.account = Account.from_key(self.wallet_key)
             if (
                 self.wallet_address
+                and self.account
                 and self.wallet_address.lower() != self.account.address.lower()
             ):
                 logger.warning("Configured WALLET_ADDRESS differs from key")
@@ -128,10 +135,14 @@ class ChainWorker:
             self.container.register(f"account_{self.chain_id}", self.account)
             self.container.register(f"web3_{self.chain_id}", self.web3)
 
-            # — Configs & API —
-            self.api_config = APIConfig(self.config)
-            await self.api_config.initialize()
-            self.container.register(f"api_config_{self.chain_id}", self.api_config)
+            # — External APIs —
+            if hasattr(self.config, 'api') and self.config.api is not None:
+                self.api_manager = ExternalAPIManager(self.config.api)
+                await self.api_manager.initialize()
+                self.container.register(f"api_manager_{self.chain_id}", self.api_manager)
+            else:
+                self.api_manager = None
+                logger.warning(f"[{self.chain_name}] No API settings found, ExternalAPIManager not initialized")
 
             # — Notifications —
             # Use shared notification manager if available
@@ -182,6 +193,10 @@ class ChainWorker:
             self.container.register(f"abi_registry_{self.chain_id}", self.abi_registry)
 
             # — Cores & Monitors —
+            # Ensure web3 is initialized before passing to components
+            if self.web3 is None:
+                raise RuntimeError("Web3 connection must be established before initializing components")
+                
             self.nonce_manager = NonceManager(
                 web3=self.web3, configuration=self.config, main_orchestrator=self.main_orchestrator
             )
@@ -192,7 +207,7 @@ class ChainWorker:
                 web3=self.web3,
                 config=self.config,
                 account=self.account,
-                api_config=self.api_config,
+                external_api_manager=self.api_config,
                 main_orchestrator=self.main_orchestrator,
             )
             await self.safety_guard.initialize()
@@ -202,7 +217,7 @@ class ChainWorker:
             self.market_data_feed = MarketDataFeed(
                 web3=self.web3,
                 config=self.config,
-                api_config=self.api_config,
+                api_config=self.config.api,
             )
             await self.market_data_feed.initialize()
             self.container.register(
@@ -229,13 +244,17 @@ class ChainWorker:
             from .transaction_manager import TransactionManager
 
             # Initialize transaction core with both monitors
+            # At this point, web3 and account should be initialized
+            assert self.web3 is not None, "web3 should be initialized"
+            assert self.account is not None, "account should be initialized"
+            
             self.transaction_manager = TransactionManager(
                 web3=self.web3,
                 account=self.account,
                 configuration=self.config,
-                nonce_core=self.nonce_manager,
-                safety_net=self.safety_guard,
-                api_config=self.api_config,
+                nonce_manager=self.nonce_manager,
+                safety_guard=self.safety_guard,
+                external_api_manager=self.api_config,
                 market_monitor=self.market_data_feed,
                 txpool_monitor=self.txpool_scanner,
                 chain_id=int(self.chain_id) if self.chain_id.isdigit() else 1,
@@ -307,16 +326,18 @@ class ChainWorker:
 
         try:
             # Launch txpool + market monitors
-            self._tasks.append(
-                asyncio.create_task(
-                    self.txpool_scanner.start_monitoring(), name=f"TXM_{self.chain_id}"
+            if self.txpool_scanner:
+                self._tasks.append(
+                    asyncio.create_task(
+                        self.txpool_scanner.start_monitoring(), name=f"TXM_{self.chain_id}"
+                    )
                 )
-            )
-            self._tasks.append(
-                asyncio.create_task(
-                    self.market_data_feed.schedule_updates(), name=f"MM_{self.chain_id}"
+            if self.market_data_feed:
+                self._tasks.append(
+                    asyncio.create_task(
+                        self.market_data_feed.schedule_updates(), name=f"MM_{self.chain_id}"
+                    )
                 )
-            )
 
             # Launch heartbeat task
             self._tasks.append(
@@ -426,10 +447,16 @@ class ChainWorker:
         try:
             if hasattr(component, "stop") and callable(component.stop):
                 logger.debug(f"Stopping {attr_name}")
-                await component.stop()
+                if asyncio.iscoroutinefunction(component.stop):
+                    await component.stop()
+                else:
+                    component.stop()
             elif hasattr(component, "close") and callable(component.close):
                 logger.debug(f"Closing {attr_name}")
-                await component.close()
+                if asyncio.iscoroutinefunction(component.close):
+                    await component.close()
+                else:
+                    component.close()
         except Exception as e:
             logger.error(f"Error stopping {attr_name}: {e}")
 
@@ -475,9 +502,13 @@ class ChainWorker:
 
         # Check Web3 connection
         try:
-            web3_connected = await self.web3.is_connected()
-            components_health["web3"] = web3_connected
-            if not web3_connected:
+            if self.web3 is not None:
+                web3_connected = await self.web3.is_connected()
+                components_health["web3"] = web3_connected
+                if not web3_connected:
+                    all_healthy = False
+            else:
+                components_health["web3"] = False
                 all_healthy = False
         except Exception:
             components_health["web3"] = False
@@ -511,6 +542,8 @@ class ChainWorker:
     async def get_wallet_balance(self) -> float:
         """Get wallet balance in ETH."""
         try:
+            if self.web3 is None or self.account is None:
+                return 0.0
             balance_wei = await self.web3.eth.get_balance(self.account.address)
             balance_eth = float(self.web3.from_wei(balance_wei, "ether"))
             self.metrics["wallet_balance_eth"] = balance_eth
@@ -522,6 +555,8 @@ class ChainWorker:
     async def get_gas_price(self) -> float:
         """Get current gas price in gwei."""
         try:
+            if self.web3 is None:
+                return 0.0
             gas_wei = await self.web3.eth.gas_price
             gas_gwei = float(self.web3.from_wei(gas_wei, "gwei"))
             self.metrics["last_gas_price_gwei"] = gas_gwei
@@ -538,7 +573,8 @@ class ChainWorker:
 
         try:
             # Update block number
-            self.metrics["last_block_number"] = await self.web3.eth.block_number
+            if self.web3 is not None:
+                self.metrics["last_block_number"] = await self.web3.eth.block_number
         except Exception:
             pass
 
@@ -547,17 +583,25 @@ class ChainWorker:
         await self.get_gas_price()
 
         # Get transaction stats if DB is available
-        if self.db and hasattr(self.db, "get_transaction_stats"):
+        if self.db and self.account is not None:
             try:
-                stats = await self.db.get_transaction_stats(
-                    self.account.address, self.chain_id
+                # Convert chain_id to int for database methods
+                chain_id_int = int(self.chain_id) if self.chain_id.isdigit() else None
+                
+                # Get transaction count using available method
+                tx_count = await self.db.get_transaction_count(
+                    address=self.account.address, chain_id=chain_id_int
                 )
-                if stats:
-                    self.metrics["transaction_count"] = stats.get("tx_count", 0)
-                    self.metrics["total_profit_eth"] = stats.get("total_profit", 0.0)
-                    self.metrics["total_gas_spent_eth"] = stats.get(
-                        "total_gas_spent", 0.0
+                self.metrics["transaction_count"] = tx_count
+                
+                # Get profit summary if available
+                if hasattr(self.db, "get_profit_summary"):
+                    profit_summary = await self.db.get_profit_summary(
+                        address=self.account.address, chain_id=chain_id_int
                     )
+                    if profit_summary:
+                        self.metrics["total_profit_eth"] = profit_summary.get("total_profit", 0.0)
+                        self.metrics["total_gas_spent_eth"] = profit_summary.get("total_gas_spent", 0.0)
             except Exception as e:
                 logger.warning(f"Failed to get transaction stats: {e}")
 
@@ -633,10 +677,10 @@ class ChainWorker:
 
         # Try WebSocket endpoint
         if self.websocket_endpoint:
-            from web3.providers import WebsocketProvider
+            from web3.providers import WebSocketProvider
 
             try:
-                provider = WebsocketProvider(self.websocket_endpoint)
+                provider = WebSocketProvider(self.websocket_endpoint)
                 web3 = AsyncWeb3(provider)
                 chain_id = await web3.eth.chain_id
 
@@ -663,10 +707,10 @@ class ChainWorker:
 
         # Try IPC endpoint
         if self.ipc_endpoint:
-            from web3.providers import IPCProvider
+            from web3.providers import AsyncIPCProvider
 
             try:
-                provider = IPCProvider(self.ipc_endpoint)
+                provider = AsyncIPCProvider(self.ipc_endpoint)
                 web3 = AsyncWeb3(provider)
                 chain_id = await web3.eth.chain_id
 
@@ -691,13 +735,18 @@ class ChainWorker:
         return False
 
     async def _verify_connection(self) -> bool:
+        if self.web3 is None:
+            logger.error("Web3 connection is None")
+            return False
+        
         try:
             onchain = await self.web3.eth.chain_id
             if str(onchain) != self.chain_id:
                 logger.error(f"Chain ID mismatch: {onchain} != {self.chain_id}")
                 return False
             blk = await self.web3.eth.get_block("latest")
-            self.metrics["last_block_number"] = blk["number"]
+            if "number" in blk:
+                self.metrics["last_block_number"] = blk["number"]
             return True
         except Exception as e:
             logger.error(f"Web3 connection verify failed: {e}")

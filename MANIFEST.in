@@ -4,9 +4,8 @@ include CHANGELOG.md
 include CONTRIBUTING.md
 include pyproject.toml
 
-recursive-include docs *
-recursive-include configs *.yaml *.yml
-recursive-include src/on1builder/resources *.json *.sol *.csv *.sql
+recursive-include configs *.yaml
+recursive-include src/on1builder/resources *.json *.sol
 
 prune venv
 prune data

@@ -10,16 +10,9 @@ RUN apt-get update && apt-get install -y \
 
 # Copy build dependencies first for better caching
 COPY pyproject.toml .
-COPY setup.py .
 
-# Install Poetry
-RUN pip install poetry
-
-# Configure Poetry to not create virtual environment
-RUN poetry config virtualenvs.create false
-
-# Install dependencies
-RUN poetry install --only=main --no-dev
+# Install dependencies using pip and pyproject.toml
+RUN pip install --no-cache-dir .
 
 # Copy the rest of the application
 COPY . .

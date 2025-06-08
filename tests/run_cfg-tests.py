@@ -82,7 +82,7 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
         return dummy_config
 
     monkeypatch.setattr(
-        "on1builder.commands.run.load_configuration",
+        "on1builder.config.loaders.load_configuration",
         fake_load_configuration,
     )
 
@@ -102,7 +102,6 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
     result = runner.invoke(
         run_app,
         [
-            "run",
             "--config",
             str(tmp_path / "does_not_matter.yaml"),
             "--chain",
@@ -110,7 +109,7 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
         ],
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
     # Since logger.info is used but not printed to stdout by default, we only check that
     # no "Error:" prefix is printed to stderr.
     assert result.stderr == ""
@@ -135,7 +134,7 @@ def test_run_multi_chain_success(monkeypatch, tmp_path):
         return dummy_config
 
     monkeypatch.setattr(
-        "on1builder.commands.run.load_configuration",
+        "on1builder.config.loaders.load_configuration",
         fake_load_configuration,
     )
 
@@ -151,8 +150,8 @@ def test_run_multi_chain_success(monkeypatch, tmp_path):
     monkeypatch.setattr(asyncio, "run", fake_asyncio_run)
 
     # 3) Invoke without any flags: defaults to config=None, chain=None
-    result = runner.invoke(run_app, ["run"])
-    assert result.exit_code == 0
+    result = runner.invoke(run_app, [])
+    assert result.exit_code == 0, f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
     assert result.stderr == ""
     assert called["multi_executed"]
 
@@ -169,15 +168,15 @@ def test_run_load_config_failure(monkeypatch):
     def fake_load_configuration(*, config_path, chain):
         raise ValueError("bad config!")
 
-    monkeypatch.setattr(
-        "on1builder.commands.run.load_configuration",
-        fake_load_configuration,
-    )
+    import sys
+    import types
+    run_cmd_module = sys.modules["on1builder.cli.run_cmd"]
+    monkeypatch.setattr(run_cmd_module, "load_configuration", fake_load_configuration)
 
     # No need to stub asyncio.run or orchestrators, because load_configuration fails first
     result = runner.invoke(
         run_app,
-        ["run", "--config", "whatever.yaml", "--chain", "x"],
+        ["--config", "whatever.yaml", "--chain", "x"],
     )
     assert result.exit_code == 1
     # The stderr should contain the prefix "Error: bad config!"
@@ -199,7 +198,7 @@ def test_run_orchestrator_failure(monkeypatch):
         return dummy_config
 
     monkeypatch.setattr(
-        "on1builder.commands.run.load_configuration",
+        "on1builder.config.loaders.load_configuration",
         fake_load_configuration,
     )
 
@@ -208,15 +207,19 @@ def test_run_orchestrator_failure(monkeypatch):
     setattr(main_mod, "MainOrchestrator", FailingOrchestrator)
 
     # 3) Stub asyncio.run: it will propagate the exception raised by FailingOrchestrator.run()
-    def passthrough_asyncio_run(coro):
-        # This will run the coroutine, which raises
-        return asyncio.get_event_loop().run_until_complete(coro)
+    def fake_asyncio_run(coro):
+        # Create a new event loop and run the coroutine, which should raise
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
-    monkeypatch.setattr(asyncio, "run", passthrough_asyncio_run)
+    monkeypatch.setattr(asyncio, "run", fake_asyncio_run)
 
     result = runner.invoke(
         run_app,
-        ["run", "--config", "some.yaml"],
+        ["--config", "some.yaml"],
     )
     assert result.exit_code == 1
     # The stderr should mention “Error: ” and the original exception text
@@ -237,7 +240,7 @@ def test_run_with_debug_flag(monkeypatch, tmp_path):
         return dummy_config
 
     monkeypatch.setattr(
-        "on1builder.commands.run.load_configuration",
+        "on1builder.config.loaders.load_configuration",
         fake_load_configuration,
     )
 
@@ -252,7 +255,7 @@ def test_run_with_debug_flag(monkeypatch, tmp_path):
     monkeypatch.setattr(asyncio, "run", fake_asyncio_run)
 
     # 3) Invoke with --debug (no other flags)
-    result = runner.invoke(run_app, ["run", "--debug"])
-    assert result.exit_code == 0
+    result = runner.invoke(run_app, ["--debug"])
+    assert result.exit_code == 0, f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
     assert result.stderr == ""
     assert called["ran_debug"]

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Complete package restructuring following PEP 660 src/ layout
-- Poetry-based dependency management
+- PEP 621-compliant pyproject.toml with setuptools backend
 - Proper module hierarchy with organized subpackages
 - Typer-based enhanced CLI with fallback to basic argparse
 - Dependency injection system to avoid circular imports

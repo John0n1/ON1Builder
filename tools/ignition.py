@@ -2,20 +2,17 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 """
-ON1Builder - Interactive Console Ignition
-========================================
+ON1Builder – Interactive Console Ignition
+==========================================
 
 A terminal-based interactive launcher for the ON1Builder application.
 Provides menus, configuration options, and monitoring capabilities 
 through a user-friendly TUI (Terminal User Interface).
 
-==========================
 License: MIT
-=========================
-
-This file is part of the ON1Builder project, which is licensed under the MIT License.
-see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder/blob/master/LICENSE
 """
+
+from __future__ import annotations
 
 import asyncio
 import os
@@ -43,9 +40,9 @@ def check_required_packages():
     if missing_packages:
         print(f"Missing required packages: {', '.join(missing_packages)}")
         print("Please install them using:")
-        print("  poetry install")
-        print("  or")
         print(f"  pip install {' '.join(missing_packages)}")
+        print("  or")
+        print("  pip install -e .[dev]  # for development dependencies")
         print("")
         print("Make sure you're in your virtual environment and try again.")
         sys.exit(1)
@@ -93,10 +90,12 @@ try:
     from on1builder.core.multi_chain_orchestrator import MultiChainOrchestrator
     from on1builder.config.loaders import ConfigLoader
     from on1builder.config.settings import GlobalSettings
+    from on1builder import __version__
     ON1BUILDER_AVAILABLE = True
 except ImportError:
     print("Warning: ON1Builder package not found in path.")
     print("Limited functionality available.")
+    __version__ = "2.1.3"  # Fallback version
     ON1BUILDER_AVAILABLE = False
 
 # Set up console for rich output (with fallback)
@@ -138,7 +137,7 @@ logger = setup_logging("Ignition", level="INFO") if ON1BUILDER_AVAILABLE else No
 
 # Constants
 CONFIG_DIR = Path("configs/chains")
-DEFAULT_CONFIG_PATH = CONFIG_DIR / "config.yaml"
+DEFAULT_CONFIG_PATH = CONFIG_DIR / "ethereum_mainnet.yaml"
 DEFAULT_ENV_PATH = Path(".env")
 DEFAULT_LOG_DIR = Path("logs")
 
@@ -184,12 +183,12 @@ class Ignition:
             console.print(Panel.fit(
                 "[bold yellow]ON1Builder Ignition[/bold yellow]\n"
                 "[dim]Interactive console launcher for ON1Builder[/dim]",
-                title="v2.1.2",
+                title=f"v{__version__}",
                 border_style="yellow",
             ))
         else:
             print("=" * 50)
-            print("     ON1Builder Ignition v2.1.2")
+            print(f"     ON1Builder Ignition v{__version__}")
             print("Interactive console launcher for ON1Builder")
             print("=" * 50)
         console.print()
@@ -342,31 +341,15 @@ class Ignition:
             return
         
         try:
-            # Create the run command with all the settings
+            # Create the run command with available options
             cmd = [
-                sys.executable, "-m", "on1builder", "run",
+                sys.executable, "-m", "on1builder", "run", "run",
                 "--config", str(self.config_path),
-                "--env", str(self.env_file),
-                "--log-level", self.log_level,
             ]
             
-            if self.multi_chain:
-                cmd.append("--multi-chain")
-            
-            if not self.metrics_enabled:
-                cmd.append("--no-metrics")
-            
-            if not self.monitoring_enabled:
-                cmd.append("--no-monitoring")
-            
-            if not self.notifications_enabled:
-                cmd.append("--no-notifications")
-            
-            if not self.strategy_validation:
-                cmd.append("--no-validate-strategies")
-            
-            if self.json_logs:
-                cmd.append("--json-logs")
+            # Add debug flag if log level is DEBUG
+            if self.log_level.upper() == "DEBUG":
+                cmd.append("--debug")
             
             # Display the command that will be run
             console.print("[dim]Running command:[/dim]")

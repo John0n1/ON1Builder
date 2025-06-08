@@ -131,10 +131,16 @@ class Container:
                 if key in closed_components:
                     continue
 
-                # Check if this component depends on any unclosed components
-                dependencies = self._dependencies.get(key, set())
-                if not dependencies.issubset(closed_components):
-                    # Some dependencies not closed yet, skip this one
+                # Check if any other components depend on this one
+                # We should only close this component if no other unclosed components depend on it
+                has_dependents = False
+                for other_key, other_dependencies in self._dependencies.items():
+                    if other_key not in closed_components and key in other_dependencies:
+                        has_dependents = True
+                        break
+                
+                if has_dependents:
+                    # Some components still depend on this one, skip this one
                     continue
 
                 # Close this component
