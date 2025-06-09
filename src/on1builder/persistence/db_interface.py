@@ -36,8 +36,6 @@ logger = get_logger(__name__)
 
 # Try to enable SQLAlchemy ORM; otherwise disable DB features
 try:
-    from sqlalchemy.orm import declarative_base
-
     Base = declarative_base()
     HAS_SQLALCHEMY = True
 except ImportError:

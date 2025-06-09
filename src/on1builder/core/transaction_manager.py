@@ -1220,7 +1220,6 @@ class TransactionManager:
             StrategyExecutionError: If safety checks fail
         """
         try:
-            assets = flashloan_data["assets"]
             amounts = flashloan_data["amounts"]
 
             # Check account balance for potential fees
@@ -1805,7 +1804,8 @@ class TransactionManager:
                     if flashloan_abi:
                         # Mock contract for gas estimation
                         mock_address = Web3.to_checksum_address("0x" + "1" * 40)
-                        mock_contract = self.web3.eth.contract(
+                        # Note: mock_contract created for potential future gas estimation
+                        self.web3.eth.contract(
                             address=mock_address,  # Placeholder address
                             abi=flashloan_abi,
                         )
@@ -1943,7 +1943,9 @@ class TransactionManager:
                 try:
                     await self.notification_manager.send_alert(
                         "EMERGENCY STOP",
-                        f"TransactionCore emergency stop executed. {cleanup_results['pending_transactions_cancelled']}/{pending_count} transactions cancelled.",
+                        f"TransactionCore emergency stop executed. "
+                        f"{cleanup_results['pending_transactions_cancelled']}"
+                        f"/{pending_count} transactions cancelled.",
                         level="CRITICAL",
                     )
                     cleanup_results["notifications_sent"] = True

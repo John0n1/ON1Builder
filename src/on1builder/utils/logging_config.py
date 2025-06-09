@@ -178,8 +178,6 @@ def setup_logging(
     Returns:
         Configured logger or LoggerAdapter if context is provided
     """
-    global _loggers, _logger_lock
-
     # Check if we already have this logger configured
     with _logger_lock:
         if name in _loggers:
@@ -284,8 +282,6 @@ def get_logger(name: str) -> Union[logging.Logger, StructuredLoggerAdapter]:
     Returns:
         Existing logger or newly created one
     """
-    global _loggers, _logger_lock
-
     with _logger_lock:
         if name in _loggers:
             return _loggers[name]

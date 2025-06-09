@@ -113,8 +113,6 @@ else:
             # Remove rich markup for basic printing
             text = " ".join(str(arg) for arg in args)
             # Basic cleanup of rich markup
-            import re
-
             text = re.sub(r"\[/?\w+[^\]]*\]", "", text)
             print(text)
 
@@ -395,8 +393,6 @@ class Ignition:
             console.print("[yellow]Press Ctrl+C to stop...[/yellow]")
 
             # Run the process and capture output
-            import subprocess
-
             with subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -592,8 +588,6 @@ class Ignition:
         editor = os.environ.get("EDITOR", "vi")
 
         try:
-            import subprocess
-
             console.print(f"[green]Opening {config_path} with {editor}...[/green]")
             subprocess.call([editor, str(config_path)])
             console.print(f"[green]Finished editing {config_path}[/green]")
@@ -803,8 +797,6 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
         try:
             # Read the last 50 lines for large files
             tail_cmd = ["tail", "-n", "50", selected]
-            import subprocess
-
             result = subprocess.run(tail_cmd, capture_output=True, text=True)
             console.print(result.stdout)
 
@@ -963,9 +955,6 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
             while time.time() - start_time < duration:
                 # Clear screen
                 print("\033[2J\033[H", end="")
-
-                # Create matrix effect
-                matrix = [[" " for _ in range(cols)] for _ in range(rows)]
 
                 # Update streams
                 for i, stream in enumerate(streams):
