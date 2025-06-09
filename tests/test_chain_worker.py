@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from on1builder.config.settings import APISettings, GlobalSettings
 from on1builder.core.chain_worker import ChainWorker
 
 
