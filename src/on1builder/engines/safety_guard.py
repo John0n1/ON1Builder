@@ -122,7 +122,7 @@ class SafetyGuard:
         min_bal_wei = self.web3.to_wei(self.config.min_balance, "ether")
         if bal_wei < min_bal_wei:
             reason = (
-                f"Balance ({self.web3.from_wei(bal_wei,'ether'):.4f} ETH) "
+                f"Balance ({self.web3.from_wei(bal_wei, 'ether'):.4f} ETH) "
                 "below MIN_BALANCE"
             )
             await self.break_circuit(reason)
@@ -132,7 +132,7 @@ class SafetyGuard:
         max_gas_price = self.config.max_gas_price
         if gas_price > max_gas_price:
             logger.warning(
-                f"Gas price ({self.web3.from_wei(gas_price,'gwei'):.1f} gwei) "
+                f"Gas price ({self.web3.from_wei(gas_price, 'gwei'):.1f} gwei) "
                 "above MAX_GAS_PRICE"
             )
             return False
@@ -193,7 +193,7 @@ class SafetyGuard:
         gp = tx_params.get("gasPrice", 0)
         max_gp = self.config.max_gas_price
         if gp > max_gp:
-            return f"Gas price {self.web3.from_wei(gp,'gwei'):.1f} gwei exceeds MAX_GAS_PRICE"
+            return f"Gas price {self.web3.from_wei(gp, 'gwei'):.1f} gwei exceeds MAX_GAS_PRICE"
 
         gl = tx_params.get("gas", 0)
         max_gl = self.config.default_gas_limit
@@ -204,7 +204,7 @@ class SafetyGuard:
         bal_wei = await self.web3.eth.get_balance(self.account_address)
         if val > bal_wei * 0.95:
             return (
-                f"Value {self.web3.from_wei(val,'ether'):.4f} ETH too close to balance"
+                f"Value {self.web3.from_wei(val, 'ether'):.4f} ETH too close to balance"
             )
 
         return None

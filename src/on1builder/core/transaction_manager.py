@@ -1164,12 +1164,12 @@ class TransactionManager:
             True if sufficient liquidity available
         """
         try:
-            # Get Aave pool contract
-            pool_address = getattr(
-                self.configuration,
-                "aave_pool_address",
-                "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",  # Mainnet V3 Pool
-            )
+            # Get Aave pool contract (available for future use)
+            # pool_address = getattr(
+            #     self.configuration,
+            #     "aave_pool_address",
+            #     "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",  # Mainnet V3 Pool
+            # )
 
             if not self.abi_registry:
                 logger.warning("Cannot check asset availability without ABIRegistry")

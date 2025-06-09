@@ -11,7 +11,7 @@ License: MIT
 =========================
 
 This file is part of the ON1Builder project, which is licensed under the MIT License.
-see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder/blob/master/LICENSE
+see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder
 """
 
 from __future__ import annotations
@@ -157,7 +157,8 @@ class MainOrchestrator:
             except Exception as e:
                 if attempt < retry_count:
                     logger.warning(
-                        f"WebSocket connection attempt {attempt + 1}/{retry_count + 1} failed: {e}"
+                        f"WebSocket connection attempt {attempt + 1}/"
+                        f"{retry_count + 1} failed: {e}"
                     )
                     await asyncio.sleep(retry_delay)
                 else:
