@@ -582,7 +582,7 @@ class ChainWorker:
     async def _update_metrics(self) -> None:
         """Update various metrics for monitoring."""
         now = time.time()
-        elapsed = now - self._last_metrics_ts
+        # elapsed = now - self._last_metrics_ts  # Available for future metrics
         self._last_metrics_ts = now
 
         try:

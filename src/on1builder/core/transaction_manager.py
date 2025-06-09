@@ -1131,12 +1131,12 @@ class TransactionManager:
             if not flashloan_abi:
                 raise StrategyExecutionError("Flashloan ABI not found")
 
-            # Aave V3 addresses provider for mainnet
-            addresses_provider = getattr(
-                self.configuration,
-                "aave_addresses_provider",
-                "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e",  # Mainnet default
-            )
+            # Aave V3 addresses provider for mainnet (available for future use)
+            # addresses_provider = getattr(
+            #     self.configuration,
+            #     "aave_addresses_provider",
+            #     "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e",  # Mainnet default
+            # )
 
             # For deployment, we'd need bytecode - this is a placeholder
             # In production, you'd compile the Solidity contract or have pre-compiled bytecode
@@ -1180,10 +1180,10 @@ class TransactionManager:
                 logger.warning("Pool ABI not available for liquidity check")
                 return True
 
-            # Create pool contract instance
-            pool_contract = self.web3.eth.contract(
-                address=Web3.to_checksum_address(pool_address), abi=pool_abi
-            )
+            # Create pool contract instance (available for liquidity checks)
+            # pool_contract = self.web3.eth.contract(
+            #     address=Web3.to_checksum_address(pool_address), abi=pool_abi
+            # )
 
             # Check available liquidity (this would require the full Aave pool ABI)
             # For now, we'll do basic validation

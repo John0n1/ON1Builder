@@ -9,11 +9,11 @@ import json
 import os
 import sys
 import time
+from unittest.mock import Mock, patch
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from unittest.mock import Mock, patch
 
 from on1builder.utils.custom_exceptions import (
     ChainConnectionError,

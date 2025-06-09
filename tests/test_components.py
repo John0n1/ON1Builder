@@ -95,7 +95,8 @@ def test_main_orchestrator():
         config_path = os.path.join(
             os.path.dirname(__file__), "..", "configs", "common_settings.yaml"
         )
-        chains_dir = os.path.join(os.path.dirname(__file__), "..", "configs", "chains")
+        # chains_dir available for future use
+        # chains_dir = os.path.join(os.path.dirname(__file__), "..", "configs", "chains")
 
         if os.path.exists(config_path):
             global_settings = loader.load_global_config()
@@ -164,7 +165,7 @@ def main():
 
     print()
     print("=" * 50)
-    print(f"📊 Test Results:")
+    print("📊 Test Results:")
     print(f"✅ Passed: {passed}/{total}")
 
     if passed == total:

@@ -357,17 +357,3 @@ class NonceManager:
     async def stop(self) -> None:
         """Stop and cleanup NonceManager."""
         await self.close()
-
-    async def reset_nonce(self, address: Optional[str] = None) -> int:
-        """Reset cached nonce by fetching fresh value from chain."""
-        async with self._nonce_lock:
-            checksum = to_checksum_address(address or self.config.WALLET_ADDRESS)
-            logger.debug(f"Resetting nonce for {checksum}")
-
-            # Fetch fresh nonce from chain
-            fresh_nonce = await self.get_onchain_nonce(checksum)
-            self._nonces[checksum] = fresh_nonce
-            self._last_refresh[checksum] = time.time()
-
-            logger.info(f"Nonce reset for {checksum}: {fresh_nonce}")
-            return fresh_nonce
