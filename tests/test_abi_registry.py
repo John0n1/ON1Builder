@@ -5,21 +5,22 @@
 Tests for ABIRegistry class.
 """
 
-import pytest
+import hashlib
 import json
 import tempfile
-import hashlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from on1builder.integrations.abi_registry import ABIRegistry, get_registry, _REQUIRED
+import pytest
+
+from on1builder.integrations.abi_registry import _REQUIRED, ABIRegistry, get_registry
 
 
 @pytest.fixture(autouse=True)
 def clean_global_state():
     """Fixture to clean global state before each test."""
     from on1builder.integrations import abi_registry
-    
+
     # Save original state
     original_abis = abi_registry._GLOBAL_ABIS.copy()
     original_sigs = abi_registry._GLOBAL_SIG_MAP.copy()
@@ -27,17 +28,17 @@ def clean_global_state():
     original_hash = abi_registry._FILE_HASH.copy()
     original_initialized = abi_registry._initialized
     original_instance = abi_registry._registry_instance
-    
+
     # Clear before test
     abi_registry._GLOBAL_ABIS.clear()
-    abi_registry._GLOBAL_SIG_MAP.clear() 
+    abi_registry._GLOBAL_SIG_MAP.clear()
     abi_registry._GLOBAL_SELECTOR_MAP.clear()
     abi_registry._FILE_HASH.clear()
     abi_registry._initialized = False
     abi_registry._registry_instance = None
-    
+
     yield
-    
+
     # Restore original state after test (although pytest should handle this)
     abi_registry._GLOBAL_ABIS.clear()
     abi_registry._GLOBAL_ABIS.update(original_abis)
@@ -56,7 +57,7 @@ def temp_abi_dir():
     """Create a temporary directory with test ABI files."""
     with tempfile.TemporaryDirectory() as temp_dir:
         abi_path = Path(temp_dir)
-        
+
         # Create test ERC20 ABI
         erc20_abi = [
             {
@@ -64,18 +65,18 @@ def temp_abi_dir():
                 "type": "function",
                 "inputs": [
                     {"name": "to", "type": "address"},
-                    {"name": "value", "type": "uint256"}
+                    {"name": "value", "type": "uint256"},
                 ],
-                "outputs": [{"name": "", "type": "bool"}]
+                "outputs": [{"name": "", "type": "bool"}],
             },
             {
                 "name": "approve",
                 "type": "function",
                 "inputs": [
                     {"name": "spender", "type": "address"},
-                    {"name": "value", "type": "uint256"}
+                    {"name": "value", "type": "uint256"},
                 ],
-                "outputs": [{"name": "", "type": "bool"}]
+                "outputs": [{"name": "", "type": "bool"}],
             },
             {
                 "name": "transferFrom",
@@ -83,18 +84,18 @@ def temp_abi_dir():
                 "inputs": [
                     {"name": "from", "type": "address"},
                     {"name": "to", "type": "address"},
-                    {"name": "value", "type": "uint256"}
+                    {"name": "value", "type": "uint256"},
                 ],
-                "outputs": [{"name": "", "type": "bool"}]
+                "outputs": [{"name": "", "type": "bool"}],
             },
             {
                 "name": "balanceOf",
                 "type": "function",
                 "inputs": [{"name": "owner", "type": "address"}],
-                "outputs": [{"name": "", "type": "uint256"}]
-            }
+                "outputs": [{"name": "", "type": "uint256"}],
+            },
         ]
-        
+
         # Create test Uniswap ABI
         uniswap_abi = [
             {
@@ -105,31 +106,31 @@ def temp_abi_dir():
                     {"name": "amountOutMin", "type": "uint256"},
                     {"name": "path", "type": "address[]"},
                     {"name": "to", "type": "address"},
-                    {"name": "deadline", "type": "uint256"}
+                    {"name": "deadline", "type": "uint256"},
                 ],
-                "outputs": [{"name": "amounts", "type": "uint256[]"}]
+                "outputs": [{"name": "amounts", "type": "uint256[]"}],
             },
             {
                 "name": "getAmountsOut",
                 "type": "function",
                 "inputs": [
                     {"name": "amountIn", "type": "uint256"},
-                    {"name": "path", "type": "address[]"}
+                    {"name": "path", "type": "address[]"},
                 ],
-                "outputs": [{"name": "amounts", "type": "uint256[]"}]
-            }
+                "outputs": [{"name": "amounts", "type": "uint256[]"}],
+            },
         ]
-        
+
         # Write ABI files
         (abi_path / "erc20_abi.json").write_text(json.dumps(erc20_abi))
         (abi_path / "uniswap_abi.json").write_text(json.dumps(uniswap_abi))
-        
+
         # Create invalid ABI file
         (abi_path / "invalid_abi.json").write_text('{"not": "an_abi"}')
-        
+
         # Create non-ABI JSON file that should be excluded
         (abi_path / "token_list.json").write_text('{"tokens": []}')
-        
+
         yield abi_path
 
 
@@ -143,8 +144,8 @@ def mock_abi_data():
                 "type": "function",
                 "inputs": [
                     {"name": "to", "type": "address"},
-                    {"name": "value", "type": "uint256"}
-                ]
+                    {"name": "value", "type": "uint256"},
+                ],
             }
         ]
     }
@@ -161,10 +162,10 @@ class TestABIRegistry:
 
     def test_init_without_path(self):
         """Test ABIRegistry initialization without path."""
-        with patch.object(ABIRegistry, '_find_default_abi_path') as mock_find:
+        with patch.object(ABIRegistry, "_find_default_abi_path") as mock_find:
             mock_path = Path("/mock/abi/path")
             mock_find.return_value = mock_path
-            
+
             registry = ABIRegistry()
             assert registry.abi_path == mock_path
             mock_find.assert_called_once()
@@ -172,9 +173,9 @@ class TestABIRegistry:
     def test_find_default_abi_path(self):
         """Test default ABI path resolution."""
         registry = ABIRegistry()
-        
+
         # Test the path finding logic
-        with patch('pathlib.Path.exists') as mock_exists:
+        with patch("pathlib.Path.exists") as mock_exists:
             # Mock different scenarios
             mock_exists.side_effect = [True]  # First path exists
             path = registry._find_default_abi_path()
@@ -186,7 +187,7 @@ class TestABIRegistry:
         """Test successful initialization."""
         registry = ABIRegistry(str(temp_abi_dir))
         result = await registry.initialize()
-        
+
         assert result is True
         assert "erc20" in registry.abis
         assert "uniswap" in registry.abis
@@ -196,7 +197,7 @@ class TestABIRegistry:
         """Test initialization with new path."""
         registry = ABIRegistry()
         result = await registry.initialize(str(temp_abi_dir))
-        
+
         assert result is True
         assert registry.abi_path == temp_abi_dir
 
@@ -205,7 +206,7 @@ class TestABIRegistry:
         """Test initialization with invalid path."""
         registry = ABIRegistry("/nonexistent/path")
         result = await registry.initialize()
-        
+
         # Should still return True even if path doesn't exist
         assert result is True
 
@@ -213,10 +214,10 @@ class TestABIRegistry:
     async def test_is_healthy(self, temp_abi_dir):
         """Test health check."""
         registry = ABIRegistry(str(temp_abi_dir))
-        
+
         # Before initialization - depends on global state, may already be initialized
         healthy_before = await registry.is_healthy()
-        
+
         # After initialization
         await registry.initialize()
         registry.load_abis()  # Need to load ABIs for health check to pass
@@ -229,9 +230,9 @@ class TestABIRegistry:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Empty directory
             registry = ABIRegistry(temp_dir)
-            
+
             await registry.initialize()
-            
+
             healthy = await registry.is_healthy()
             assert healthy is False
 
@@ -240,10 +241,10 @@ class TestABIRegistry:
         """Test health check with nonexistent path."""
         registry = ABIRegistry("/nonexistent/path")
         await registry.initialize()
-        
+
         healthy = await registry.is_healthy()
         assert healthy is False
-        
+
         healthy = await registry.is_healthy()
         assert healthy is False
 
@@ -251,10 +252,10 @@ class TestABIRegistry:
         """Test successful ABI loading."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         assert "erc20" in registry.abis
         assert "uniswap" in registry.abis
-        
+
         # Check function signatures were extracted
         assert "erc20" in registry.function_signatures
         assert "transfer" in registry.function_signatures["erc20"]
@@ -263,9 +264,9 @@ class TestABIRegistry:
         """Test ABI loading with nonexistent directory."""
         # Create registry with path that doesn't exist
         registry = ABIRegistry("/nonexistent/path")
-        
+
         registry.load_abis()
-        
+
         # Should not crash, just log error
         assert len(registry.list_available_abis()) == 0
 
@@ -273,22 +274,22 @@ class TestABIRegistry:
         """Test that non-ABI files are excluded from loading."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         # token_list.json should be excluded
         assert "token_list" not in registry.abis
 
     def test_extract_function_signatures(self, temp_abi_dir):
         """Test function signature extraction."""
         registry = ABIRegistry(str(temp_abi_dir))
-        
+
         abi = [
             {
                 "name": "transfer",
                 "type": "function",
                 "inputs": [
                     {"name": "to", "type": "address"},
-                    {"name": "value", "type": "uint256"}
-                ]
+                    {"name": "value", "type": "uint256"},
+                ],
             },
             {
                 "name": "Transfer",
@@ -296,13 +297,13 @@ class TestABIRegistry:
                 "inputs": [
                     {"name": "from", "type": "address"},
                     {"name": "to", "type": "address"},
-                    {"name": "value", "type": "uint256"}
-                ]
-            }
+                    {"name": "value", "type": "uint256"},
+                ],
+            },
         ]
-        
+
         signatures = registry._extract_function_signatures(abi)
-        
+
         assert "transfer" in signatures
         # Should not include 0x prefix, just plain signature
         assert signatures["transfer"] == "transfer(address,uint256)"
@@ -313,7 +314,7 @@ class TestABIRegistry:
         """Test retrieving existing ABI."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         abi = registry.get_abi("erc20")
         assert abi is not None
         assert isinstance(abi, list)
@@ -323,7 +324,7 @@ class TestABIRegistry:
         """Test retrieving nonexistent ABI."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         abi = registry.get_abi("nonexistent")
         assert abi is None
 
@@ -331,7 +332,7 @@ class TestABIRegistry:
         """Test retrieving existing function signature."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         sig = registry.get_function_signature("erc20", "transfer")
         assert sig is not None
         # Should not include 0x prefix, just plain signature
@@ -341,10 +342,10 @@ class TestABIRegistry:
         """Test retrieving nonexistent function signature."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         sig = registry.get_function_signature("erc20", "nonexistent")
         assert sig is None
-        
+
         sig = registry.get_function_signature("nonexistent", "transfer")
         assert sig is None
 
@@ -352,7 +353,7 @@ class TestABIRegistry:
         """Test validation of valid ABI."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         is_valid = registry.validate_abi("erc20")
         assert is_valid is True
 
@@ -360,14 +361,14 @@ class TestABIRegistry:
         """Test validation of invalid ABI."""
         # Create incomplete ERC20 ABI (missing required functions)
         incomplete_abi = [{"name": "transfer", "type": "function"}]
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             abi_path = Path(temp_dir)
             (abi_path / "erc20_abi.json").write_text(json.dumps(incomplete_abi))
-            
+
             registry = ABIRegistry(str(abi_path))
             registry.load_abis()
-            
+
             # erc20 ABI is missing required functions (approve, transferFrom, balanceOf)
             is_valid = registry.validate_abi("erc20")
             assert is_valid is False
@@ -376,7 +377,7 @@ class TestABIRegistry:
         """Test validation of unknown ABI."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         # Unknown contracts return True (no requirements exist)
         is_valid = registry.validate_abi("unknown_contract")
         assert is_valid is True
@@ -385,7 +386,7 @@ class TestABIRegistry:
         """Test listing available ABIs."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         abis = registry.list_available_abis()
         assert "erc20" in abis
         assert "uniswap" in abis
@@ -394,7 +395,7 @@ class TestABIRegistry:
         """Test getting method selector."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         # Get the selector for transfer function
         transfer_sig = registry.get_function_signature("erc20", "transfer")
         if transfer_sig:
@@ -406,11 +407,11 @@ class TestABIRegistry:
     def test_caching_behavior(self, temp_abi_dir):
         """Test that files are cached based on hash."""
         registry = ABIRegistry(str(temp_abi_dir))
-        
+
         # Load ABIs first time
         registry.load_abis()
         initial_abis_count = len(registry.list_available_abis())
-        
+
         # Load again - should use cache (no change in ABI count)
         registry.load_abis()
         assert len(registry.list_available_abis()) == initial_abis_count
@@ -419,14 +420,14 @@ class TestABIRegistry:
         """Test reloading when file changes."""
         registry = ABIRegistry(str(temp_abi_dir))
         registry.load_abis()
-        
+
         # Modify a file
         new_abi = [{"name": "newFunction", "type": "function"}]
         (temp_abi_dir / "erc20_abi.json").write_text(json.dumps(new_abi))
-        
+
         # Reload
         registry.load_abis()
-        
+
         # Should have new content
         abi = registry.get_abi("erc20")
         assert abi is not None
@@ -440,8 +441,9 @@ async def test_get_registry_singleton():
     with tempfile.TemporaryDirectory() as temp_dir:
         registry1 = await get_registry(temp_dir)
         registry2 = await get_registry()
-        
+
         assert registry1 is registry2
+
 
 @pytest.mark.asyncio
 async def test_get_registry_path_change():
@@ -450,11 +452,12 @@ async def test_get_registry_path_change():
         with tempfile.TemporaryDirectory() as temp_dir2:
             registry1 = await get_registry(temp_dir1)
             registry2 = await get_registry(temp_dir2)
-            
+
             assert registry1 is registry2
             assert registry1.abi_path == Path(temp_dir2)
 
-@pytest.mark.asyncio 
+
+@pytest.mark.asyncio
 async def test_initialize_method(temp_abi_dir):
     """Test the initialize method."""
     registry = ABIRegistry()
@@ -462,15 +465,17 @@ async def test_initialize_method(temp_abi_dir):
     assert result is True
     assert registry.abi_path == Path(temp_abi_dir)
 
+
 @pytest.mark.asyncio
 async def test_is_healthy():
     """Test the health check method."""
     with tempfile.TemporaryDirectory() as temp_dir:
         registry = ABIRegistry(temp_dir)
         await registry.initialize()
-        
+
         health = await registry.is_healthy()
         assert isinstance(health, bool)
+
 
 @pytest.mark.asyncio
 async def test_token_methods():
@@ -478,20 +483,20 @@ async def test_token_methods():
     with tempfile.TemporaryDirectory() as temp_dir:
         registry = ABIRegistry(temp_dir)
         await registry.initialize()
-        
+
         # Test find_tokens_path
         tokens_path = registry.find_tokens_path()
         assert isinstance(tokens_path, Path)
-        
+
         # Test token address methods (may return empty dict if no token data)
         token_addresses = await registry.get_token_addresses(1)
         assert isinstance(token_addresses, dict)
-        
+
         token_symbols = await registry.get_token_symbols(1)
         assert isinstance(token_symbols, dict)
-        
+
         # Test specific token lookups (may return None if no data)
-        address = await registry.get_token_address("USDC", 1) 
+        address = await registry.get_token_address("USDC", 1)
         symbol = await registry.get_token_symbol("0x" + "0" * 40, 1)
         # Just check they don't error
 

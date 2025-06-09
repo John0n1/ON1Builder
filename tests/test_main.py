@@ -12,6 +12,7 @@ defined in src/on1builder/__main__.py.
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
 import pytest
 import typer
 from typer.testing import CliRunner
@@ -31,7 +32,10 @@ class TestMainCLI:
         assert isinstance(app, typer.Typer)
         assert app.info.name == "on1builder"
         if app.info.help:
-            assert "Multi-chain blockchain transaction execution framework" in app.info.help
+            assert (
+                "Multi-chain blockchain transaction execution framework"
+                in app.info.help
+            )
 
     def test_help_option(self):
         """Test help option displays correctly."""
@@ -40,71 +44,63 @@ class TestMainCLI:
         assert "ON1Builder" in result.stdout
         assert "Multi-chain blockchain transaction execution framework" in result.stdout
 
-    @patch('on1builder.__main__.setup_logging')
-    @patch('on1builder.__main__.get_logger')
+    @patch("on1builder.__main__.setup_logging")
+    @patch("on1builder.__main__.get_logger")
     def test_main_callback_defaults(self, mock_get_logger, mock_setup_logging):
         """Test main callback with default parameters."""
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
-        
+
         main()
-        
+
         mock_setup_logging.assert_called_once_with(
-            name="on1builder", 
-            level="WARNING", 
-            log_dir=None
+            name="on1builder", level="WARNING", log_dir=None
         )
         mock_logger.debug.assert_called_once()
 
-    @patch('on1builder.__main__.setup_logging')
-    @patch('on1builder.__main__.get_logger')
+    @patch("on1builder.__main__.setup_logging")
+    @patch("on1builder.__main__.get_logger")
     def test_main_callback_verbose(self, mock_get_logger, mock_setup_logging):
         """Test main callback with verbose flag."""
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
-        
+
         main(verbose=True)
-        
+
         mock_setup_logging.assert_called_once_with(
-            name="on1builder", 
-            level="INFO", 
-            log_dir=None
+            name="on1builder", level="INFO", log_dir=None
         )
 
-    @patch('on1builder.__main__.setup_logging')
-    @patch('on1builder.__main__.get_logger')
+    @patch("on1builder.__main__.setup_logging")
+    @patch("on1builder.__main__.get_logger")
     def test_main_callback_debug(self, mock_get_logger, mock_setup_logging):
         """Test main callback with debug flag."""
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
-        
+
         main(debug=True)
-        
+
         mock_setup_logging.assert_called_once_with(
-            name="on1builder", 
-            level="DEBUG", 
-            log_dir=None
+            name="on1builder", level="DEBUG", log_dir=None
         )
 
-    @patch('on1builder.__main__.setup_logging')
-    @patch('on1builder.__main__.get_logger')
+    @patch("on1builder.__main__.setup_logging")
+    @patch("on1builder.__main__.get_logger")
     def test_main_callback_with_log_file(self, mock_get_logger, mock_setup_logging):
         """Test main callback with log file path."""
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
         log_file = Path("/tmp/test.log")
-        
+
         main(log_file=log_file)
-        
+
         mock_setup_logging.assert_called_once_with(
-            name="on1builder", 
-            level="WARNING", 
-            log_dir="/tmp"
+            name="on1builder", level="WARNING", log_dir="/tmp"
         )
 
-    @patch('on1builder.__version__', '1.0.0')
-    @patch('on1builder.__title__', 'ON1Builder')
-    @patch('on1builder.__description__', 'Test Description')
+    @patch("on1builder.__version__", "1.0.0")
+    @patch("on1builder.__title__", "ON1Builder")
+    @patch("on1builder.__description__", "Test Description")
     def test_version_command(self):
         """Test version command displays correct information."""
         result = self.runner.invoke(app, ["version"])
@@ -112,41 +108,41 @@ class TestMainCLI:
         assert "ON1Builder v1.0.0" in result.stdout
         assert "Test Description" in result.stdout
 
-    @patch('on1builder.__main__.app')
+    @patch("on1builder.__main__.app")
     def test_cli_normal_execution(self, mock_app):
         """Test CLI function normal execution."""
         mock_app.return_value = None
-        
+
         cli()
-        
+
         mock_app.assert_called_once()
 
-    @patch('on1builder.__main__.app')
-    @patch('on1builder.__main__.get_logger')
-    @patch('sys.exit')
+    @patch("on1builder.__main__.app")
+    @patch("on1builder.__main__.get_logger")
+    @patch("sys.exit")
     def test_cli_keyboard_interrupt(self, mock_exit, mock_get_logger, mock_app):
         """Test CLI function handles KeyboardInterrupt."""
         mock_app.side_effect = KeyboardInterrupt()
-        
-        with patch('typer.echo') as mock_echo:
+
+        with patch("typer.echo") as mock_echo:
             cli()
-        
+
         mock_echo.assert_called_once_with("\nOperation cancelled by user.", err=True)
         mock_exit.assert_called_once_with(1)
 
-    @patch('on1builder.__main__.app')
-    @patch('on1builder.__main__.get_logger')
-    @patch('sys.exit')
+    @patch("on1builder.__main__.app")
+    @patch("on1builder.__main__.get_logger")
+    @patch("sys.exit")
     def test_cli_unexpected_exception(self, mock_exit, mock_get_logger, mock_app):
         """Test CLI function handles unexpected exceptions."""
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
         test_error = ValueError("Test error")
         mock_app.side_effect = test_error
-        
-        with patch('typer.echo') as mock_echo:
+
+        with patch("typer.echo") as mock_echo:
             cli()
-        
+
         mock_logger.error.assert_called_once_with(f"Unexpected error: {test_error}")
         mock_echo.assert_called_once_with("Error: Test error", err=True)
         mock_exit.assert_called_once_with(1)
@@ -158,6 +154,7 @@ class TestMainCLI:
         # So we'll just verify the module can be imported
         try:
             import on1builder.__main__
+
             # If we get here, the module imported successfully
             assert True
         except ImportError as e:

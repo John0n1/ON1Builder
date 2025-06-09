@@ -58,7 +58,9 @@ class ChainWorker:
         self.config: GlobalSettings = global_cfg
         self.chain_id: str = str(chain_cfg.get("CHAIN_ID", "unknown"))
         self.chain_name: str = chain_cfg.get("CHAIN_NAME", f"chain-{self.chain_id}")
-        self.main_orchestrator = main_orchestrator  # Store reference to MainOrchestrator
+        self.main_orchestrator = (
+            main_orchestrator  # Store reference to MainOrchestrator
+        )
 
         # Endpoints
         self.http_endpoint: str = chain_cfg.get("HTTP_ENDPOINT", "")
@@ -136,13 +138,17 @@ class ChainWorker:
             self.container.register(f"web3_{self.chain_id}", self.web3)
 
             # — External APIs —
-            if hasattr(self.config, 'api') and self.config.api is not None:
+            if hasattr(self.config, "api") and self.config.api is not None:
                 self.api_manager = ExternalAPIManager(self.config.api)
                 await self.api_manager.initialize()
-                self.container.register(f"api_manager_{self.chain_id}", self.api_manager)
+                self.container.register(
+                    f"api_manager_{self.chain_id}", self.api_manager
+                )
             else:
                 self.api_manager = None
-                logger.warning(f"[{self.chain_name}] No API settings found, ExternalAPIManager not initialized")
+                logger.warning(
+                    f"[{self.chain_name}] No API settings found, ExternalAPIManager not initialized"
+                )
 
             # — Notifications —
             # Use shared notification manager if available
@@ -195,10 +201,14 @@ class ChainWorker:
             # — Cores & Monitors —
             # Ensure web3 is initialized before passing to components
             if self.web3 is None:
-                raise RuntimeError("Web3 connection must be established before initializing components")
-                
+                raise RuntimeError(
+                    "Web3 connection must be established before initializing components"
+                )
+
             self.nonce_manager = NonceManager(
-                web3=self.web3, configuration=self.config, main_orchestrator=self.main_orchestrator
+                web3=self.web3,
+                configuration=self.config,
+                main_orchestrator=self.main_orchestrator,
             )
             await self.nonce_manager.initialize()
             self.container.register(f"nonce_core_{self.chain_id}", self.nonce_manager)
@@ -247,7 +257,7 @@ class ChainWorker:
             # At this point, web3 and account should be initialized
             assert self.web3 is not None, "web3 should be initialized"
             assert self.account is not None, "account should be initialized"
-            
+
             self.transaction_manager = TransactionManager(
                 web3=self.web3,
                 account=self.account,
@@ -329,13 +339,15 @@ class ChainWorker:
             if self.txpool_scanner:
                 self._tasks.append(
                     asyncio.create_task(
-                        self.txpool_scanner.start_monitoring(), name=f"TXM_{self.chain_id}"
+                        self.txpool_scanner.start_monitoring(),
+                        name=f"TXM_{self.chain_id}",
                     )
                 )
             if self.market_data_feed:
                 self._tasks.append(
                     asyncio.create_task(
-                        self.market_data_feed.schedule_updates(), name=f"MM_{self.chain_id}"
+                        self.market_data_feed.schedule_updates(),
+                        name=f"MM_{self.chain_id}",
                     )
                 )
 
@@ -436,7 +448,9 @@ class ChainWorker:
             for comp_name, comp in self.main_orchestrator.components.items():
                 if component is comp:
                     is_shared = True
-                    logger.debug(f"Skipping stop for shared {attr_name} from main_orchestrator")
+                    logger.debug(
+                        f"Skipping stop for shared {attr_name} from main_orchestrator"
+                    )
                     break
 
         if is_shared:
@@ -480,7 +494,7 @@ class ChainWorker:
                             level="WARNING",
                             details={
                                 "balance": self.metrics["wallet_balance_eth"],
-                                "wallet": getattr(self.account, 'address', 'unknown'),
+                                "wallet": getattr(self.account, "address", "unknown"),
                                 "chain_id": self.chain_id,
                             },
                         )
@@ -587,21 +601,25 @@ class ChainWorker:
             try:
                 # Convert chain_id to int for database methods
                 chain_id_int = int(self.chain_id) if self.chain_id.isdigit() else None
-                
+
                 # Get transaction count using available method
                 tx_count = await self.db.get_transaction_count(
                     address=self.account.address, chain_id=chain_id_int
                 )
                 self.metrics["transaction_count"] = tx_count
-                
+
                 # Get profit summary if available
                 if hasattr(self.db, "get_profit_summary"):
                     profit_summary = await self.db.get_profit_summary(
                         address=self.account.address, chain_id=chain_id_int
                     )
                     if profit_summary:
-                        self.metrics["total_profit_eth"] = profit_summary.get("total_profit", 0.0)
-                        self.metrics["total_gas_spent_eth"] = profit_summary.get("total_gas_spent", 0.0)
+                        self.metrics["total_profit_eth"] = profit_summary.get(
+                            "total_profit", 0.0
+                        )
+                        self.metrics["total_gas_spent_eth"] = profit_summary.get(
+                            "total_gas_spent", 0.0
+                        )
             except Exception as e:
                 logger.warning(f"Failed to get transaction stats: {e}")
 
@@ -629,7 +647,11 @@ class ChainWorker:
             return False
 
         # Check if we already have a Web3 instance from MainCore
-        if self.main_orchestrator and hasattr(self.main_orchestrator, "web3") and self.main_orchestrator.web3:
+        if (
+            self.main_orchestrator
+            and hasattr(self.main_orchestrator, "web3")
+            and self.main_orchestrator.web3
+        ):
             main_orchestrator_chain_id = await self.main_orchestrator.web3.eth.chain_id
             if str(main_orchestrator_chain_id) == str(self.chain_id):
                 logger.info(
@@ -738,7 +760,7 @@ class ChainWorker:
         if self.web3 is None:
             logger.error("Web3 connection is None")
             return False
-        
+
         try:
             onchain = await self.web3.eth.chain_id
             if str(onchain) != self.chain_id:

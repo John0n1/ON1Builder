@@ -1,10 +1,11 @@
 # tests/test_run_cli.py
 
-import sys
 import asyncio
+import sys
+
 import pytest
-from typer.testing import CliRunner
 from typer import Exit
+from typer.testing import CliRunner
 
 # Import the Typer app object from your run module.
 # Adjust this if the path is different in your project.
@@ -16,6 +17,7 @@ runner = CliRunner()
 # ----------------------------
 # Helpers to create dummy modules/classes
 # ----------------------------
+
 
 class DummyOrchestrator:
     def __init__(self, *, config):
@@ -67,6 +69,7 @@ def stub_core_modules(monkeypatch):
 # Test: successful single‐chain run
 # ----------------------------
 
+
 def test_run_single_chain_success(monkeypatch, tmp_path):
     """
     If load_configuration returns a dict without 'multi_chain',
@@ -75,6 +78,7 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
     """
     # 1) Stub load_configuration to return a simple dict without 'multi_chain'
     dummy_config = {"some_key": "some_value"}
+
     def fake_load_configuration(*, config_path, chain):
         # verify that config_path and chain arguments propagate correctly
         assert config_path == str(tmp_path / "does_not_matter.yaml")
@@ -89,6 +93,7 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
     # 2) Stub asyncio.run so it simply awaits the coroutine and returns
     called = {"executed": False}
     original_asyncio_run = asyncio.run
+
     def fake_asyncio_run(coro):
         # The orchestrator instance should be our DummyOrchestrator
         # and its run() sets .ran = True
@@ -109,7 +114,9 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
         ],
     )
 
-    assert result.exit_code == 0, f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
+    assert (
+        result.exit_code == 0
+    ), f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
     # Since logger.info is used but not printed to stdout by default, we only check that
     # no "Error:" prefix is printed to stderr.
     assert result.stderr == ""
@@ -121,6 +128,7 @@ def test_run_single_chain_success(monkeypatch, tmp_path):
 # Test: successful multi‐chain run
 # ----------------------------
 
+
 def test_run_multi_chain_success(monkeypatch, tmp_path):
     """
     If load_configuration returns {'multi_chain': True}, run() should import
@@ -128,6 +136,7 @@ def test_run_multi_chain_success(monkeypatch, tmp_path):
     """
     # 1) Stub load_configuration to return a dict with multi_chain=True
     dummy_config = {"multi_chain": True, "chains": ["a", "b"]}
+
     def fake_load_configuration(*, config_path, chain):
         assert config_path is None  # since we won't pass --config
         assert chain is None
@@ -151,7 +160,9 @@ def test_run_multi_chain_success(monkeypatch, tmp_path):
 
     # 3) Invoke without any flags: defaults to config=None, chain=None
     result = runner.invoke(run_app, [])
-    assert result.exit_code == 0, f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
+    assert (
+        result.exit_code == 0
+    ), f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
     assert result.stderr == ""
     assert called["multi_executed"]
 
@@ -160,16 +171,19 @@ def test_run_multi_chain_success(monkeypatch, tmp_path):
 # Test: load_configuration raises an exception
 # ----------------------------
 
+
 def test_run_load_config_failure(monkeypatch):
     """
     If load_configuration raises, run() should catch it, print an error to stderr,
     and exit with code 1.
     """
+
     def fake_load_configuration(*, config_path, chain):
         raise ValueError("bad config!")
 
     import sys
     import types
+
     run_cmd_module = sys.modules["on1builder.cli.run_cmd"]
     monkeypatch.setattr(run_cmd_module, "load_configuration", fake_load_configuration)
 
@@ -187,6 +201,7 @@ def test_run_load_config_failure(monkeypatch):
 # Test: orchestrator.run() raises an exception
 # ----------------------------
 
+
 def test_run_orchestrator_failure(monkeypatch):
     """
     If orchestrator.run() raises, run() should print “Error: …” and exit code 1.
@@ -194,6 +209,7 @@ def test_run_orchestrator_failure(monkeypatch):
     """
     # 1) Stub load_configuration to return single‐chain config
     dummy_config = {"foo": "bar"}
+
     def fake_load_configuration(*, config_path, chain):
         return dummy_config
 
@@ -230,12 +246,14 @@ def test_run_orchestrator_failure(monkeypatch):
 # Test: debug flag does not break anything
 # ----------------------------
 
+
 def test_run_with_debug_flag(monkeypatch, tmp_path):
     """
     Passing --debug should still follow the single‐chain code path and succeed.
     """
     # 1) Stub load_configuration
     dummy_config = {"x": "y"}
+
     def fake_load_configuration(*, config_path, chain):
         return dummy_config
 
@@ -256,6 +274,8 @@ def test_run_with_debug_flag(monkeypatch, tmp_path):
 
     # 3) Invoke with --debug (no other flags)
     result = runner.invoke(run_app, ["--debug"])
-    assert result.exit_code == 0, f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
+    assert (
+        result.exit_code == 0
+    ), f"Exit code: {result.exit_code}, stdout: {result.stdout}, stderr: {result.stderr}"
     assert result.stderr == ""
     assert called["ran_debug"]

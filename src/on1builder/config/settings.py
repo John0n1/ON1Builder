@@ -85,7 +85,7 @@ class GlobalSettings(BaseModel):
     max_gas_price: int = Field(default=500_000_000_000, gt=0)
     min_gas_price_gwei: float = Field(default=1.0, gt=0)
     max_gas_price_gwei: float = Field(default=500.0, gt=0)
-    
+
     # Slippage settings
     slippage_low_congestion: float = Field(default=0.1, ge=0)
     slippage_medium_congestion: float = Field(default=0.5, ge=0)
@@ -94,11 +94,11 @@ class GlobalSettings(BaseModel):
     slippage_default: float = Field(default=0.5, ge=0)
     min_slippage: float = Field(default=0.05, ge=0)
     max_slippage: float = Field(default=5.0, ge=0)
-    
+
     # Profit settings
     profit_safety_margin: float = Field(default=0.9, gt=0)
     primary_token: Optional[str] = None
-    
+
     # Strategy settings
     strategy_decay_factor: float = Field(default=0.95, gt=0, le=1)
     strategy_learning_rate: float = Field(default=0.01, gt=0)
@@ -108,13 +108,13 @@ class GlobalSettings(BaseModel):
     strategy_market_weight: float = Field(default=1.0, gt=0)
     strategy_gas_weight: float = Field(default=1.0, gt=0)
     strategy_save_interval: int = Field(default=100, gt=0)
-    
+
     # Market data settings
     price_cache_ttl: int = Field(default=300, gt=0)
     cache_cleanup_interval: int = Field(default=300, gt=0)
     market_update_interval: int = Field(default=60, gt=0)
     health_check_token: str = Field(default="ETH")
-    
+
     # Chain worker settings
     heartbeat_interval: float = Field(default=30.0, gt=0)
     min_wallet_balance: float = Field(default=0.01, gt=0)

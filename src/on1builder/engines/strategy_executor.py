@@ -74,15 +74,19 @@ class StrategyExecutor:
         transaction_core: TransactionManager,
         safety_net: SafetyGuard,
         market_monitor: MarketDataFeed,
-        main_orchestrator: Optional[Any] = None,  # Reference to MainOrchestrator for shared resources
+        main_orchestrator: Optional[
+            Any
+        ] = None,  # Reference to MainOrchestrator for shared resources
     ) -> None:
         self.web3 = web3
         self.cfg = config
         self.txc = transaction_core
         self.safety_net = safety_net
         self.market_monitor = market_monitor
-        self.api_manager = getattr(config, 'api', None)  # Use api attribute instead
-        self.main_orchestrator = main_orchestrator  # Store reference to MainOrchestrator
+        self.api_manager = getattr(config, "api", None)  # Use api attribute instead
+        self.main_orchestrator = (
+            main_orchestrator  # Store reference to MainOrchestrator
+        )
 
         # Use path_helpers to get the correct resource path
         from ..utils.path_helpers import get_resource_path

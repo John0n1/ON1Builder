@@ -2,13 +2,14 @@
 Tests for the chain_worker module.
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from on1builder.config.settings import APISettings, GlobalSettings
 from on1builder.core.chain_worker import ChainWorker
-from on1builder.config.settings import GlobalSettings, APISettings
 
 
 @pytest.fixture
@@ -54,7 +55,9 @@ class TestChainWorker:
         assert chain_worker.websocket_endpoint == "ws://localhost:8546"
         assert chain_worker.ipc_endpoint == "/tmp/geth.ipc"
         assert chain_worker.wallet_key == "0x" + "1" * 64
-        assert chain_worker.wallet_address == "0x742d35Cc6634C0532925a3b8D0C55E749b5A2C4B"
+        assert (
+            chain_worker.wallet_address == "0x742d35Cc6634C0532925a3b8D0C55E749b5A2C4B"
+        )
         assert not chain_worker.initialized
         assert not chain_worker.running
         assert chain_worker.web3 is None
@@ -81,16 +84,23 @@ class TestChainWorker:
         assert chain_worker.metrics["health_status"] == "initializing"
 
     @pytest.mark.asyncio
-    @patch('on1builder.core.chain_worker.get_container')
-    @patch('on1builder.core.chain_worker.get_notification_manager')
-    @patch('on1builder.core.chain_worker.MarketDataFeed')
-    @patch('on1builder.core.chain_worker.TxPoolScanner')
-    async def test_initialize_success(self, mock_txpool, mock_market_feed, mock_get_notification, mock_get_container, chain_worker):
+    @patch("on1builder.core.chain_worker.get_container")
+    @patch("on1builder.core.chain_worker.get_notification_manager")
+    @patch("on1builder.core.chain_worker.MarketDataFeed")
+    @patch("on1builder.core.chain_worker.TxPoolScanner")
+    async def test_initialize_success(
+        self,
+        mock_txpool,
+        mock_market_feed,
+        mock_get_notification,
+        mock_get_container,
+        chain_worker,
+    ):
         """Test successful initialization."""
         # Add missing attributes to config mock
         chain_worker.config.monitored_tokens = ["ETH", "USDC"]
         chain_worker.config.api = MagicMock()
-        
+
         # Mock container
         mock_container = MagicMock()
         mock_get_container.return_value = mock_container
@@ -110,20 +120,26 @@ class TestChainWorker:
         mock_txpool.return_value = mock_scanner
 
         # Mock web3 initialization
-        with patch.object(chain_worker, '_init_web3', new_callable=AsyncMock) as mock_init_web3, \
-             patch('on1builder.core.chain_worker.Account') as mock_account_class, \
-             patch('on1builder.core.chain_worker.ExternalAPIManager') as mock_api_manager, \
-             patch('on1builder.core.chain_worker.get_db_manager') as mock_get_db, \
-             patch('on1builder.core.chain_worker.NonceManager') as mock_nonce_manager, \
-             patch('on1builder.core.chain_worker.SafetyGuard') as mock_safety_guard:
+        with (
+            patch.object(
+                chain_worker, "_init_web3", new_callable=AsyncMock
+            ) as mock_init_web3,
+            patch("on1builder.core.chain_worker.Account") as mock_account_class,
+            patch(
+                "on1builder.core.chain_worker.ExternalAPIManager"
+            ) as mock_api_manager,
+            patch("on1builder.core.chain_worker.get_db_manager") as mock_get_db,
+            patch("on1builder.core.chain_worker.NonceManager") as mock_nonce_manager,
+            patch("on1builder.core.chain_worker.SafetyGuard") as mock_safety_guard,
+        ):
 
             # Setup mocks
             mock_init_web3.return_value = True
-            
+
             # Mock web3 instance to ensure it's set during init
             mock_web3 = MagicMock()
             chain_worker.web3 = mock_web3
-            
+
             mock_account = MagicMock()
             mock_account.address = chain_worker.wallet_address
             mock_account_class.from_key.return_value = mock_account
@@ -160,12 +176,14 @@ class TestChainWorker:
     async def test_initialize_no_wallet_key(self, chain_worker):
         """Test initialization failure when no wallet key is provided."""
         chain_worker.wallet_key = None
-        
-        with patch.object(chain_worker, '_init_web3', new_callable=AsyncMock) as mock_init_web3:
+
+        with patch.object(
+            chain_worker, "_init_web3", new_callable=AsyncMock
+        ) as mock_init_web3:
             mock_init_web3.return_value = True
-            
+
             result = await chain_worker.initialize()
-            
+
             assert result is False
             assert not chain_worker.initialized
             assert chain_worker.metrics["health_status"] == "error_account"
@@ -173,11 +191,13 @@ class TestChainWorker:
     @pytest.mark.asyncio
     async def test_initialize_web3_failure(self, chain_worker):
         """Test initialization failure when Web3 connection fails."""
-        with patch.object(chain_worker, '_init_web3', new_callable=AsyncMock) as mock_init_web3:
+        with patch.object(
+            chain_worker, "_init_web3", new_callable=AsyncMock
+        ) as mock_init_web3:
             mock_init_web3.return_value = False
-            
+
             result = await chain_worker.initialize()
-            
+
             assert result is False
             assert not chain_worker.initialized
             assert chain_worker.metrics["health_status"] == "error_web3"
@@ -186,7 +206,7 @@ class TestChainWorker:
     async def test_start_worker_success(self, chain_worker):
         """Test starting the worker successfully."""
         chain_worker.initialized = True
-        
+
         # Mock required components
         chain_worker.txpool_scanner = MagicMock()
         chain_worker.txpool_scanner.start_monitoring = AsyncMock()
@@ -194,10 +214,10 @@ class TestChainWorker:
         chain_worker.market_data_feed.schedule_updates = AsyncMock()
         chain_worker.notification_manager = MagicMock()
         chain_worker.notification_manager.send_notification = AsyncMock()
-        
-        with patch.object(chain_worker, '_run_heartbeat', new_callable=AsyncMock):
+
+        with patch.object(chain_worker, "_run_heartbeat", new_callable=AsyncMock):
             await chain_worker.start()
-            
+
             assert chain_worker.running
             assert chain_worker.metrics["health_status"] == "running"
             chain_worker.notification_manager.send_notification.assert_called_once()
@@ -213,7 +233,7 @@ class TestChainWorker:
         """Test starting worker when already running."""
         chain_worker.initialized = True
         chain_worker.running = True
-        
+
         await chain_worker.start()
         # Should just log warning and return
 
@@ -222,26 +242,28 @@ class TestChainWorker:
         """Test stopping the worker."""
         chain_worker.running = True
         chain_worker._stop_event = asyncio.Event()
-        
+
         # Mock some tasks
         mock_task1 = MagicMock()
         mock_task1.done.return_value = False
         mock_task1.cancelled.return_value = False
         mock_task1.get_name.return_value = "test_task_1"
-        
+
         mock_task2 = MagicMock()
         mock_task2.done.return_value = False
         mock_task2.cancelled.return_value = False
         mock_task2.get_name.return_value = "test_task_2"
-        
+
         chain_worker._tasks = [mock_task1, mock_task2]
         chain_worker.notification_manager = MagicMock()
         chain_worker.notification_manager.send_notification = AsyncMock()
         chain_worker.notification_manager.stop = AsyncMock()
-        
-        with patch.object(chain_worker, '_stop_component', new_callable=AsyncMock) as mock_stop_component:
+
+        with patch.object(
+            chain_worker, "_stop_component", new_callable=AsyncMock
+        ) as mock_stop_component:
             await chain_worker.stop()
-            
+
             assert not chain_worker.running
             assert chain_worker._stop_event.is_set()
             assert chain_worker.metrics["health_status"] == "stopped"
@@ -260,13 +282,15 @@ class TestChainWorker:
     async def test_get_wallet_balance(self, chain_worker):
         """Test getting wallet balance."""
         mock_web3 = MagicMock()
-        mock_web3.eth.get_balance = AsyncMock(return_value=1000000000000000000)  # 1 ETH in wei
+        mock_web3.eth.get_balance = AsyncMock(
+            return_value=1000000000000000000
+        )  # 1 ETH in wei
         chain_worker.web3 = mock_web3
         chain_worker.account = MagicMock()
         chain_worker.account.address = "0x742d35Cc6634C0532925a3b8D0C55E749b5A2C4B"
-        
+
         balance = await chain_worker.get_wallet_balance()
-        
+
         assert balance == 1.0  # 1 ETH
         mock_web3.eth.get_balance.assert_called_once_with(chain_worker.account.address)
 
@@ -274,10 +298,11 @@ class TestChainWorker:
     async def test_get_gas_price(self, chain_worker):
         """Test getting gas price."""
         mock_web3 = MagicMock()
+
         # For AsyncWeb3, gas_price is awaitable
         async def mock_gas_price():
             return 20000000000  # 20 gwei in wei
-            
+
         mock_web3.eth.gas_price = mock_gas_price()
         mock_web3.from_wei = MagicMock(return_value=20.0)
         chain_worker.web3 = mock_web3
@@ -290,12 +315,13 @@ class TestChainWorker:
     async def test_verify_connection_success(self, chain_worker):
         """Test successful connection verification."""
         mock_web3 = MagicMock()
-        
+
         # Mock chain_id as a coroutine
         async def mock_chain_id():
             return 1
+
         mock_web3.eth.chain_id = mock_chain_id()
-        
+
         mock_web3.eth.get_block = AsyncMock(return_value={"number": 12345})
         chain_worker.web3 = mock_web3
         chain_worker.chain_id = "1"
@@ -309,12 +335,13 @@ class TestChainWorker:
     async def test_verify_connection_chain_id_mismatch(self, chain_worker):
         """Test connection verification with chain ID mismatch."""
         mock_web3 = MagicMock()
-        
+
         # Mock chain_id as a coroutine returning different ID
         async def mock_chain_id():
             return 5
+
         mock_web3.eth.chain_id = mock_chain_id()
-        
+
         chain_worker.web3 = mock_web3
         chain_worker.chain_id = "1"
 
@@ -325,16 +352,19 @@ class TestChainWorker:
     @pytest.mark.asyncio
     async def test_init_web3_http_success(self, chain_worker):
         """Test successful Web3 initialization with HTTP provider."""
-        with patch('on1builder.core.chain_worker.AsyncWeb3') as mock_web3_class, \
-             patch('on1builder.core.chain_worker.AsyncHTTPProvider') as mock_provider:
+        with (
+            patch("on1builder.core.chain_worker.AsyncWeb3") as mock_web3_class,
+            patch("on1builder.core.chain_worker.AsyncHTTPProvider") as mock_provider,
+        ):
 
             mock_web3 = MagicMock()
-            
+
             # Mock chain_id as a coroutine
             async def mock_chain_id():
                 return 1
+
             mock_web3.eth.chain_id = mock_chain_id()
-            
+
             mock_web3_class.return_value = mock_web3
 
             result = await chain_worker._init_web3()
@@ -348,9 +378,9 @@ class TestChainWorker:
         chain_worker.http_endpoint = ""
         chain_worker.websocket_endpoint = ""
         chain_worker.ipc_endpoint = ""
-        
+
         result = await chain_worker._init_web3()
-        
+
         assert result is False
 
     @pytest.mark.asyncio
@@ -360,21 +390,28 @@ class TestChainWorker:
         chain_worker.web3 = MagicMock()
         chain_worker.account = MagicMock()
         chain_worker.account.address = "0x742d35Cc6634C0532925a3b8D0C55E749b5A2C4B"
-        
+
         # Mock block_number as a coroutine
         async def mock_block_number():
             return 12345
+
         chain_worker.web3.eth.block_number = mock_block_number()
-        
-        with patch.object(chain_worker, 'get_wallet_balance', new_callable=AsyncMock) as mock_balance, \
-             patch.object(chain_worker, 'get_gas_price', new_callable=AsyncMock) as mock_gas_price:
-            
+
+        with (
+            patch.object(
+                chain_worker, "get_wallet_balance", new_callable=AsyncMock
+            ) as mock_balance,
+            patch.object(
+                chain_worker, "get_gas_price", new_callable=AsyncMock
+            ) as mock_gas_price,
+        ):
+
             mock_balance.return_value = 5.0
             mock_gas_price.return_value = 25.0
-            
+
             # Call the method that exists in the actual implementation
             await chain_worker._update_metrics()
-            
+
             # Check that the methods were called (the actual metrics update may depend on implementation details)
             mock_balance.assert_called()
             mock_gas_price.assert_called()
@@ -384,19 +421,20 @@ class TestChainWorker:
         """Test heartbeat functionality."""
         chain_worker.running = True
         chain_worker._stop_event = asyncio.Event()
-        
+
         # Add missing config attributes that are used in _update_metrics
         chain_worker.config.min_wallet_balance = 0.1
         chain_worker.config.max_gas_price_gwei = 100
-        
+
         # Mock web3 for metrics update
         mock_web3 = MagicMock()
-        
-        # Mock block_number as a coroutine  
+
+        # Mock block_number as a coroutine
         async def mock_block_number():
             return 12345
+
         mock_web3.eth.block_number = mock_block_number()
-        
+
         chain_worker.web3 = mock_web3
 
         # Stop the event after a short delay to prevent infinite loop
@@ -404,8 +442,14 @@ class TestChainWorker:
             await asyncio.sleep(0.1)
             chain_worker._stop_event.set()
 
-        with patch.object(chain_worker, '_update_metrics', new_callable=AsyncMock) as mock_update, \
-             patch.object(chain_worker, '_check_component_health', new_callable=AsyncMock) as mock_health:
+        with (
+            patch.object(
+                chain_worker, "_update_metrics", new_callable=AsyncMock
+            ) as mock_update,
+            patch.object(
+                chain_worker, "_check_component_health", new_callable=AsyncMock
+            ) as mock_health,
+        ):
 
             mock_update.return_value = None
             mock_health.return_value = True
@@ -449,9 +493,9 @@ class TestChainWorker:
         mock_component = MagicMock()
         mock_component.stop = AsyncMock()
         chain_worker.txpool_scanner = mock_component
-        
+
         await chain_worker._stop_component("txpool_scanner")
-        
+
         mock_component.stop.assert_called_once()
         assert "txpool_scanner" in chain_worker._closed_components
 
@@ -468,11 +512,13 @@ class TestChainWorkerErrorHandling:
     @pytest.mark.asyncio
     async def test_initialize_with_exception(self, chain_worker):
         """Test initialization with exception."""
-        with patch.object(chain_worker, '_init_web3', new_callable=AsyncMock) as mock_init_web3:
+        with patch.object(
+            chain_worker, "_init_web3", new_callable=AsyncMock
+        ) as mock_init_web3:
             mock_init_web3.side_effect = Exception("Connection failed")
-            
+
             result = await chain_worker.initialize()
-            
+
             assert result is False
             assert chain_worker.metrics["health_status"] == "error"
 
@@ -481,10 +527,12 @@ class TestChainWorkerErrorHandling:
         """Test start with exception."""
         chain_worker.initialized = True
         chain_worker.txpool_scanner = MagicMock()
-        chain_worker.txpool_scanner.start_monitoring = AsyncMock(side_effect=Exception("Start failed"))
-        
+        chain_worker.txpool_scanner.start_monitoring = AsyncMock(
+            side_effect=Exception("Start failed")
+        )
+
         await chain_worker.start()
-        
+
         assert chain_worker.metrics["health_status"] == "error_starting"
 
     @pytest.mark.asyncio
@@ -495,20 +543,22 @@ class TestChainWorkerErrorHandling:
         chain_worker.web3 = mock_web3
         chain_worker.account = MagicMock()
         chain_worker.account.address = "0x742d35Cc6634C0532925a3b8D0C55E749b5A2C4B"
-        
+
         balance = await chain_worker.get_wallet_balance()
-        
+
         assert balance == 0.0  # Should return 0 on error
 
     @pytest.mark.asyncio
     async def test_get_gas_price_exception(self, chain_worker):
         """Test gas price with exception."""
         mock_web3 = MagicMock()
-        mock_web3.eth.gas_price = property(lambda self: (_ for _ in ()).throw(Exception("Network error")))
+        mock_web3.eth.gas_price = property(
+            lambda self: (_ for _ in ()).throw(Exception("Network error"))
+        )
         chain_worker.web3 = mock_web3
-        
+
         gas_price = await chain_worker.get_gas_price()
-        
+
         assert gas_price == 0.0  # Should return 0 on error
 
 
@@ -519,12 +569,12 @@ class TestChainWorkerIntegration:
     async def test_minimal_lifecycle(self, chain_config, mock_global_settings):
         """Test minimal worker lifecycle."""
         worker = ChainWorker(chain_config, mock_global_settings)
-        
+
         # Test initialization (will fail due to missing dependencies, but that's expected)
         result = await worker.initialize()
-        
+
         # Should not crash, even if initialization fails
         assert isinstance(result, bool)
-        
+
         # Test stop (should work even if not started)
         await worker.stop()

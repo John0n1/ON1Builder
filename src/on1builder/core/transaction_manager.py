@@ -21,15 +21,25 @@ from __future__ import annotations
 import asyncio
 import time
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 
 from eth_account import Account
 from eth_account.datastructures import SignedTransaction
 from eth_account.signers.local import LocalAccount
 from eth_typing import Address, ChecksumAddress, HexStr
-from web3 import AsyncWeb3, Web3
-from web3.types import TxParams, TxReceipt, TxData, Wei, LogReceipt, _Hash32
 from eth_utils.conversions import to_hex
+from web3 import AsyncWeb3, Web3
+from web3.types import LogReceipt, TxData, TxParams, TxReceipt, Wei, _Hash32
 
 from ..config.settings import GlobalSettings
 from ..engines.safety_guard import SafetyGuard
@@ -384,7 +394,7 @@ class TransactionManager:
                         except Exception as notify_err:
                             logger.warning(f"Failed to send notification: {notify_err}")
                     raise StrategyExecutionError(f"Execution failed: {e}")
-        
+
         # This should never be reached, but added for type checker
         raise StrategyExecutionError("Unexpected execution path")
 
@@ -398,7 +408,9 @@ class TransactionManager:
         start = time.time()
         while time.time() - start < timeout:
             try:
-                receipt = await self.web3.eth.get_transaction_receipt(cast(_Hash32, tx_hash))
+                receipt = await self.web3.eth.get_transaction_receipt(
+                    cast(_Hash32, tx_hash)
+                )
                 if receipt:
                     status = receipt.get("status", 0)
                     self._pending_txs.setdefault(tx_hash, {})["status"] = (
@@ -435,7 +447,9 @@ class TransactionManager:
         addr = address or self.address
         try:
             # Ensure addr is a ChecksumAddress for proper type handling
-            checked_addr = cast(ChecksumAddress, addr) if isinstance(addr, str) else addr
+            checked_addr = (
+                cast(ChecksumAddress, addr) if isinstance(addr, str) else addr
+            )
             bal = await self.web3.eth.get_balance(checked_addr)
             return Decimal(bal) / Decimal(10**18)
         except Exception as e:
@@ -458,7 +472,7 @@ class TransactionManager:
             # Ensure recipient address is checksummed if present
             if "to" in tx and tx["to"]:
                 tx["to"] = Web3.to_checksum_address(tx["to"])
-            
+
             # Basic simulation via eth_call
             result = await self.web3.eth.call(cast(TxParams, tx))
 
@@ -993,7 +1007,7 @@ class TransactionManager:
     ) -> str:
         """Withdraw ETH to a specified address or profit receiver."""
         if to_address is None:
-            to_address = getattr(self.configuration, 'profit_receiver', None)
+            to_address = getattr(self.configuration, "profit_receiver", None)
             if not to_address:
                 raise StrategyExecutionError("No withdrawal address configured")
 
@@ -1042,6 +1056,7 @@ class TransactionManager:
                 # Check for close method and try to call it appropriately
                 if hasattr(provider, "close"):
                     import inspect
+
                     close_method = getattr(provider, "close")
                     if inspect.iscoroutinefunction(close_method):
                         await close_method()
@@ -1074,7 +1089,9 @@ class TransactionManager:
         """
         try:
             # Check if contract address is configured
-            configured_address = getattr(self.configuration, 'flashloan_contract_address', None)
+            configured_address = getattr(
+                self.configuration, "flashloan_contract_address", None
+            )
             if configured_address:
                 # Validate existing contract
                 try:
@@ -1116,8 +1133,9 @@ class TransactionManager:
 
             # Aave V3 addresses provider for mainnet
             addresses_provider = getattr(
-                self.configuration, 'aave_addresses_provider',
-                "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e"  # Mainnet default
+                self.configuration,
+                "aave_addresses_provider",
+                "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e",  # Mainnet default
             )
 
             # For deployment, we'd need bytecode - this is a placeholder
@@ -1148,8 +1166,9 @@ class TransactionManager:
         try:
             # Get Aave pool contract
             pool_address = getattr(
-                self.configuration, 'aave_pool_address',
-                "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"  # Mainnet V3 Pool
+                self.configuration,
+                "aave_pool_address",
+                "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",  # Mainnet V3 Pool
             )
 
             if not self.abi_registry:
@@ -1170,9 +1189,7 @@ class TransactionManager:
             # For now, we'll do basic validation
             try:
                 # Check if asset contract exists and has code
-                code = await self.web3.eth.get_code(
-                    Web3.to_checksum_address(asset)
-                )
+                code = await self.web3.eth.get_code(Web3.to_checksum_address(asset))
                 if code == b"":
                     return False
 
@@ -1468,8 +1485,8 @@ class TransactionManager:
 
             # Create contract instance for event parsing
             contract = self.web3.eth.contract(
-                address=Web3.to_checksum_address(flashloan_data["flashloan_contract"]), 
-                abi=flashloan_abi
+                address=Web3.to_checksum_address(flashloan_data["flashloan_contract"]),
+                abi=flashloan_abi,
             )
 
             # Parse each log
@@ -1518,7 +1535,9 @@ class TransactionManager:
 
             # Get transaction receipt for analysis
             try:
-                receipt = await self.web3.eth.get_transaction_receipt(cast(_Hash32, tx_hash))
+                receipt = await self.web3.eth.get_transaction_receipt(
+                    cast(_Hash32, tx_hash)
+                )
             except Exception:
                 return {
                     "error": "Cannot get transaction receipt",
@@ -1694,8 +1713,9 @@ class TransactionManager:
 
             # Check Aave pool contract
             pool_address = getattr(
-                self.configuration, 'aave_pool_address', 
-                "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
+                self.configuration,
+                "aave_pool_address",
+                "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
             )
             try:
                 pool_code = await self.web3.eth.get_code(
@@ -1844,13 +1864,15 @@ class TransactionManager:
                 "balances": {},
                 "configuration": {
                     "gas_price_multiplier": getattr(
-                        self.configuration, 'gas_price_multiplier', 1.1
+                        self.configuration, "gas_price_multiplier", 1.1
                     ),
                     "flashloan_contract": getattr(
-                        self.configuration, 'flashloan_contract_address', None
+                        self.configuration, "flashloan_contract_address", None
                     ),
-                    "aave_pool": getattr(self.configuration, 'aave_pool_address', None),
-                    "profit_receiver": getattr(self.configuration, 'profit_receiver', None),
+                    "aave_pool": getattr(self.configuration, "aave_pool_address", None),
+                    "profit_receiver": getattr(
+                        self.configuration, "profit_receiver", None
+                    ),
                 },
             }
 

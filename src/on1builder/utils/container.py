@@ -138,7 +138,7 @@ class Container:
                     if other_key not in closed_components and key in other_dependencies:
                         has_dependents = True
                         break
-                
+
                 if has_dependents:
                     # Some components still depend on this one, skip this one
                     continue

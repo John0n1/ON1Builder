@@ -29,9 +29,13 @@ def global_settings():
 @pytest.fixture
 def db_interface(global_settings):
     """Create test database interface."""
-    with patch('on1builder.persistence.db_interface.HAS_SQLALCHEMY', True):
-        with patch('on1builder.persistence.db_interface.create_async_engine') as mock_engine:
-            with patch('on1builder.persistence.db_interface.async_sessionmaker') as mock_session:
+    with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", True):
+        with patch(
+            "on1builder.persistence.db_interface.create_async_engine"
+        ) as mock_engine:
+            with patch(
+                "on1builder.persistence.db_interface.async_sessionmaker"
+            ) as mock_session:
                 mock_engine.return_value = MagicMock()
                 mock_session.return_value = MagicMock()
                 return DatabaseInterface(global_settings)
@@ -48,33 +52,33 @@ class TestDatabaseInterface:
     @pytest.mark.asyncio
     async def test_initialize_with_sqlalchemy(self, db_interface):
         """Test initialization when SQLAlchemy is available."""
-        with patch('on1builder.persistence.db_interface.HAS_SQLALCHEMY', True):
-            with patch('on1builder.persistence.db_interface.Base') as mock_base:
+        with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", True):
+            with patch("on1builder.persistence.db_interface.Base") as mock_base:
                 # Create a proper async context manager mock
                 mock_conn = AsyncMock()
                 mock_conn.run_sync = AsyncMock()
-                
+
                 # Create a context manager that returns the connection
                 async def async_begin():
                     return mock_conn
-                
+
                 mock_context_manager = AsyncMock()
                 mock_context_manager.__aenter__ = AsyncMock(return_value=mock_conn)
                 mock_context_manager.__aexit__ = AsyncMock(return_value=None)
-                
+
                 mock_engine = AsyncMock()
                 mock_engine.begin = MagicMock(return_value=mock_context_manager)
                 db_interface._engine = mock_engine
-                
+
                 await db_interface.initialize()
-                
+
                 mock_engine.begin.assert_called_once()
                 mock_conn.run_sync.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_initialize_without_sqlalchemy(self, db_interface):
         """Test initialization when SQLAlchemy is not available."""
-        with patch('on1builder.persistence.db_interface.HAS_SQLALCHEMY', False):
+        with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", False):
             # Should complete without error
             await db_interface.initialize()
 
@@ -84,9 +88,9 @@ class TestDatabaseInterface:
         # Set up mock engine
         mock_engine = AsyncMock()
         db_interface._engine = mock_engine
-        
+
         await db_interface.close()
-        
+
         mock_engine.dispose.assert_called_once()
 
     @pytest.mark.asyncio
@@ -112,9 +116,11 @@ class TestDatabaseInterface:
             "data": "0x",
         }
 
-        with patch('on1builder.persistence.db_interface.HAS_SQLALCHEMY', True):
-            with patch('on1builder.persistence.db_interface.Transaction') as mock_transaction_class:
-                with patch('on1builder.persistence.db_interface.select') as mock_select:
+        with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", True):
+            with patch(
+                "on1builder.persistence.db_interface.Transaction"
+            ) as mock_transaction_class:
+                with patch("on1builder.persistence.db_interface.select") as mock_select:
                     mock_transaction = MagicMock()
                     mock_transaction.id = 1
                     mock_transaction_class.return_value = mock_transaction
@@ -124,15 +130,17 @@ class TestDatabaseInterface:
                     mock_session_cm = AsyncMock()
                     mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
                     mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-                    
+
                     # Mock the result of the select query
                     mock_result = MagicMock()
-                    mock_result.scalar_one_or_none = MagicMock(return_value=None)  # No existing transaction (sync return)
+                    mock_result.scalar_one_or_none = MagicMock(
+                        return_value=None
+                    )  # No existing transaction (sync return)
                     mock_session.execute = AsyncMock(return_value=mock_result)
                     mock_session.add = MagicMock()
                     mock_session.commit = AsyncMock()
                     mock_session.refresh = AsyncMock()
-                    
+
                     # Mock session factory to return the context manager
                     session_factory = MagicMock()
                     session_factory.return_value = mock_session_cm
@@ -159,7 +167,7 @@ class TestDatabaseInterface:
     async def test_save_transaction_without_sqlalchemy(self, db_interface):
         """Test saving transaction when SQLAlchemy is not available."""
         db_interface._session_factory = None
-        
+
         result = await db_interface.save_transaction(
             tx_hash="0x123",
             chain_id=1,
@@ -168,15 +176,17 @@ class TestDatabaseInterface:
             value="1000000000000000000",
             gas_price="20000000000",
         )
-        
+
         assert result is None
 
     @pytest.mark.asyncio
     async def test_save_transaction_error_handling(self, db_interface):
         """Test transaction saving error handling."""
-        with patch('on1builder.persistence.db_interface.HAS_SQLALCHEMY', True):
-            with patch('on1builder.persistence.db_interface.Transaction') as mock_transaction_class:
-                with patch('on1builder.persistence.db_interface.select') as mock_select:
+        with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", True):
+            with patch(
+                "on1builder.persistence.db_interface.Transaction"
+            ) as mock_transaction_class:
+                with patch("on1builder.persistence.db_interface.select") as mock_select:
                     mock_transaction = MagicMock()
                     mock_transaction.id = 1
                     mock_transaction_class.return_value = mock_transaction
@@ -186,14 +196,18 @@ class TestDatabaseInterface:
                     mock_session_cm = AsyncMock()
                     mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
                     mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-                    
+
                     # Mock the result of the select query
                     mock_result = MagicMock()
-                    mock_result.scalar_one_or_none = MagicMock(return_value=None)  # No existing transaction (sync return)
+                    mock_result.scalar_one_or_none = MagicMock(
+                        return_value=None
+                    )  # No existing transaction (sync return)
                     mock_session.execute = AsyncMock(return_value=mock_result)
                     mock_session.add = MagicMock()
-                    mock_session.commit = AsyncMock(side_effect=Exception("Database error"))
-                    
+                    mock_session.commit = AsyncMock(
+                        side_effect=Exception("Database error")
+                    )
+
                     # Mock session factory to return the context manager
                     session_factory = MagicMock()
                     session_factory.return_value = mock_session_cm
@@ -220,8 +234,10 @@ class TestDatabaseInterface:
             "strategy": "arbitrage",
         }
 
-        with patch('on1builder.persistence.db_interface.HAS_SQLALCHEMY', True):
-            with patch('on1builder.persistence.db_interface.ProfitRecord') as mock_profit_class:
+        with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", True):
+            with patch(
+                "on1builder.persistence.db_interface.ProfitRecord"
+            ) as mock_profit_class:
                 mock_profit = MagicMock()
                 mock_profit.id = 1
                 mock_profit_class.return_value = mock_profit
@@ -234,7 +250,7 @@ class TestDatabaseInterface:
                 mock_session.add = MagicMock()
                 mock_session.commit = AsyncMock()
                 mock_session.refresh = AsyncMock()
-                
+
                 session_factory = MagicMock()
                 session_factory.return_value = mock_session_cm
                 db_interface._session_factory = session_factory
@@ -254,24 +270,24 @@ class TestDatabaseInterface:
     @pytest.mark.asyncio
     async def test_get_transaction_success(self, db_interface):
         """Test getting transaction when found."""
-        with patch('on1builder.persistence.db_interface.Transaction'):
-            with patch('on1builder.persistence.db_interface.select') as mock_select:
+        with patch("on1builder.persistence.db_interface.Transaction"):
+            with patch("on1builder.persistence.db_interface.select") as mock_select:
                 mock_tx = MagicMock()
                 mock_tx.to_dict.return_value = {"tx_hash": "0x123", "chain_id": 1}
-                
+
                 # Mock session as proper async context manager
                 mock_session = AsyncMock()
                 mock_session_cm = AsyncMock()
                 mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
                 mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-                
+
                 # Mock session.get to return None, forcing fallback to select query
                 mock_session.get = AsyncMock(return_value=None)
-                
+
                 mock_result = MagicMock()
                 mock_result.scalars.return_value.first.return_value = mock_tx
                 mock_session.execute = AsyncMock(return_value=mock_result)
-                
+
                 session_factory = MagicMock()
                 session_factory.return_value = mock_session_cm
                 db_interface._session_factory = session_factory
@@ -288,14 +304,14 @@ class TestDatabaseInterface:
         mock_session_cm = AsyncMock()
         mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-        
+
         # Mock session.get to return None, forcing fallback to select query
         mock_session.get = AsyncMock(return_value=None)
-        
+
         mock_result = MagicMock()
         mock_result.scalars.return_value.first.return_value = None
         mock_session.execute = AsyncMock(return_value=mock_result)
-        
+
         session_factory = MagicMock()
         session_factory.return_value = mock_session_cm
         db_interface._session_factory = session_factory
@@ -312,27 +328,29 @@ class TestDatabaseInterface:
         mock_session_cm = AsyncMock()
         mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-        
+
         # Mock profit query result
         mock_result1 = MagicMock()
         mock_result1.first.return_value = (100.5, 10)  # profit sum and count
-        
+
         mock_result2 = MagicMock()
         mock_result2.scalar.return_value = 2000000000000000000  # gas sum in wei
-        
+
         mock_result3 = MagicMock()
         mock_result3.scalar.return_value = 8  # success count
-        
+
         mock_result4 = MagicMock()
         mock_result4.scalar.return_value = 10  # total count
-        
-        mock_session.execute = AsyncMock(side_effect=[
-            mock_result1,
-            mock_result2,
-            mock_result3,
-            mock_result4,
-        ])
-        
+
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                mock_result1,
+                mock_result2,
+                mock_result3,
+                mock_result4,
+            ]
+        )
+
         session_factory = MagicMock()
         session_factory.return_value = mock_session_cm
         db_interface._session_factory = session_factory
@@ -371,11 +389,11 @@ class TestDatabaseInterface:
         mock_session_cm = AsyncMock()
         mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-        
+
         mock_result = MagicMock()
         mock_result.scalar.return_value = 42
         mock_session.execute = AsyncMock(return_value=mock_result)
-        
+
         session_factory = MagicMock()
         session_factory.return_value = mock_session_cm
         db_interface._session_factory = session_factory
@@ -401,7 +419,7 @@ class TestDatabaseInterface:
         mock_session_cm = AsyncMock()
         mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_cm.__aexit__ = AsyncMock(return_value=None)
-        
+
         mock_result = MagicMock()
         mock_result.all.return_value = [
             ("0xtoken1",),
@@ -409,7 +427,7 @@ class TestDatabaseInterface:
             ("0xtoken3",),
         ]
         mock_session.execute = AsyncMock(return_value=mock_result)
-        
+
         session_factory = MagicMock()
         session_factory.return_value = mock_session_cm
         db_interface._session_factory = session_factory
