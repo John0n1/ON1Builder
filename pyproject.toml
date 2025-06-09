@@ -89,6 +89,9 @@ dev = [
     "bandit>=1.7.4",
     "safety>=2.4.0",
     "pre-commit>=3.0.0",
+    "types-PyYAML>=6.0.0",
+    "types-requests>=2.32.0",
+    "colorlog>=6.9.0",
 ]
 test = [
     "pytest>=8.3.5",
@@ -101,6 +104,9 @@ lint = [
     "mypy>=1.10.0",
     "flake8>=6.1.0",
     "bandit>=1.7.4",
+    "types-PyYAML>=6.0.0",
+    "types-requests>=2.32.0",
+    "colorlog>=6.9.0",
 ]
 
 [project.urls]

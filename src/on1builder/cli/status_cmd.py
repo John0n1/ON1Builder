@@ -35,7 +35,7 @@ def status(
 
         # Check database connectivity
         try:
-            db = DatabaseInterface(config_data.get("database", {}))
+            DatabaseInterface(config_data.get("database", {}))
             typer.echo("✓ Database: Connected")
         except Exception as e:
             typer.echo(f"✗ Database: Failed ({e})")

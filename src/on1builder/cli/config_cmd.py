@@ -118,7 +118,7 @@ def validate_command(
                 typer.secho(f"❌ {err}", fg=typer.colors.RED)
             raise typer.Exit(code=1)
 
-        typer.secho(f"✅ Configuration is valid.", fg=typer.colors.GREEN)
+        typer.secho("✅ Configuration is valid.", fg=typer.colors.GREEN)
 
     except Exception as e:
         logger.error(f"Configuration validation failed: {e}")

@@ -49,13 +49,17 @@ def main(
 ) -> None:
     """ON1Builder - Multi-chain blockchain transaction execution framework."""
     # Handle case where parameters might be typer.Option objects (during testing)
-    verbose_val = verbose if not hasattr(verbose, 'default') else verbose.default
-    debug_val = debug if not hasattr(debug, 'default') else debug.default
-    log_file_val = log_file if not hasattr(log_file, 'default') else log_file.default
-    
+    verbose_val = verbose if not hasattr(verbose, "default") else verbose.default
+    debug_val = debug if not hasattr(debug, "default") else debug.default
+    log_file_val = log_file if not hasattr(log_file, "default") else log_file.default
+
     # Setup logging
     log_level = "DEBUG" if debug_val else ("INFO" if verbose_val else "WARNING")
-    log_dir = str(log_file_val.parent) if log_file_val and hasattr(log_file_val, 'parent') and log_file_val.parent else None
+    log_dir = (
+        str(log_file_val.parent)
+        if log_file_val and hasattr(log_file_val, "parent") and log_file_val.parent
+        else None
+    )
     setup_logging(name="on1builder", level=log_level, log_dir=log_dir)
 
     logger = get_logger(__name__)

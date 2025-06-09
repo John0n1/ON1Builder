@@ -1,14 +1,14 @@
 # tests/config_cmd_test.py
 
-import pytest
 from pathlib import Path
+
+import pytest
 import yaml
-from typer.testing import CliRunner
 from typer import Exit
+from typer.testing import CliRunner
 
 # Adjust this import path if your package structure differs.
-from on1builder.cli.config_cmd import app, _load_yaml
-
+from on1builder.cli.config_cmd import _load_yaml, app
 
 runner = CliRunner()
 
@@ -17,15 +17,13 @@ runner = CliRunner()
 # Fixtures
 # ----------------------------
 
+
 @pytest.fixture
 def tmp_yaml_file(tmp_path: Path):
     """
     Create a simple valid YAML file and return its path.
     """
-    content = {
-        "chain_id": 1,
-        "rpc_url": "https://example.org"
-    }
+    content = {"chain_id": 1, "rpc_url": "https://example.org"}
     file_path = tmp_path / "valid.yaml"
     file_path.write_text(yaml.dump(content))
     return file_path
@@ -62,9 +60,7 @@ def tmp_missing_fields_yaml(tmp_path: Path):
     """
     Create a YAML missing required fields.
     """
-    content = {
-        "some_key": "some_value"
-    }
+    content = {"some_key": "some_value"}
     file_path = tmp_path / "missing.yaml"
     file_path.write_text(yaml.dump(content))
     return file_path
@@ -96,6 +92,7 @@ def tmp_chain_config_missing(tmp_path: Path):
 # Tests for _load_yaml
 # ----------------------------
 
+
 def test_load_yaml_valid(tmp_yaml_file):
     data = _load_yaml(tmp_yaml_file)
     assert isinstance(data, dict)
@@ -104,7 +101,7 @@ def test_load_yaml_valid(tmp_yaml_file):
 
 
 def test_load_yaml_empty(tmp_path: Path):
-    # Create an empty file: safe_load should return {} 
+    # Create an empty file: safe_load should return {}
     empty_file = tmp_path / "empty.yaml"
     empty_file.write_text("")
     data = _load_yaml(empty_file)
@@ -122,6 +119,7 @@ def test_load_yaml_invalid_raises(tmp_invalid_yaml_file):
 # Tests for validate_command (single‐chain)
 # ----------------------------
 
+
 def test_validate_single_chain_success(tmp_yaml_file):
     """Single‐chain without --chain, fields present, should succeed."""
     result = runner.invoke(app, ["validate", str(tmp_yaml_file)])
@@ -138,44 +136,51 @@ def test_validate_single_chain_missing_fields(tmp_missing_fields_yaml):
     assert "❌ Main config: missing required field 'rpc_url'" in result.stdout
 
 
-def test_validate_single_chain_with_chain_option_success(tmp_yaml_file, tmp_chain_config_valid):
+def test_validate_single_chain_with_chain_option_success(
+    tmp_yaml_file, tmp_chain_config_valid
+):
     """
     Using --chain option: main config only needs to exist (it can be empty),
     but chain_config must have required fields.
     """
     # main config can be an otherwise empty dict, but to satisfy exists/readable constraint, reuse tmp_yaml_file
     result = runner.invoke(
-        app,
-        ["validate", str(tmp_yaml_file), "--chain", str(tmp_chain_config_valid)]
+        app, ["validate", str(tmp_yaml_file), "--chain", str(tmp_chain_config_valid)]
     )
     assert result.exit_code == 0
     assert "✅ Configuration is valid." in result.stdout
 
 
-def test_validate_single_chain_with_chain_option_missing_fields(tmp_yaml_file, tmp_chain_config_missing):
+def test_validate_single_chain_with_chain_option_missing_fields(
+    tmp_yaml_file, tmp_chain_config_missing
+):
     """Chain config missing required fields should produce an error."""
     result = runner.invoke(
-        app,
-        ["validate", str(tmp_yaml_file), "--chain", str(tmp_chain_config_missing)]
+        app, ["validate", str(tmp_yaml_file), "--chain", str(tmp_chain_config_missing)]
     )
     assert result.exit_code == 1
     assert "❌ Chain config: missing required field 'chain_id'" in result.stdout
 
 
-def test_validate_single_chain_with_invalid_chain_yaml(tmp_yaml_file, tmp_invalid_yaml_file):
+def test_validate_single_chain_with_invalid_chain_yaml(
+    tmp_yaml_file, tmp_invalid_yaml_file
+):
     """If the chain_config file is invalid YAML, it should error out."""
     result = runner.invoke(
-        app,
-        ["validate", str(tmp_yaml_file), "--chain", str(tmp_invalid_yaml_file)]
+        app, ["validate", str(tmp_yaml_file), "--chain", str(tmp_invalid_yaml_file)]
     )
     # It will fail inside _load_yaml for chain_config
     assert result.exit_code == 1
-    assert "❌ YAML parsing error:" in result.stderr or "Validation failed:" in result.stderr
+    assert (
+        "❌ YAML parsing error:" in result.stderr
+        or "Validation failed:" in result.stderr
+    )
 
 
 # ----------------------------
 # Tests for validate_command (multi‐chain)
 # ----------------------------
+
 
 def test_validate_multi_chain_success(tmp_multichain_yaml):
     """Valid multi-chain config (with 'chains' list) should pass."""
@@ -186,7 +191,9 @@ def test_validate_multi_chain_success(tmp_multichain_yaml):
 
 def test_validate_multi_chain_missing_chains_section(tmp_missing_fields_yaml):
     """Multi-chain flag but no 'chains' key should produce an error."""
-    result = runner.invoke(app, ["validate", str(tmp_missing_fields_yaml), "--multi-chain"])
+    result = runner.invoke(
+        app, ["validate", str(tmp_missing_fields_yaml), "--multi-chain"]
+    )
     assert result.exit_code == 1
     assert "❌ Multi-chain config must have 'chains' section" in result.stdout
 
@@ -218,14 +225,20 @@ def test_validate_multi_chain_chain_missing_fields(tmp_path: Path):
 
 def test_validate_multi_chain_invalid_yaml(tmp_invalid_yaml_file):
     """If main config is invalid YAML when using --multi-chain, it should exit early."""
-    result = runner.invoke(app, ["validate", str(tmp_invalid_yaml_file), "--multi-chain"])
+    result = runner.invoke(
+        app, ["validate", str(tmp_invalid_yaml_file), "--multi-chain"]
+    )
     assert result.exit_code == 1
-    assert "❌ YAML parsing error:" in result.stderr or "Validation failed:" in result.stderr
+    assert (
+        "❌ YAML parsing error:" in result.stderr
+        or "Validation failed:" in result.stderr
+    )
 
 
 # ----------------------------
 # Tests for show_command
 # ----------------------------
+
 
 def test_show_command_success(tmp_yaml_file):
     """show_command should print out the YAML contents in dumped form."""
@@ -244,7 +257,10 @@ def test_show_command_invalid_yaml(tmp_invalid_yaml_file):
     """If YAML is invalid, show_command should report an error and exit with code 1."""
     result = runner.invoke(app, ["show", str(tmp_invalid_yaml_file)])
     assert result.exit_code == 1
-    assert "❌ Failed to show config:" in result.stderr or "❌ YAML parsing error:" in result.stderr
+    assert (
+        "❌ Failed to show config:" in result.stderr
+        or "❌ YAML parsing error:" in result.stderr
+    )
 
 
 def test_show_command_nonexistent_file(tmp_path: Path):
@@ -259,6 +275,7 @@ def test_show_command_nonexistent_file(tmp_path: Path):
 # ----------------------------
 # Direct tests of _load_yaml for hierarchy checks
 # ----------------------------
+
 
 def test_load_yaml_returns_empty_dict_for_blank_file(tmp_path: Path):
     """If the YAML file is blank, safe_load returns None, so our wrapper returns {}."""

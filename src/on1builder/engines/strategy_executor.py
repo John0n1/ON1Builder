@@ -74,15 +74,19 @@ class StrategyExecutor:
         transaction_core: TransactionManager,
         safety_net: SafetyGuard,
         market_monitor: MarketDataFeed,
-        main_orchestrator: Optional[Any] = None,  # Reference to MainOrchestrator for shared resources
+        main_orchestrator: Optional[
+            Any
+        ] = None,  # Reference to MainOrchestrator for shared resources
     ) -> None:
         self.web3 = web3
         self.cfg = config
         self.txc = transaction_core
         self.safety_net = safety_net
         self.market_monitor = market_monitor
-        self.api_manager = getattr(config, 'api', None)  # Use api attribute instead
-        self.main_orchestrator = main_orchestrator  # Store reference to MainOrchestrator
+        self.api_manager = getattr(config, "api", None)  # Use api attribute instead
+        self.main_orchestrator = (
+            main_orchestrator  # Store reference to MainOrchestrator
+        )
 
         # Use path_helpers to get the correct resource path
         from ..utils.path_helpers import get_resource_path
@@ -361,23 +365,23 @@ class StrategyExecutor:
             # if not market_state:
             #     return 0.0
 
-            volatility = market_state.get("volatility", 0.0)
-            volume = market_state.get("volume", 0.0)
-            trend = market_state.get("trend", 0.0)  # -1 to 1, bearish to bullish
+            # volatility = market_state.get("volatility", 0.0)
+            # volume = market_state.get("volume", 0.0)
+            # trend = market_state.get("trend", 0.0)  # -1 to 1, bearish to bullish
 
             # Strategy-specific market condition preferences
-            if strategy_type == "front_run":
-                # Front-running works better in high volatility, moderate volume
-                return min(1.0, volatility * 2.0 - 0.5 + volume * 0.3)
-            elif strategy_type == "sandwich_attack":
-                # Sandwich attacks work better in high volume, moderate volatility
-                return min(1.0, volume * 1.5 + volatility * 0.5 - 0.3)
-            elif strategy_type == "back_run":
-                # Back-running works well in trending markets
-                return min(1.0, abs(trend) * 1.2 + volatility * 0.3)
-            else:
-                # Default: slight preference for stable conditions
-                return max(-0.5, min(0.5, 0.5 - volatility))
+            # if strategy_type == "front_run":
+            #     # Front-running works better in high volatility, moderate volume
+            #     return min(1.0, volatility * 2.0 - 0.5 + volume * 0.3)
+            # elif strategy_type == "sandwich_attack":
+            #     # Sandwich attacks work better in high volume, moderate volatility
+            #     return min(1.0, volume * 1.5 + volatility * 0.5 - 0.3)
+            # elif strategy_type == "back_run":
+            #     # Back-running works well in trending markets
+            #     return min(1.0, abs(trend) * 1.2 + volatility * 0.3)
+            # else:
+            #     # Default: slight preference for stable conditions
+            #     return max(-0.5, min(0.5, 0.5 - volatility))
 
         except Exception as e:
             logger.debug(f"Error calculating market adjustment: {e}")

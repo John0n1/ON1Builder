@@ -223,7 +223,7 @@ class NotificationService:
             if channel == "console":
                 success = True
                 continue
-                
+
     async def send_alert(
         self, message: str, level: str = "ERROR", details: Dict[str, Any] = None
     ) -> bool:
@@ -508,7 +508,9 @@ class NotificationService:
 _notification_manager: Optional[NotificationService] = None
 
 
-def get_notification_manager(config=None, main_orchestrator=None) -> NotificationService:
+def get_notification_manager(
+    config=None, main_orchestrator=None
+) -> NotificationService:
     """Get or create the global NotificationService instance.
 
     Args:

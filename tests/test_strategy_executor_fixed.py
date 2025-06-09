@@ -5,16 +5,21 @@
 Tests for StrategyExecutor class.
 """
 
-import pytest
 import json
 import tempfile
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import numpy as np
+import pytest
 
 from on1builder.config.settings import GlobalSettings
-from on1builder.engines.strategy_executor import StrategyExecutor, StrategyPerformanceMetrics, StrategyGlobalSettings
+from on1builder.engines.strategy_executor import (
+    StrategyExecutor,
+    StrategyGlobalSettings,
+    StrategyPerformanceMetrics,
+)
 
 
 @pytest.fixture
@@ -74,7 +79,7 @@ class TestStrategyPerformanceMetrics:
     def test_init(self):
         """Test StrategyPerformanceMetrics initialization."""
         metrics = StrategyPerformanceMetrics()
-        
+
         assert metrics.successes == 0
         assert metrics.failures == 0
         assert metrics.profit == Decimal("0")
@@ -92,7 +97,7 @@ class TestStrategyPerformanceMetrics:
         metrics.successes = 7
         metrics.failures = 3
         metrics.total_executions = 10
-        
+
         assert metrics.success_rate == 0.7
 
 
@@ -102,7 +107,7 @@ class TestStrategyGlobalSettings:
     def test_init(self, mock_global_settings):
         """Test StrategyGlobalSettings initialization."""
         settings = StrategyGlobalSettings(mock_global_settings)
-        
+
         assert settings.decay_factor == 0.95
         assert settings.base_learning_rate == 0.01
         assert settings.exploration_rate == 0.1
@@ -115,23 +120,30 @@ class TestStrategyGlobalSettings:
 class TestStrategyExecutor:
     """Test cases for StrategyExecutor."""
 
-    @patch('on1builder.engines.strategy_executor.get_resource_path')
-    def test_init(self, mock_get_resource_path, mock_global_settings, mock_web3, 
-                  mock_transaction_manager, mock_safety_guard, mock_market_data_feed):
+    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    def test_init(
+        self,
+        mock_get_resource_path,
+        mock_global_settings,
+        mock_web3,
+        mock_transaction_manager,
+        mock_safety_guard,
+        mock_market_data_feed,
+    ):
         """Test StrategyExecutor initialization."""
         # Mock the resource path
         mock_weight_file = MagicMock()
         mock_weight_file.exists.return_value = False
         mock_get_resource_path.return_value = mock_weight_file
-        
+
         executor = StrategyExecutor(
             web3=mock_web3,
             config=mock_global_settings,
             transaction_core=mock_transaction_manager,
             safety_net=mock_safety_guard,
-            market_monitor=mock_market_data_feed
+            market_monitor=mock_market_data_feed,
         )
-        
+
         assert executor.web3 == mock_web3
         assert executor.cfg == mock_global_settings
         assert executor.txc == mock_transaction_manager
@@ -141,125 +153,166 @@ class TestStrategyExecutor:
         assert isinstance(executor.weights, dict)
         assert isinstance(executor.learning_cfg, StrategyGlobalSettings)
 
-    @patch('on1builder.engines.strategy_executor.get_resource_path')
-    def test_get_strategies(self, mock_get_resource_path, mock_global_settings, mock_web3,
-                           mock_transaction_manager, mock_safety_guard, mock_market_data_feed):
+    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    def test_get_strategies(
+        self,
+        mock_get_resource_path,
+        mock_global_settings,
+        mock_web3,
+        mock_transaction_manager,
+        mock_safety_guard,
+        mock_market_data_feed,
+    ):
         """Test get_strategies method."""
         mock_weight_file = MagicMock()
         mock_weight_file.exists.return_value = False
         mock_get_resource_path.return_value = mock_weight_file
-        
+
         executor = StrategyExecutor(
             web3=mock_web3,
             config=mock_global_settings,
             transaction_core=mock_transaction_manager,
             safety_net=mock_safety_guard,
-            market_monitor=mock_market_data_feed
+            market_monitor=mock_market_data_feed,
         )
-        
+
         eth_strategies = executor.get_strategies("eth_transaction")
         assert len(eth_strategies) == 1
         assert eth_strategies[0] == mock_transaction_manager.handle_eth_transaction
-        
+
         front_run_strategies = executor.get_strategies("front_run")
         assert len(front_run_strategies) == 1
         assert front_run_strategies[0] == mock_transaction_manager.front_run
-        
+
         # Test non-existent strategy type
         empty_strategies = executor.get_strategies("non_existent")
         assert empty_strategies == []
 
-    @patch('on1builder.engines.strategy_executor.get_resource_path')
+    @patch("on1builder.engines.strategy_executor.get_resource_path")
     @pytest.mark.asyncio
-    async def test_execute_best_strategy_success(self, mock_get_resource_path, mock_global_settings,
-                                               mock_web3, mock_transaction_manager, mock_safety_guard,
-                                               mock_market_data_feed):
+    async def test_execute_best_strategy_success(
+        self,
+        mock_get_resource_path,
+        mock_global_settings,
+        mock_web3,
+        mock_transaction_manager,
+        mock_safety_guard,
+        mock_market_data_feed,
+    ):
         """Test successful strategy execution."""
         mock_weight_file = MagicMock()
         mock_weight_file.exists.return_value = False
         mock_get_resource_path.return_value = mock_weight_file
-        
+
         executor = StrategyExecutor(
             web3=mock_web3,
             config=mock_global_settings,
             transaction_core=mock_transaction_manager,
             safety_net=mock_safety_guard,
-            market_monitor=mock_market_data_feed
+            market_monitor=mock_market_data_feed,
         )
-        
+
         target_tx = {"hash": "0x123", "value": 1000}
-        
-        with patch.object(executor, '_select_strategy', return_value=mock_transaction_manager.handle_eth_transaction):
-            with patch.object(executor, '_update_after_run') as mock_update:
-                result = await executor.execute_best_strategy(target_tx, "eth_transaction")
-                
+
+        with patch.object(
+            executor,
+            "_select_strategy",
+            return_value=mock_transaction_manager.handle_eth_transaction,
+        ):
+            with patch.object(executor, "_update_after_run") as mock_update:
+                result = await executor.execute_best_strategy(
+                    target_tx, "eth_transaction"
+                )
+
                 assert result is True
-                mock_transaction_manager.handle_eth_transaction.assert_called_once_with(target_tx)
+                mock_transaction_manager.handle_eth_transaction.assert_called_once_with(
+                    target_tx
+                )
                 mock_update.assert_called_once()
 
-    @patch('on1builder.engines.strategy_executor.get_resource_path')
+    @patch("on1builder.engines.strategy_executor.get_resource_path")
     @pytest.mark.asyncio
-    async def test_execute_best_strategy_no_strategies(self, mock_get_resource_path, mock_global_settings,
-                                                     mock_web3, mock_transaction_manager, mock_safety_guard,
-                                                     mock_market_data_feed):
+    async def test_execute_best_strategy_no_strategies(
+        self,
+        mock_get_resource_path,
+        mock_global_settings,
+        mock_web3,
+        mock_transaction_manager,
+        mock_safety_guard,
+        mock_market_data_feed,
+    ):
         """Test strategy execution with no available strategies."""
         mock_weight_file = MagicMock()
         mock_weight_file.exists.return_value = False
         mock_get_resource_path.return_value = mock_weight_file
-        
+
         executor = StrategyExecutor(
             web3=mock_web3,
             config=mock_global_settings,
             transaction_core=mock_transaction_manager,
             safety_net=mock_safety_guard,
-            market_monitor=mock_market_data_feed
+            market_monitor=mock_market_data_feed,
         )
-        
+
         target_tx = {"hash": "0x123", "value": 1000}
-        result = await executor.execute_best_strategy(target_tx, "non_existent_strategy")
-        
+        result = await executor.execute_best_strategy(
+            target_tx, "non_existent_strategy"
+        )
+
         assert result is False
 
-    @patch('on1builder.engines.strategy_executor.get_resource_path')
+    @patch("on1builder.engines.strategy_executor.get_resource_path")
     @pytest.mark.asyncio
-    async def test_initialize(self, mock_get_resource_path, mock_global_settings,
-                             mock_web3, mock_transaction_manager, mock_safety_guard,
-                             mock_market_data_feed):
+    async def test_initialize(
+        self,
+        mock_get_resource_path,
+        mock_global_settings,
+        mock_web3,
+        mock_transaction_manager,
+        mock_safety_guard,
+        mock_market_data_feed,
+    ):
         """Test executor initialization."""
         mock_weight_file = MagicMock()
         mock_weight_file.exists.return_value = False
         mock_get_resource_path.return_value = mock_weight_file
-        
+
         executor = StrategyExecutor(
             web3=mock_web3,
             config=mock_global_settings,
             transaction_core=mock_transaction_manager,
             safety_net=mock_safety_guard,
-            market_monitor=mock_market_data_feed
+            market_monitor=mock_market_data_feed,
         )
-        
+
         # Test initialize method
         await executor.initialize()
         # Should complete without error
 
-    @patch('on1builder.engines.strategy_executor.get_resource_path')
+    @patch("on1builder.engines.strategy_executor.get_resource_path")
     @pytest.mark.asyncio
-    async def test_stop(self, mock_get_resource_path, mock_global_settings,
-                       mock_web3, mock_transaction_manager, mock_safety_guard,
-                       mock_market_data_feed):
+    async def test_stop(
+        self,
+        mock_get_resource_path,
+        mock_global_settings,
+        mock_web3,
+        mock_transaction_manager,
+        mock_safety_guard,
+        mock_market_data_feed,
+    ):
         """Test executor shutdown."""
         mock_weight_file = MagicMock()
         mock_weight_file.exists.return_value = False
         mock_get_resource_path.return_value = mock_weight_file
-        
+
         executor = StrategyExecutor(
             web3=mock_web3,
             config=mock_global_settings,
             transaction_core=mock_transaction_manager,
             safety_net=mock_safety_guard,
-            market_monitor=mock_market_data_feed
+            market_monitor=mock_market_data_feed,
         )
-        
+
         # Test stop method
         await executor.stop()
         # Should save weights and complete without error

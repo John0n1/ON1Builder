@@ -6,17 +6,19 @@ Tests for 100% coverage of all exception classes and methods.
 """
 
 import json
-import time
-import pytest
-import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+import sys
+import time
 from unittest.mock import Mock, patch
 
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
 from on1builder.utils.custom_exceptions import (
-    StrategyExecutionError,
-    ConfigurationError,
     ChainConnectionError,
+    ConfigurationError,
+    StrategyExecutionError,
     TransactionError,
 )
 
@@ -27,7 +29,7 @@ class TestStrategyExecutionError:
     def test_init_minimal(self):
         """Test StrategyExecutionError with minimal parameters."""
         error = StrategyExecutionError()
-        
+
         assert error.message == "Strategy execution failed"
         assert error.strategy_name is None
         assert error.chain_id is None
@@ -42,7 +44,7 @@ class TestStrategyExecutionError:
         """Test StrategyExecutionError with all parameters."""
         original_exc = ValueError("Original error")
         details = {"gas_used": 21000, "slippage": 0.5}
-        
+
         error = StrategyExecutionError(
             message="Custom message",
             strategy_name="arbitrage_v1",
@@ -51,7 +53,7 @@ class TestStrategyExecutionError:
             details=details,
             original_exception=original_exc,
         )
-        
+
         assert error.message == "Custom message"
         assert error.strategy_name == "arbitrage_v1"
         assert error.chain_id == 1
@@ -67,7 +69,7 @@ class TestStrategyExecutionError:
             raise ValueError("Test error")
         except ValueError as e:
             error = StrategyExecutionError(original_exception=e)
-            
+
         assert error.traceback is not None
         assert "ValueError: Test error" in error.traceback
 
@@ -78,7 +80,7 @@ class TestStrategyExecutionError:
             strategy_name="test_strategy",
             chain_id=1,
         )
-        
+
         str_repr = str(error)
         assert "Test error" in str_repr
         assert "test_strategy" in str_repr
@@ -94,7 +96,7 @@ class TestStrategyExecutionError:
         """Test string representation with all fields populated."""
         original_exc = RuntimeError("Original error")
         details = {"key": "value"}
-        
+
         error = StrategyExecutionError(
             message="Full test",
             strategy_name="full_strategy",
@@ -103,7 +105,7 @@ class TestStrategyExecutionError:
             details=details,
             original_exception=original_exc,
         )
-        
+
         str_repr = str(error)
         assert "Full test" in str_repr
         assert "Strategy: full_strategy" in str_repr
@@ -116,7 +118,7 @@ class TestStrategyExecutionError:
         """Test conversion to dictionary."""
         original_exc = ValueError("Original error")
         details = {"key": "value"}
-        
+
         error = StrategyExecutionError(
             message="Test message",
             strategy_name="test_strategy",
@@ -125,9 +127,9 @@ class TestStrategyExecutionError:
             details=details,
             original_exception=original_exc,
         )
-        
+
         result = error.to_dict()
-        
+
         assert result["message"] == "Test message"
         assert result["strategy_name"] == "test_strategy"
         assert result["chain_id"] == 42
@@ -141,7 +143,7 @@ class TestStrategyExecutionError:
         """Test to_dict with minimal data."""
         error = StrategyExecutionError()
         result = error.to_dict()
-        
+
         assert result["message"] == "Strategy execution failed"
         assert result["strategy_name"] is None
         assert result["chain_id"] is None
@@ -157,10 +159,10 @@ class TestStrategyExecutionError:
             strategy_name="json_strategy",
             chain_id=1,
         )
-        
+
         json_str = error.to_json()
         parsed = json.loads(json_str)
-        
+
         assert parsed["message"] == "JSON test"
         assert parsed["strategy_name"] == "json_strategy"
         assert parsed["chain_id"] == 1
@@ -168,11 +170,12 @@ class TestStrategyExecutionError:
     def test_to_json_with_complex_data(self):
         """Test JSON serialization with complex data types."""
         from datetime import datetime
+
         details = {"timestamp": datetime.now(), "data": [1, 2, 3]}
-        
+
         error = StrategyExecutionError(details=details)
         json_str = error.to_json()
-        
+
         # Should not raise an exception due to default=str
         parsed = json.loads(json_str)
         assert "details" in parsed
@@ -187,7 +190,7 @@ class TestStrategyExecutionError:
         """Test that exception can be properly raised and caught."""
         with pytest.raises(StrategyExecutionError) as exc_info:
             raise StrategyExecutionError("test error")
-        
+
         assert str(exc_info.value) == "test error"
 
     def test_timestamp_is_current(self):
@@ -195,14 +198,14 @@ class TestStrategyExecutionError:
         before_time = time.time()
         error = StrategyExecutionError()
         after_time = time.time()
-        
+
         assert before_time <= error.timestamp <= after_time
 
     def test_details_dict_mutability(self):
         """Test that details dict can be modified after creation."""
         error = StrategyExecutionError()
         assert error.details == {}
-        
+
         error.details["new_key"] = "new_value"
         assert error.details["new_key"] == "new_value"
 
@@ -231,7 +234,7 @@ class TestSimpleExceptions:
         """Test ConfigurationError can be raised and caught."""
         with pytest.raises(ConfigurationError) as exc_info:
             raise ConfigurationError("Test config error")
-        
+
         assert str(exc_info.value) == "Test config error"
 
     def test_chain_connection_error_basic(self):
@@ -250,7 +253,7 @@ class TestSimpleExceptions:
         """Test ChainConnectionError can be raised and caught."""
         with pytest.raises(ChainConnectionError) as exc_info:
             raise ChainConnectionError("RPC connection failed")
-        
+
         assert str(exc_info.value) == "RPC connection failed"
 
     def test_transaction_error_basic(self):
@@ -269,7 +272,7 @@ class TestSimpleExceptions:
         """Test TransactionError can be raised and caught."""
         with pytest.raises(TransactionError) as exc_info:
             raise TransactionError("Gas estimation failed")
-        
+
         assert str(exc_info.value) == "Gas estimation failed"
 
 
@@ -284,7 +287,7 @@ class TestExceptionInheritance:
             (ChainConnectionError, "connection error"),
             (TransactionError, "transaction error"),
         ]
-        
+
         for exc_class, message in exceptions_to_test:
             error = exc_class(message)
             assert isinstance(error, Exception)
@@ -298,7 +301,7 @@ class TestExceptionInheritance:
             ChainConnectionError("test"),
             TransactionError("test"),
         ]
-        
+
         for error in exceptions_to_test:
             with pytest.raises(Exception):
                 raise error
@@ -317,7 +320,7 @@ class TestEdgeCases:
         """Test to_dict handles None values correctly."""
         error = StrategyExecutionError()
         result = error.to_dict()
-        
+
         # Should contain None values, not exclude them
         assert "strategy_name" in result
         assert result["strategy_name"] is None
@@ -327,17 +330,17 @@ class TestEdgeCases:
         error = StrategyExecutionError()
         json_str = error.to_json()
         parsed = json.loads(json_str)
-        
+
         assert "strategy_name" in parsed
         assert parsed["strategy_name"] is None
 
     def test_large_details_dict(self):
         """Test handling of large details dictionary."""
         large_details = {f"key_{i}": f"value_{i}" for i in range(1000)}
-        
+
         error = StrategyExecutionError(details=large_details)
         assert len(error.details) == 1000
-        
+
         # Should be able to serialize to JSON
         json_str = error.to_json()
         parsed = json.loads(json_str)
@@ -346,10 +349,10 @@ class TestEdgeCases:
     def test_special_characters_in_strings(self):
         """Test handling of special characters in string fields."""
         special_chars = "Test with 🚀 émojis and ñ spëcial chars"
-        
+
         error = StrategyExecutionError(message=special_chars)
         assert error.message == special_chars
-        
+
         # Should serialize to JSON properly
         json_str = error.to_json()
         parsed = json.loads(json_str)
@@ -359,7 +362,7 @@ class TestEdgeCases:
         """Test handling of very long error messages."""
         long_message = "x" * 10000
         error = StrategyExecutionError(message=long_message)
-        
+
         assert error.message == long_message
         assert len(str(error)) >= 10000
 
@@ -372,7 +375,7 @@ class TestEdgeCases:
                 raise RuntimeError("Outer error") from inner
         except RuntimeError as e:
             error = StrategyExecutionError(original_exception=e)
-            
+
         assert error.traceback is not None
         assert "RuntimeError: Outer error" in error.traceback
 
@@ -380,9 +383,9 @@ class TestEdgeCases:
         """Test that circular references in details break JSON serialization."""
         details = {}
         details["self"] = details  # Circular reference
-        
+
         error = StrategyExecutionError(details=details)
-        
+
         # Should raise ValueError due to circular reference
         with pytest.raises(ValueError, match="Circular reference detected"):
             error.to_json()

@@ -20,7 +20,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, MutableMapping, Optional, Union
 
 # Use colorlog if available, otherwise fallback to standard logging
 try:
@@ -132,24 +132,26 @@ class StructuredLoggerAdapter(logging.LoggerAdapter):
         """
         super().__init__(logger, extra or {})
 
-    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple:
+    def process(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
         """Process the logging message and keyword arguments."""
         # Merge extra context from adapter with extra kwargs
         if "extra" in kwargs:
             kwargs["extra"].update(self.extra)
         else:
-            kwargs["extra"] = self.extra.copy()
+            kwargs["extra"] = dict(self.extra)
         return msg, kwargs
 
-    def bind(self, **new_context) -> "StructuredLoggerAdapter":
+    def bind(self, **new_context: Any) -> "StructuredLoggerAdapter":
         """Create a new adapter with additional context data."""
-        merged_context = self.extra.copy()
+        merged_context = dict(self.extra)
         merged_context.update(new_context)
         return StructuredLoggerAdapter(self.logger, merged_context)
 
-    def unbind(self, *keys) -> "StructuredLoggerAdapter":
+    def unbind(self, *keys: str) -> "StructuredLoggerAdapter":
         """Create a new adapter with specified keys removed."""
-        new_context = self.extra.copy()
+        new_context = dict(self.extra)
         for key in keys:
             if key in new_context:
                 del new_context[key]
@@ -216,9 +218,9 @@ def setup_logging(
     console.setLevel(numeric_level)
 
     if use_json_logging:
-        formatter = JsonFormatter()
+        console_formatter: Union[JsonFormatter, logging.Formatter] = JsonFormatter()
     elif HAVE_COLORLOG:
-        formatter = colorlog.ColoredFormatter(
+        console_formatter = colorlog.ColoredFormatter(
             "%(log_color)s%(asctime)s [%(levelname)8s] %(name)s: %(message)s%(reset)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             log_colors={
@@ -230,12 +232,12 @@ def setup_logging(
             },
         )
     else:
-        formatter = logging.Formatter(
+        console_formatter = logging.Formatter(
             "%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-    console.setFormatter(formatter)
+    console.setFormatter(console_formatter)
     logger.addHandler(console)
 
     # Add file handler if log_dir is specified
@@ -293,7 +295,7 @@ def get_logger(name: str) -> Union[logging.Logger, StructuredLoggerAdapter]:
 
 
 def bind_logger_context(
-    logger: Union[logging.Logger, StructuredLoggerAdapter], **context
+    logger: Union[logging.Logger, StructuredLoggerAdapter], **context: Any
 ) -> StructuredLoggerAdapter:
     """Bind context data to a logger.
 
