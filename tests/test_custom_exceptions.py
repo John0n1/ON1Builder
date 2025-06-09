@@ -5,15 +5,17 @@ Comprehensive test suite for ON1Builder utils.custom_exceptions module.
 Tests for 100% coverage of all exception classes and methods.
 """
 
-import json
 import os
 import sys
+
+# Must be before other imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+import json
 import time
 from unittest.mock import Mock, patch
 
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from on1builder.utils.custom_exceptions import (
     ChainConnectionError,

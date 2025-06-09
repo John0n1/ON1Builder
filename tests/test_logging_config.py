@@ -9,18 +9,20 @@ This module contains comprehensive tests for logging configuration functions
 defined in src/on1builder/utils/logging_config.py.
 """
 
-import json
-import logging
 import os
 import sys
+
+# Must be before other imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+import json
+import logging
 import tempfile
 import threading
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from on1builder.utils.logging_config import (
     HAVE_COLORLOG,

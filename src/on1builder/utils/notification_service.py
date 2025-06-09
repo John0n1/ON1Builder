@@ -217,11 +217,8 @@ class NotificationService:
             return True
 
         # Send through all other channels
-        success = False
-
         for channel, config in self._channels:
             if channel == "console":
-                success = True
                 continue
 
     async def send_alert(

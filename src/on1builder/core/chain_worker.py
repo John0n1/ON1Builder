@@ -4,13 +4,8 @@
 """
 ON1Builder – Chain Worker
 =========================
-Handles operations for a specific blockchain: init, monitoring, t            self.safety_guard = SafetyGuard(
-                web3=self.web3,
-                config=self.config,
-                account=self.account,
-                external_api_manager=self.api_manager,
-                main_orchestrator=self.main_orchestrator,
-            )ement.
+Handles operations for a specific blockchain: init, monitoring, transaction
+management.
 License: MIT
 """
 

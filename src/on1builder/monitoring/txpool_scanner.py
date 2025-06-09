@@ -17,6 +17,7 @@ import psutil
 from web3 import AsyncWeb3
 from web3.exceptions import TransactionNotFound
 
+from ..config.settings import APISettings, GlobalSettings
 from ..core.nonce_manager import NonceManager
 from ..engines.safety_guard import SafetyGuard
 from ..utils.logging_config import get_logger
@@ -34,9 +35,9 @@ class TxPoolScanner:
         web3: AsyncWeb3,
         safety_net: SafetyGuard,
         nonce_core: NonceManager,
-        api_config: APIConfig,
+        api_config: APISettings,
         monitored_tokens: List[str],
-        configuration: Configuration,
+        configuration: GlobalSettings,
         market_monitor: MarketDataFeed,
     ) -> None:
         self.web3 = web3
@@ -52,13 +53,11 @@ class TxPoolScanner:
             if t.startswith("0x"):
                 self.monitored_tokens.add(t.lower())
             else:
-                addr = api_config_token_address(t)
-                if addr:
-                    self.monitored_tokens.add(addr.lower())
-                else:
-                    logger.warning(
-                        f"Could not find address for token symbol: {t}, skipping"
-                    )
+                # For now, skip non-address tokens as symbol resolution is not implemented
+                logger.warning(
+                    f"Token symbol '{t}' is not an address, skipping. "
+                    f"Please provide token address instead."
+                )
 
         # Queues for hashes, analysis, and profitable txs
         self._tx_hash_queue: asyncio.Queue[str] = asyncio.Queue()

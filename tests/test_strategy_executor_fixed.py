@@ -120,7 +120,7 @@ class TestStrategyGlobalSettings:
 class TestStrategyExecutor:
     """Test cases for StrategyExecutor."""
 
-    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    @patch("on1builder.utils.path_helpers.get_resource_path")
     def test_init(
         self,
         mock_get_resource_path,
@@ -153,7 +153,7 @@ class TestStrategyExecutor:
         assert isinstance(executor.weights, dict)
         assert isinstance(executor.learning_cfg, StrategyGlobalSettings)
 
-    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    @patch("on1builder.utils.path_helpers.get_resource_path")
     def test_get_strategies(
         self,
         mock_get_resource_path,
@@ -188,7 +188,7 @@ class TestStrategyExecutor:
         empty_strategies = executor.get_strategies("non_existent")
         assert empty_strategies == []
 
-    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    @patch("on1builder.utils.path_helpers.get_resource_path")
     @pytest.mark.asyncio
     async def test_execute_best_strategy_success(
         self,
@@ -230,7 +230,7 @@ class TestStrategyExecutor:
                 )
                 mock_update.assert_called_once()
 
-    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    @patch("on1builder.utils.path_helpers.get_resource_path")
     @pytest.mark.asyncio
     async def test_execute_best_strategy_no_strategies(
         self,
@@ -261,7 +261,7 @@ class TestStrategyExecutor:
 
         assert result is False
 
-    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    @patch("on1builder.utils.path_helpers.get_resource_path")
     @pytest.mark.asyncio
     async def test_initialize(
         self,
@@ -289,7 +289,7 @@ class TestStrategyExecutor:
         await executor.initialize()
         # Should complete without error
 
-    @patch("on1builder.engines.strategy_executor.get_resource_path")
+    @patch("on1builder.utils.path_helpers.get_resource_path")
     @pytest.mark.asyncio
     async def test_stop(
         self,
