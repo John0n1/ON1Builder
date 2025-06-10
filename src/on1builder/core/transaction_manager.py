@@ -244,7 +244,7 @@ class TransactionManager:
                 mult = self.configuration.gas_price_multiplier
                 gas_price = int(net_gas * mult) if net_gas else None
             except Exception as e:
-                logger.error(f"Fetch network gas_price error: {e}")
+                logger.error("Fetch network gas_price error: %s", e)
                 gas_price = None
             if gas_price is None:
                 gas_price = self.configuration.fallback_gas_price
@@ -284,7 +284,7 @@ class TransactionManager:
             tx_hash = await self.web3.eth.send_raw_transaction(raw)
             return tx_hash.hex()
         except Exception as e:
-            logger.error(f"send_raw_transaction error: {e}")
+            logger.error("send_raw_transaction error: %s", e)
             raise StrategyExecutionError(f"Send failed: {e}")
 
     async def execute_transaction(
