@@ -3,6 +3,8 @@ include README.md
 include CHANGELOG.md
 include CONTRIBUTING.md
 include pyproject.toml
+include MANIFEST.in
+include src/on1builder/py.typed
 
 recursive-include configs *.yaml
 recursive-include src/on1builder/resources *.json *.sol

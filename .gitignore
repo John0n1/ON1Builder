@@ -2,7 +2,7 @@
 venv/
 .venv/
 venv/bin/
-
+coverage*
 # Environment variables
 .env
 !.env.example
