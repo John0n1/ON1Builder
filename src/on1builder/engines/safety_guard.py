@@ -19,7 +19,9 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+import json
 
+import aiohttp
 from web3 import AsyncWeb3
 
 from ..config.settings import GlobalSettings
@@ -411,8 +413,10 @@ class SafetyGuard:
                     cong = sum_w / total_w
 
             logger.debug(
-                f"Network congestion: {cong:.2f} (gas ratio: {ratio:.2f}, pending: {pending}, trend: {trend:.2f})"
-            )
+                f"Network congestion: {
+                    cong:.2f} (gas ratio: {
+                    ratio:.2f}, pending: {pending}, trend: {
+                    trend:.2f})")
             return cong
 
         except Exception as e:
@@ -438,8 +442,10 @@ class SafetyGuard:
                 profit = amt_out - amt_in - gas_cost
                 ok = profit >= self.config.min_profit
                 logger.debug(
-                    f"Profit check (ETH): {profit:.6f} ETH {'≥' if ok else '<'} {self.config.min_profit:.6f} ETH"
-                )
+                    f"Profit check (ETH): {
+                        profit:.6f} ETH {
+                        '≥' if ok else '<'} {
+                        self.config.min_profit:.6f} ETH")
                 return ok
 
             # Token profit in ETH terms
@@ -491,7 +497,7 @@ class SafetyGuard:
 
             # 1) Gas price check
             gp = tx_data.get("gas_price", await self.get_dynamic_gas_price())
-            max_gp = self.config("MAX_GAS_PRICE_GWEI", 100)
+            max_gp = self.config.max_gas_price_gwei
             ok = gp <= max_gp
             if ok:
                 details["checks_passed"] += 1
@@ -503,7 +509,7 @@ class SafetyGuard:
 
             # 2) Network congestion check
             cong = await self.get_network_congestion()
-            max_cong = self.config("MAX_NETWORK_CONGESTION", 0.8)
+            max_cong = self.config.max_network_congestion
             ok = cong < max_cong
             if ok:
                 details["checks_passed"] += 1
@@ -546,7 +552,7 @@ class SafetyGuard:
                     ),
                 }
             except Exception as e:
-                logger.error(f"Balance check error: {e}")
+                logger.error("Balance check error: %s", e)
                 details["check_details"]["balance_check"] = {
                     "passed": False,
                     "error": str(e),
@@ -566,7 +572,7 @@ class SafetyGuard:
             return is_safe, {"safety_percentage": safety_pct, **details}
 
         except Exception as e:
-            logger.error(f"Transaction safety check error: {e}")
+            logger.error("Transaction safety check error: %s", e)
             return False, {"is_safe": False, "error": str(e)}
 
     async def estimate_gas(self, tx: Dict[str, Any]) -> int:
@@ -609,6 +615,13 @@ class SafetyGuard:
                 )
                 return False
             return True
-        except Exception as e:
+        except (
+            aiohttp.ClientError,
+            self.web3.exceptions.Web3Exception,
+            json.JSONDecodeError,
+        ) as e:
             logger.error(f"SafetyGuard health check failed: {e}")
+            return False
+        except Exception as e:
+            logger.exception("Unexpected error in SafetyGuard health check")
             return False

@@ -33,13 +33,12 @@ from typing import (
     cast,
 )
 
-from eth_account import Account
+
 from eth_account.datastructures import SignedTransaction
 from eth_account.signers.local import LocalAccount
-from eth_typing import Address, ChecksumAddress, HexStr
-from eth_utils.conversions import to_hex
+from eth_typing import ChecksumAddress, HexStr
 from web3 import AsyncWeb3, Web3
-from web3.types import LogReceipt, TxData, TxParams, TxReceipt, Wei, _Hash32
+from web3.types import TxParams, _Hash32
 
 from ..config.settings import GlobalSettings
 from ..engines.safety_guard import SafetyGuard
@@ -55,7 +54,10 @@ logger = get_logger(__name__)
 
 
 class TransactionManager:
-    """High-level helper for building, signing, simulating, and dispatching MEV-style transactions."""
+    """
+    High-level helper for building, signing, simulating,
+    and dispatching MEV-style transactions.
+    """
 
     DEFAULT_GAS_LIMIT: int = 100_000
     ETH_TRANSFER_GAS: int = 21_000
@@ -122,7 +124,7 @@ class TransactionManager:
 
         self._pending_txs: Dict[str, Dict[str, Any]] = {}
 
-        logger.debug(f"TransactionCore initialized for chain ID {chain_id}")
+        logger.debug("TransactionCore initialized for chain ID %s", chain_id)
 
     async def initialize(self) -> bool:
         """Perform async initialization logic."""
@@ -256,7 +258,9 @@ class TransactionManager:
                     gas_limit = int(est * 1.2)
                 except Exception as e:
                     logger.warning(
-                        f"Gas estimate failed: {e}; defaulting to {self.configuration.default_gas_limit}"
+                        "Gas estimate failed: %s; defaulting to %s",
+                        e,
+                        self.configuration.default_gas_limit,
                     )
                     gas_limit = self.configuration.default_gas_limit
             else:
@@ -325,7 +329,8 @@ class TransactionManager:
                     bumped_max = int(original_max * (self.GAS_RETRY_BUMP**attempt))
                     bumped_pri = int(original_pri * (self.GAS_RETRY_BUMP**attempt))
                     logger.info(
-                        f"Retry {attempt}: bumping maxFeePerGas to {bumped_max}, priority to {bumped_pri}"
+                        f"Retry {attempt}: bumping maxFeePerGas to {bumped_max}, "
+                        f"priority to {bumped_pri}"
                     )
                     tx["maxFeePerGas"] = bumped_max
                     tx["maxPriorityFeePerGas"] = bumped_pri
@@ -734,7 +739,7 @@ class TransactionManager:
                         )
 
                     validated_assets.append(asset)
-                    logger.debug(f"Validated asset {i+1}/{len(assets)}: {asset}")
+                    logger.debug(f"Validated asset {i + 1}/{len(assets)}: {asset}")
 
                 except Exception as e:
                     raise StrategyExecutionError(
@@ -920,10 +925,10 @@ class TransactionManager:
             try:
                 tx_hash = await self.execute_transaction(tx)
                 results.append(tx_hash)
-                logger.debug(f"Bundle tx {i+1}/{len(transactions)} sent: {tx_hash}")
+                logger.debug(f"Bundle tx {i + 1}/{len(transactions)} sent: {tx_hash}")
             except Exception as e:
-                logger.error(f"Bundle tx {i+1} failed: {e}")
-                raise StrategyExecutionError(f"Bundle tx {i+1} failed: {e}")
+                logger.error(f"Bundle tx {i + 1} failed: {e}")
+                raise StrategyExecutionError(f"Bundle tx {i + 1} failed: {e}")
         return ",".join(results)
 
     async def front_run(self, target_tx: Dict[str, Any]) -> str:
@@ -968,8 +973,10 @@ class TransactionManager:
     ) -> Tuple[str, str]:
         """Execute a sandwich attack (front-run then back-run)."""
         logger.info(
-            f"Executing sandwich attack on {target_tx.get('tx_hash', 'N/A')} with strategy {strategy}"
-        )
+            f"Executing sandwich attack on {
+                target_tx.get(
+                    'tx_hash',
+                    'N/A')} with strategy {strategy}")
         fr = await self.front_run(target_tx)
         txh = target_tx.get("tx_hash")
         if txh:

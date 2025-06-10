@@ -2,25 +2,25 @@
 # -*- coding: utf-8 -*-
 """Tests for TransactionManager"""
 
+from unittest.mock import AsyncMock, MagicMock
+from on1builder.config.settings import GlobalSettings
+from on1builder.core.nonce_manager import NonceManager
+from on1builder.core.transaction_manager import TransactionManager
+from on1builder.engines.safety_guard import SafetyGuard
+from on1builder.utils.custom_exceptions import StrategyExecutionError
 import asyncio
 import os
 
 # Add the src directory to the path for imports
 import sys
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+
 
 import pytest
 from eth_account import Account
 from eth_account.datastructures import SignedTransaction
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
-from on1builder.config.settings import GlobalSettings
-from on1builder.core.nonce_manager import NonceManager
-from on1builder.core.transaction_manager import TransactionManager
-from on1builder.engines.safety_guard import SafetyGuard
-from on1builder.utils.custom_exceptions import StrategyExecutionError
 
 
 class TestTransactionManager:
@@ -334,7 +334,7 @@ class TestTransactionManager:
 
     @pytest.mark.asyncio
     async def test_execute_transaction_success(
-        self, transaction_manager, mock_safety_guard, mock_nonce_manager
+        self, transaction_manager, mock_safety_guard
     ):
         """Test successful transaction execution."""
         mock_function = MagicMock()
@@ -629,7 +629,7 @@ class TestTransactionManager:
         """Test ETH withdrawal with insufficient balance."""
         # Set balance so low that even after gas estimation, insufficient for withdrawal
         mock_web3.eth.get_balance.return_value = 1000  # Very small amount
-        mock_web3.eth.gas_price = 20000000000  # 20 gwei
+        mock_web3.eth.gas_price.return_value = 20000000000  # 20 gwei
 
         with pytest.raises(StrategyExecutionError, match="Insufficient balance"):
             await transaction_manager.withdraw_eth(

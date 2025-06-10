@@ -113,12 +113,18 @@ class NotificationService:
             )
 
             if all([smtp_server, smtp_port, smtp_username, smtp_password, alert_email]):
+                try:
+                    smtp_port_int = int(smtp_port or "587")
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid SMTP port value: {smtp_port}")
+                    smtp_port_int = 587  # Default SMTP port
+
                 self._channels.append(
                     (
                         "email",
                         {
                             "server": smtp_server,
-                            "port": int(smtp_port),
+                            "port": smtp_port_int,
                             "username": smtp_username,
                             "password": smtp_password,
                             "to_email": alert_email,
@@ -185,7 +191,10 @@ class NotificationService:
         return current_level_value >= min_level_value
 
     async def send_notification(
-        self, message: str, level: str = "INFO", details: Dict[str, Any] = None
+        self,
+        message: str,
+        level: str = "INFO",
+        details: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Send a notification through all available channels.
 
@@ -222,7 +231,10 @@ class NotificationService:
                 continue
 
     async def send_alert(
-        self, message: str, level: str = "ERROR", details: Dict[str, Any] = None
+        self,
+        message: str,
+        level: str = "ERROR",
+        details: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Send an alert (alias for send_notification with ERROR level by default).
 

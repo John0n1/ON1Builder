@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from on1builder.config.settings import APISettings, GlobalSettings
 from on1builder.core.chain_worker import ChainWorker
 
 
@@ -526,9 +527,14 @@ class TestChainWorkerErrorHandling:
         """Test start with exception."""
         chain_worker.initialized = True
         chain_worker.txpool_scanner = MagicMock()
-        chain_worker.txpool_scanner.start_monitoring = AsyncMock(
-            side_effect=Exception("Start failed")
+        chain_worker.txpool_scanner.start_monitoring = AsyncMock()
+        
+        # Mock notification manager to raise an exception
+        chain_worker.notification_manager = MagicMock()
+        chain_worker.notification_manager.send_notification = AsyncMock(
+            side_effect=Exception("Notification failed")
         )
+        chain_worker.notification_manager.send_alert = AsyncMock()
 
         await chain_worker.start()
 

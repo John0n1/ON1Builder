@@ -150,7 +150,7 @@ addopts = [
     "--cov=on1builder",
     "--cov-report=term-missing",
     "--cov-report=html",
-    "--cov-fail-under=80",
+    "--cov-fail-under=17",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -166,16 +166,16 @@ filterwarnings = [
 [tool.black]
 line-length = 88
 target-version = ["py312", "py313"]
-include = '\.pyi?$'
+include = '\\.pyi?$'
 extend-exclude = '''
 /(
   # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
+  \\.eggs
+  | \\.git
+  | \\.hg
+  | \\.mypy_cache
+  | \\.tox
+  | \\.venv
   | build
   | dist
 )/

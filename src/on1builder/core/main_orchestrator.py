@@ -434,8 +434,9 @@ class MainOrchestrator:
                     logger.info(f"Applied PoA middleware for chain ID {chain_id}")
 
                 logger.info(
-                    f"Connected to HTTP endpoint: {chain_config.http_endpoint} (chain: {chain_config.name})"
-                )
+                    f"Connected to HTTP endpoint: {
+                        chain_config.http_endpoint} (chain: {
+                        chain_config.name})")
                 return web3
             except Exception as e:
                 logger.warning(f"Failed to connect to HTTP endpoint: {e}")
@@ -452,8 +453,9 @@ class MainOrchestrator:
                     logger.info(f"Applied PoA middleware for chain ID {chain_id}")
 
                 logger.info(
-                    f"Connected to WebSocket endpoint: {chain_config.websocket_endpoint} (chain: {chain_config.name})"
-                )
+                    f"Connected to WebSocket endpoint: {
+                        chain_config.websocket_endpoint} (chain: {
+                        chain_config.name})")
                 return web3
             except Exception as e:
                 logger.warning(f"Failed to connect to WebSocket endpoint: {e}")
@@ -461,15 +463,19 @@ class MainOrchestrator:
         # Try IPC endpoint (Note: IPC is not supported with AsyncWeb3)
         if chain_config.ipc_endpoint:
             logger.warning(
-                f"IPC endpoint configured but not supported with AsyncWeb3: {chain_config.ipc_endpoint}"
-            )
+                f"IPC endpoint configured but not supported with AsyncWeb3: {
+                    chain_config.ipc_endpoint}")
 
         logger.error(f"Failed to connect to any endpoint for chain {chain_config.name}")
         return None
 
     async def _create_account(self) -> Optional[Account]:
         if hasattr(self.cfg, "wallet_key") and self.cfg.wallet_key:
-            return Account.from_key(self.cfg.wallet_key)
+            try:
+                return Account.from_key(self.cfg.wallet_key)
+            except Exception as e:
+                logger.error(f"Failed to create account from wallet key: {e}")
+                return None
         logger.error("No wallet_key provided in configuration")
         return None
 
@@ -663,8 +669,10 @@ class MainOrchestrator:
                                     f"💰 Found profitable transaction: {profitable_tx['tx_hash'][:10]}..."
                                 )
                                 logger.info(
-                                    f"📊 Strategy type: {profitable_tx.get('strategy_type', 'unknown')}"
-                                )
+                                    f"📊 Strategy type: {
+                                        profitable_tx.get(
+                                            'strategy_type',
+                                            'unknown')}")
 
                                 # Execute the strategy
                                 success = await strategy_net.execute_best_strategy(

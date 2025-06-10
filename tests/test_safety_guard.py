@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Tests for SafetyGuard"""
-
+from on1builder.config.settings import GlobalSettings
+from on1builder.engines.safety_guard import SafetyGuard
+from on1builder.integrations.external_apis import ExternalAPIManager
 import asyncio
 import os
 
@@ -13,10 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
-from on1builder.config.settings import GlobalSettings
-from on1builder.engines.safety_guard import SafetyGuard
-from on1builder.integrations.external_apis import ExternalAPIManager
 
 
 class TestSafetyGuard:
@@ -529,7 +527,7 @@ class TestSafetyGuard:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_ensure_profit_high_loss(self, safety_guard, mock_config):
+    async def test_ensure_profit_high_loss(self, safety_guard):
         """Test ensure_profit with high loss."""
         tx_data = {
             "expected_profit_eth": -0.01,  # Loss above threshold

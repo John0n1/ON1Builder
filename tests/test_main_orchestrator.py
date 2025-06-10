@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from eth_account import Account
 
 from on1builder.config.settings import GlobalSettings
 from on1builder.core.main_orchestrator import MainOrchestrator
@@ -30,6 +31,7 @@ def mock_global_settings():
     settings.base_path = Path("/tmp")
     settings.api = MagicMock()
     settings.database_url = "sqlite:///test.db"
+    settings.memory_check_interval = 30  # Add missing attribute
     return settings
 
 
@@ -198,6 +200,7 @@ class TestMainOrchestrator:
         """Test complete run lifecycle."""
         orchestrator = MainOrchestrator(config=mock_global_settings)
 
+        # Mock all the internal methods that would be called during run
         with patch.multiple(
             orchestrator,
             _bootstrap=AsyncMock(),
@@ -205,26 +208,32 @@ class TestMainOrchestrator:
             _heartbeat=AsyncMock(),
             stop=AsyncMock(),
         ):
-            # Mock background tasks
+            # Mock asyncio.create_task to return mock tasks
             mock_task = MagicMock()
             mock_task.done.return_value = False
-
+            
+            # Mock the event wait to return immediately
+            original_wait = orchestrator._stop_evt.wait
+            
+            async def mock_wait():
+                return True
+                
+            orchestrator._stop_evt.wait = mock_wait
+            
             with patch("asyncio.create_task", return_value=mock_task):
-                # Mock the stop event to be set after a short delay
-                async def set_stop_event():
-                    await asyncio.sleep(0.01)
-                    orchestrator._stop_evt.set()
-
-                # Start the stop event setter
-                stop_task = asyncio.create_task(set_stop_event())
-
-                try:
-                    await orchestrator.run()
-                except Exception:
-                    pass  # Expected as we're mocking components
-
-                await stop_task
+                await orchestrator.run()
+                
+                # Verify bootstrap was called
                 orchestrator._bootstrap.assert_called_once()
+                
+                # Verify that the running event was set
+                assert orchestrator._running_evt.is_set()
+                
+                # Verify that stop was called
+                orchestrator.stop.assert_called_once()
+            
+            # Restore original wait method
+            orchestrator._stop_evt.wait = original_wait
 
     @pytest.mark.asyncio
     async def test_stop(self, mock_global_settings):
@@ -328,3 +337,178 @@ class TestMainOrchestrator:
         assert hasattr(orchestrator, "_mk_market_monitor")
         assert hasattr(orchestrator, "_mk_txpool_monitor")
         assert hasattr(orchestrator, "_mk_strategy_net")
+
+    @pytest.mark.asyncio
+    async def test_connect_web3_http_success(self, mock_global_settings):
+        """Test successful web3 HTTP connection."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        
+        mock_web3 = MagicMock()
+        mock_web3.is_connected = AsyncMock(return_value=True)
+        mock_web3.eth.chain_id = AsyncMock(return_value=1)
+        
+        # Mock the _create_web3_connection method directly
+        with patch.object(orchestrator, "_create_web3_connection", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_web3
+            
+            result = await orchestrator._connect_web3()
+            assert result == mock_web3
+            mock_create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_connect_web3_poa_chain(self, mock_global_settings):
+        """Test web3 connection for POA chain."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        orchestrator.cfg.chains["ethereum"].chain_id = 99  # POA chain
+        
+        mock_web3 = MagicMock()
+        mock_web3.is_connected = AsyncMock(return_value=True)
+        mock_web3.eth.chain_id = AsyncMock(return_value=99)
+        mock_web3.middleware_onion.inject = MagicMock()
+        
+        # Mock the _create_web3_connection method directly
+        with patch.object(orchestrator, "_create_web3_connection", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_web3
+            
+            result = await orchestrator._connect_web3()
+            assert result == mock_web3
+            mock_create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_connect_web3_connection_failure(self, mock_global_settings):
+        """Test web3 connection failure."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        
+        mock_web3 = MagicMock()
+        mock_web3.is_connected = AsyncMock(return_value=False)
+        
+        with patch("on1builder.core.main_orchestrator.AsyncWeb3") as mock_web3_class:
+            mock_web3_class.return_value = mock_web3
+            
+            result = await orchestrator._connect_web3()
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_create_account_success(self, mock_global_settings):
+        """Test successful account creation."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        orchestrator.cfg.wallet_key = "0x" + "1" * 64
+        
+        mock_account = MagicMock()
+        with patch.object(Account, "from_key", return_value=mock_account):
+            result = await orchestrator._create_account()
+            assert result == mock_account
+
+    @pytest.mark.asyncio
+    async def test_create_account_no_wallet_key(self, mock_global_settings):
+        """Test account creation failure when no wallet key is configured."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        orchestrator.cfg.wallet_key = None
+        
+        result = await orchestrator._create_account()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_mk_api_config(self, mock_global_settings):
+        """Test API config creation."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        
+        with patch("on1builder.core.main_orchestrator.ExternalAPIManager") as mock_api:
+            mock_instance = MagicMock()
+            mock_instance.initialize = AsyncMock()
+            mock_api.return_value = mock_instance
+            
+            result = await orchestrator._mk_api_config()
+            assert result == mock_instance
+            mock_instance.initialize.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_mk_abi_registry(self, mock_global_settings):
+        """Test ABI registry creation."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        
+        with patch("on1builder.integrations.abi_registry.get_registry") as mock_get_registry:
+            mock_registry = MagicMock()
+            mock_registry.abis = {}  # Empty dict for len() call
+            mock_get_registry.return_value = mock_registry
+            
+            result = await orchestrator._mk_abi_registry()
+            assert result == mock_registry
+            mock_get_registry.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_mk_db_manager(self, mock_global_settings):
+        """Test database manager creation."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        
+        with patch("on1builder.persistence.db_interface.get_db_manager") as mock_get_db:
+            mock_instance = MagicMock()
+            mock_instance.initialize = AsyncMock()
+            mock_get_db.return_value = mock_instance
+            
+            result = await orchestrator._mk_db_manager()
+            assert result == mock_instance
+            mock_instance.initialize.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_tx_processor_no_components(self, mock_global_settings):
+        """Test transaction processor when no transaction manager exists."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        # Don't add transaction_manager to components
+        
+        # Set stop event immediately to exit the loop
+        orchestrator._stop_evt.set()
+        
+        # This should exit immediately due to stop event
+        await orchestrator._tx_processor()
+        
+        # Verify that stop event is set
+        assert orchestrator._stop_evt.is_set()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_functionality(self, mock_global_settings):
+        """Test heartbeat functionality."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        orchestrator.components = {
+            "test_component": MagicMock(is_healthy=AsyncMock(return_value=True))
+        }
+        
+        # Set stop event immediately to exit the loop
+        orchestrator._stop_evt.set()
+        
+        # This should exit immediately due to stop event
+        await orchestrator._heartbeat()
+        
+        # Verify that stop event is set
+        assert orchestrator._stop_evt.is_set()
+
+    def test_component_health_storage(self, mock_global_settings):
+        """Test that component health can be stored and accessed."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        orchestrator.component_health = {
+            "component1": True,
+            "component2": False
+        }
+        
+        # Just verify the health dictionary is accessible
+        assert orchestrator.component_health["component1"] is True
+        assert orchestrator.component_health["component2"] is False
+
+    @pytest.mark.asyncio
+    async def test_connect_web3_exception_handling(self, mock_global_settings):
+        """Test web3 connection with exception handling."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        
+        with patch("on1builder.core.main_orchestrator.AsyncWeb3", side_effect=Exception("Connection failed")):
+            result = await orchestrator._connect_web3()
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_create_account_exception_handling(self, mock_global_settings):
+        """Test account creation with exception handling."""
+        orchestrator = MainOrchestrator(config=mock_global_settings)
+        orchestrator.cfg.wallet_key = "invalid_key"
+        
+        with patch.object(Account, "from_key", side_effect=Exception("Invalid key")):
+            result = await orchestrator._create_account()
+            assert result is None

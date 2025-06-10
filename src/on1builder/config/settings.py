@@ -148,4 +148,6 @@ class MultiChainSettings(GlobalSettings):
 
     def get_chain_config(self, chain_name: str) -> Optional[ChainSettings]:
         """Get configuration for a specific chain."""
-        return self.chains.get(chain_name)
+        if isinstance(self.chains, dict) and self.chains:
+            return self.chains.get(chain_name)
+        return None

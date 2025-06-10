@@ -37,12 +37,12 @@ class Container:
     def register(self, key: str, instance: Any) -> None:
         """Register a concrete instance under a key."""
         self._instances[key] = instance
-        logger.debug(f"Registered instance '{key}'")
+        logger.debug("Registered instance '%s'", key)
 
     def register_factory(self, key: str, factory: Callable[..., T]) -> None:
         """Register a factory for lazy instantiation under a key."""
         self._factories[key] = factory
-        logger.debug(f"Registered factory '{key}'")
+        logger.debug("Registered factory '%s'", key)
 
     def register_main_orchestrator(self, main_orchestrator: Any) -> None:
         """Register the MainOrchestrator instance for shared resource access."""
@@ -61,14 +61,14 @@ class Container:
             KeyError: if neither instance nor factory is registered.
         """
         if self._resolving.get(key):
-            logger.warning(f"Circular dependency detected for '{key}'")
+            logger.warning("Circular dependency detected for '%s'", key)
             return None  # break the cycle temporarily
 
         if key in self._instances:
             return self._instances[key]
 
         if key in self._factories:
-            logger.debug(f"Creating '{key}' via factory")
+            logger.debug("Creating '%s' via factory", key)
             self._resolving[key] = True
             try:
                 factory = self._factories[key]
@@ -147,14 +147,14 @@ class Container:
                 await self._close_component(key, instance)
                 closed_components.add(key)
 
-        logger.info(f"Closed {len(closed_components)} components")
+        logger.info("Closed %d components", len(closed_components))
 
     async def _close_component(self, key: str, instance: Any) -> None:
         """Close a single component using appropriate method."""
         try:
             # Try stop() first (standard for our components)
             if hasattr(instance, "stop") and callable(instance.stop):
-                logger.debug(f"Stopping component '{key}'")
+                logger.debug("Stopping component '%s'", key)
                 if inspect.iscoroutinefunction(instance.stop):
                     await instance.stop()
                 else:
@@ -163,14 +163,14 @@ class Container:
 
             # Fall back to close() for compatibility
             if hasattr(instance, "close") and callable(instance.close):
-                logger.debug(f"Closing component '{key}'")
+                logger.debug("Closing component '%s'", key)
                 if inspect.iscoroutinefunction(instance.close):
                     await instance.close()
                 else:
                     instance.close()
                 return
         except Exception as e:
-            logger.error(f"Error closing component '{key}': {e}")
+            logger.error("Error closing component '%s': %s", key, e)
 
 
 # Global singleton container

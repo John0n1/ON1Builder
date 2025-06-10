@@ -14,13 +14,11 @@ License: MIT
 
 from __future__ import annotations
 
-import asyncio
 import os
 import random
 import re
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -65,11 +63,9 @@ except ImportError:
     print("⚠️  Questionary not available - using basic input mode")
 
 try:
-    from rich import print as rprint
+    from rich import print
     from rich.console import Console
-    from rich.live import Live
     from rich.panel import Panel
-    from rich.prompt import Confirm, Prompt
     from rich.table import Table
 
     RICH_AVAILABLE = True
@@ -91,10 +87,7 @@ if not RICH_AVAILABLE and not QUESTIONARY_AVAILABLE:
 try:
     from on1builder import __version__
     from on1builder.config.loaders import ConfigLoader
-    from on1builder.config.settings import GlobalSettings
-    from on1builder.core.main_orchestrator import MainOrchestrator
-    from on1builder.core.multi_chain_orchestrator import MultiChainOrchestrator
-    from on1builder.utils.logging_config import get_logger, setup_logging
+    from on1builder.utils.logging_config import setup_logging
 
     ON1BUILDER_AVAILABLE = True
 except ImportError:
@@ -114,7 +107,10 @@ else:
             text = " ".join(str(arg) for arg in args)
             # Basic cleanup of rich markup
             text = re.sub(r"\[/?\w+[^\]]*\]", "", text)
-            print(text)
+            # Use builtins.print to avoid conflict with method name
+            import builtins
+
+            builtins.print(text)
 
         def print_json(self, data=None, **kwargs):
             # Simple JSON printing without rich formatting
@@ -126,7 +122,7 @@ else:
         def input(self, prompt=""):
             return input(prompt)
 
-        def status(self, *args, **kwargs):
+        def status(self):
             # Simple context manager that does nothing
             class NoOpStatus:
                 def __enter__(self):
@@ -797,7 +793,9 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
         try:
             # Read the last 50 lines for large files
             tail_cmd = ["tail", "-n", "50", selected]
-            result = subprocess.run(tail_cmd, capture_output=True, text=True)
+            result = subprocess.run(
+                tail_cmd, capture_output=True, text=True, check=False
+            )
             console.print(result.stdout)
 
             console.print("\n[dim]Note: Showing the last 50 lines only.[/dim]")

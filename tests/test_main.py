@@ -51,7 +51,7 @@ class TestMainCLI:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
 
-        main()
+        main(verbose=False, debug=False, log_file=None)
 
         mock_setup_logging.assert_called_once_with(
             name="on1builder", level="WARNING", log_dir=None
@@ -65,7 +65,7 @@ class TestMainCLI:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
 
-        main(verbose=True)
+        main(verbose=True, debug=False, log_file=None)
 
         mock_setup_logging.assert_called_once_with(
             name="on1builder", level="INFO", log_dir=None
@@ -78,7 +78,7 @@ class TestMainCLI:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
 
-        main(debug=True)
+        main(verbose=False, debug=True, log_file=None)
 
         mock_setup_logging.assert_called_once_with(
             name="on1builder", level="DEBUG", log_dir=None
@@ -92,7 +92,7 @@ class TestMainCLI:
         mock_get_logger.return_value = mock_logger
         log_file = Path("/tmp/test.log")
 
-        main(log_file=log_file)
+        main(verbose=False, debug=False, log_file=log_file)
 
         mock_setup_logging.assert_called_once_with(
             name="on1builder", level="WARNING", log_dir="/tmp"
@@ -143,7 +143,7 @@ class TestMainCLI:
         with patch("typer.echo") as mock_echo:
             cli()
 
-        mock_logger.error.assert_called_once_with(f"Unexpected error: {test_error}")
+        mock_logger.error.assert_called_once_with("Unexpected error: %s", test_error)
         mock_echo.assert_called_once_with("Error: Test error", err=True)
         mock_exit.assert_called_once_with(1)
 

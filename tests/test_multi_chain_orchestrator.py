@@ -141,7 +141,7 @@ class TestMultiChainOrchestrator:
     ):
         """Test successful chain worker initialization."""
         with patch(
-            "src.on1builder.core.multi_chain_orchestrator.ChainWorker"
+            "on1builder.core.multi_chain_orchestrator.ChainWorker"
         ) as mock_worker_class:
             mock_worker = AsyncMock()
             mock_worker.initialize.return_value = True
@@ -159,7 +159,7 @@ class TestMultiChainOrchestrator:
     ):
         """Test chain worker initialization failure."""
         with patch(
-            "src.on1builder.core.multi_chain_orchestrator.ChainWorker"
+            "on1builder.core.multi_chain_orchestrator.ChainWorker"
         ) as mock_worker_class:
             mock_worker = AsyncMock()
             mock_worker.initialize.return_value = False
@@ -176,7 +176,7 @@ class TestMultiChainOrchestrator:
     ):
         """Test chain worker initialization with exception."""
         with patch(
-            "src.on1builder.core.multi_chain_orchestrator.ChainWorker"
+            "on1builder.core.multi_chain_orchestrator.ChainWorker"
         ) as mock_worker_class:
             mock_worker_class.side_effect = Exception("Test error")
 
@@ -250,13 +250,13 @@ class TestMultiChainOrchestrator:
     @pytest.mark.asyncio
     async def test_update_metrics(self, orchestrator):
         """Test metrics update functionality."""
-        mock_worker = AsyncMock()
+        mock_worker = MagicMock()
         mock_worker.get_metrics.return_value = {
             "transactions": 10,
             "profit_eth": 0.5,
             "gas_spent_eth": 0.1,
         }
-        mock_worker.is_healthy.return_value = True
+        mock_worker.is_healthy = AsyncMock(return_value=True)
         orchestrator.workers["1"] = mock_worker
 
         # Start metrics update and then stop it quickly

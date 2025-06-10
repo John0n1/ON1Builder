@@ -284,6 +284,7 @@ class TestContainer:
 
         # Create a component that depends on orchestrator
         def dependent_factory(main_orchestrator):
+            # This factory depends on main_orchestrator
             return MagicMock()
 
         self.container.register_factory("dependent", dependent_factory)

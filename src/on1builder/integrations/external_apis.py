@@ -153,6 +153,8 @@ class ExternalAPIManager:
         """Get the shared HTTP session."""
         if self._session is None or self._session.closed:
             await self._acquire_session()
+        if self._session is None:
+            raise RuntimeError("Failed to acquire aiohttp session")
         return self._session
 
     async def _load_token_mappings(self) -> None:
@@ -260,8 +262,12 @@ class ExternalAPIManager:
             # Make the API request
             timeout = aiohttp.ClientTimeout(total=10)
             kwargs = {"params": params, "timeout": timeout}
-            if "headers" in locals():
-                kwargs["headers"] = headers
+            headers = {}
+            if provider.name == "coinmarketcap":
+                headers = (
+                    {"X-CMC_PRO_API_KEY": provider.api_key} if provider.api_key else {}
+                )
+            kwargs["headers"] = headers
 
             async with session.get(url, **kwargs) as response:
                 if response.status == 200:

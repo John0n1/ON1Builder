@@ -309,8 +309,7 @@ class TxPoolScanner:
                 pending_count = len(result["result"].get("pending", {}))
                 queued_count = len(result["result"].get("queued", {}))
                 logger.info(
-                    f"✅ Txpool API supported! Found {pending_count} pending, {queued_count} queued transactions"
-                )
+                    f"✅ Txpool API supported! Found {pending_count} pending, {queued_count} queued transactions")
             else:
                 logger.info(
                     "💡 Txpool API not available - will use alternative monitoring methods"
@@ -360,8 +359,8 @@ class TxPoolScanner:
                             collection_count += 1
 
                     logger.info(
-                        f"📊 Enqueued {len(pending_txs)} transactions for analysis (total: {collection_count})"
-                    )
+                        f"📊 Enqueued {
+                            len(pending_txs)} transactions for analysis (total: {collection_count})")
                 else:
                     logger.debug("No pending transactions found in mempool")
 
@@ -701,8 +700,8 @@ class TxPoolScanner:
             if txpool_content and "result" in txpool_content:
                 pending_data = txpool_content["result"].get("pending", {})
                 logger.debug(
-                    f"📊 Txpool response: {len(pending_data)} sender addresses with pending transactions"
-                )
+                    f"📊 Txpool response: {
+                        len(pending_data)} sender addresses with pending transactions")
 
                 # Process each pending transaction
                 for sender_address, nonce_dict in pending_data.items():

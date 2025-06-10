@@ -49,9 +49,9 @@ def main(
 ) -> None:
     """ON1Builder - Multi-chain blockchain transaction execution framework."""
     # Handle case where parameters might be typer.Option objects (during testing)
-    verbose_val = verbose if not hasattr(verbose, "default") else verbose.default
-    debug_val = debug if not hasattr(debug, "default") else debug.default
-    log_file_val = log_file if not hasattr(log_file, "default") else log_file.default
+    verbose_val = verbose if not isinstance(verbose, bool) else verbose
+    debug_val = debug if not isinstance(debug, bool) else debug
+    log_file_val = log_file
 
     # Setup logging
     log_level = "DEBUG" if debug_val else ("INFO" if verbose_val else "WARNING")
@@ -63,7 +63,7 @@ def main(
     setup_logging(name="on1builder", level=log_level, log_dir=log_dir)
 
     logger = get_logger(__name__)
-    logger.debug(f"ON1Builder CLI started with log level: {log_level}")
+    logger.debug("ON1Builder CLI started with log level: %s", log_level)
 
 
 @app.command()
@@ -84,7 +84,7 @@ def cli() -> None:
         sys.exit(1)
     except Exception as e:
         logger = get_logger(__name__)
-        logger.error(f"Unexpected error: {e}")
+        logger.error("Unexpected error: %s", e)
         typer.echo(f"Error: {e}", err=True)
         sys.exit(1)
 

@@ -2,20 +2,16 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 """Tests for on1builder.persistence.db_interface module."""
-
+import datetime
+import pytest
 import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+from on1builder.config.settings import GlobalSettings
+from on1builder.persistence.db_interface import DatabaseInterface
 from pathlib import Path
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-
-from on1builder.config.settings import GlobalSettings
-from on1builder.persistence.db_interface import DatabaseInterface
 
 
 @pytest.fixture
@@ -53,7 +49,7 @@ class TestDatabaseInterface:
     async def test_initialize_with_sqlalchemy(self, db_interface):
         """Test initialization when SQLAlchemy is available."""
         with patch("on1builder.persistence.db_interface.HAS_SQLALCHEMY", True):
-            with patch("on1builder.persistence.db_interface.Base") as mock_base:
+            with patch("on1builder.persistence.db_interface.Base"):
                 # Create a proper async context manager mock
                 mock_conn = AsyncMock()
                 mock_conn.run_sync = AsyncMock()
