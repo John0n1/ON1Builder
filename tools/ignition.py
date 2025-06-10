@@ -22,6 +22,11 @@ import sys
 import time
 from pathlib import Path
 
+from rich import *
+from rich.console import *
+from rich.panel import *
+from rich.table import *
+from rich.text import *
 
 # Check for required packages with enhanced error handling
 def check_required_packages():
@@ -38,14 +43,20 @@ def check_required_packages():
 
     if missing_packages:
         print(f"Missing required packages: {', '.join(missing_packages)}")
-        print("Please install them using:")
-        print(f"  pip install {' '.join(missing_packages)}")
-        print("  or")
-        print("  pip install -e .[dev]  # for development dependencies")
-        print("")
-        print("Make sure you're in your virtual environment and try again.")
-        sys.exit(1)
-
+        print("Would you like to set up a virtual environment and install them now (Y),")
+        print("Or, set up a development environment (D) ?,")
+        print("(Y/N/D) else (N) to exit:")
+        choice = input().strip().lower()
+        if choice == "y":
+            subprocess.check_call([sys.executable, "-m", "venv", "env"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", *missing_packages])
+        elif choice == "d":
+            subprocess.check_call([sys.executable, "-m", "venv", "env"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", *missing_packages, ".[dev]"])
+        else:
+            print("Please install them manually and try again.")
+            sys.exit(1)
+        print("Environment is set up and required packages installed successfully.")
 
 # Check for required packages
 check_required_packages()
@@ -63,11 +74,8 @@ except ImportError:
     print("⚠️  Questionary not available - using basic input mode")
 
 try:
-    from rich import print
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.table import Table
-
+    from rich import *
+ 
     RICH_AVAILABLE = True
 except ImportError:
     print("⚠️  Rich not available - using basic output mode")
@@ -920,89 +928,79 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
             return default
 
     # Matrix-style intro effects
+    def _matrix_colors(self):
+        """Define consistent matrix color codes"""
+        return {
+            'bright_green': '\033[1;92m',  # Bright green for headers/highlights
+            'matrix_green': '\033[0;92m',  # Standard matrix green
+            'dim_green': '\033[2;32m',     # Dim green for fading effect
+            'bright_white': '\033[1;97m',  # Bright white for rabbit
+            'yellow': '\033[1;93m',        # Yellow for warnings
+            'reset': '\033[0m'             # Reset colors
+        }
+
     def clear_screen(self):
         """Clear the terminal screen"""
         os.system("clear" if os.name == "posix" else "cls")
 
     def matrix_rain_effect(self, duration=3):
-        """Display falling green code effect"""
-        if not sys.stdout.isatty():
-            return
-
+        """Display falling green code effect using Rich for proper color handling"""
         # Matrix characters
         chars = "01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
-
+        
         try:
-            # Get terminal size using shutil (cross-platform)
+            # Get terminal size
             try:
                 import shutil
-
                 size = shutil.get_terminal_size()
-                rows, cols = size.lines, size.columns
+                rows, cols = size.lines - 1, size.columns  # Leave space for cursor
             except (ImportError, OSError):
-                # Fallback to reasonable defaults
-                rows, cols = 24, 80
-
-            # Initialize falling streams
-            streams = [
-                {"chars": [], "y": 0, "speed": random.randint(1, 3)}
-                for _ in range(cols // 3)
-            ]
+                rows, cols = 100, 100
 
             start_time = time.time()
             while time.time() - start_time < duration:
-                # Clear screen
-                print("\033[2J\033[H", end="")
-
-                # Update streams
-                for i, stream in enumerate(streams):
-                    if random.random() < 0.1:  # Start new stream
-                        stream["chars"] = [
-                            random.choice(chars) for _ in range(random.randint(5, 15))
-                        ]
-                        stream["y"] = 0
-
-                    # Draw stream
-                    x = i * 3
-                    if x < cols and stream["chars"]:
-                        for j, char in enumerate(stream["chars"]):
-                            y = stream["y"] - j
-                            if 0 <= y < rows:
-                                if j == 0:  # Head of stream (bright)
-                                    print(
-                                        f"\033[{y+1};{x+1}H\033[92m{char}\033[0m",
-                                        end="",
-                                    )
-                                elif j < 3:  # Bright part
-                                    print(
-                                        f"\033[{y+1};{x+1}H\033[32m{char}\033[0m",
-                                        end="",
-                                    )
-                                else:  # Dim part
-                                    print(
-                                        f"\033[{y+1};{x+1}H\033[90m{char}\033[0m",
-                                        end="",
-                                    )
-
-                        stream["y"] += stream["speed"]
-                        if stream["y"] > rows + len(stream["chars"]):
-                            stream["chars"] = []
-
-                sys.stdout.flush()
-                time.sleep(0.1)
+                # Create a matrix frame
+                matrix_lines = []
+                
+                for row in range(rows):
+                    line_chars = []
+                    for col in range(0, cols, 2):  # Every other column for spacing
+                        if random.random() < 0.4:  # 40% chance of character
+                            char = random.choice(chars)
+                            # Randomly assign colors for matrix effect
+                            rand = random.random()
+                            if rand < 0.1:  # 10% bright white (like cursor)
+                                line_chars.append(f"[bold white]{char}[/bold white]")
+                            elif rand < 0.3:  # 20% bright green
+                                line_chars.append(f"[bold bright_green]{char}[/bold bright_green]")
+                            elif rand < 0.6:  # 30% normal green
+                                line_chars.append(f"[green]{char}[/green]")
+                            else:  # 40% dim green
+                                line_chars.append(f"[dim green]{char}[/dim green]")
+                        else:
+                            line_chars.append(" ")  # Empty space
+                    
+                    matrix_lines.append("".join(line_chars))
+                
+                # Clear and display
+                self.clear_screen()
+                for line in matrix_lines:
+                    console.print(line)
+                
+                time.sleep(0.10)  # Slower animation for better effect
 
         except KeyboardInterrupt:
             pass
-
-        self.clear_screen()
+        finally:
+            self.clear_screen()
 
     def wake_up_neo_sequence(self):
         messages = [
             "Wake up, Developer...",
             "",
+            "",
             "The Matrix has you...",
             "Follow the white rabbit.",
-            "",
             "",
             "Knock, knock, Dev.",
             "",
@@ -1015,33 +1013,58 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
 
         for msg in messages:
             if msg:
-                # Green text effect
+                # Typewriter effect - print one character at a time
                 for char in msg:
-                    print(f"\033[92m{char}\033[0m", end="", flush=True)
-                    time.sleep(0.05)
-                print()
-            time.sleep(1)
+                    # Use ANSI codes for green color and sys.stdout for precise control
+                    sys.stdout.write(f"\033[1;92m{char}\033[0m")
+                    sys.stdout.flush()
+                    time.sleep(0.08)  # Typing speed
+                print()  # New line after message
+                time.sleep(1.2)  # Pause between messages
+            else:
+                print()  # Empty line
+                time.sleep(0.8)
 
     def white_rabbit_sequence(self):
         """Display ASCII white rabbit animation"""
         rabbit_frames = [
             """
-                    (\\   /)
+                    (\\_/)
                    ( ._.)
                   o_(")(")
             """,
             """
-                    (\\   /)
+                    (\\_/)
+                   ( ._.)
+                  o_(")(")
+            """,
+            """
+                    (\\_/)
                    ( >.<)
                   o_(")(")
             """,
             """
-                    (\\   /)
+                    (\\_/)
                    ( >.<)
                   o_(")(")
             """,
             """
-                    (\\   /)
+                    (\\_/)
+                   ( ._.)
+                  o_(")(")
+            """,
+            """
+                    (\\_/)
+                   ( >.<)
+                  o_(")(")
+            """,
+            """
+                    (\\_/)
+                   ( >.<)
+                  o_(")(")
+            """,
+            """
+                    (\\_/)
                    ( ._.)
                   o_(")(")
             """,
@@ -1051,7 +1074,7 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
 
         for frame in rabbit_frames:
             self.clear_screen()
-            print("\033[97m" + frame + "\033[0m")  # White rabbit
+            console.print(f"[bold white]{frame}[/bold white]")  # Bright white rabbit
             time.sleep(1.2)
 
         time.sleep(2)
@@ -1063,9 +1086,9 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
             self.clear_screen()
 
             # Phase 1: Matrix rain
-            print("\033[92m" + "=" * 50)
-            print("ON1Builder Ignition")
-            print("=" * 50 + "\033[0m")
+            console.print("[bold bright_green]" + "=" * 50)
+            console.print("[bold bright_green]ON1Builder Ignition")
+            console.print("[bold bright_green]" + "=" * 50)
             time.sleep(1)
 
             self.matrix_rain_effect(3)
@@ -1078,15 +1101,15 @@ WALLET_KEY: "${PRIVATE_KEY}"  # From .env file
             self.white_rabbit_sequence()
 
             # Phase 4: System ready
-            print("\033[92m" + "=" * 50)
-            print("SYSTEM ONLINE - REALITY LOADING...")
-            print("=" * 50 + "\033[0m")
+            console.print("[bold bright_green]" + "=" * 50)
+            console.print("[bold bright_green]SYSTEM ONLINE - REALITY LOADING...")
+            console.print("[bold bright_green]" + "=" * 50)
             time.sleep(2)
             self.clear_screen()
 
         except KeyboardInterrupt:
             self.clear_screen()
-            print("Matrix sequence interrupted. Entering normal mode...")
+            console.print("[yellow]Matrix sequence interrupted. Entering normal mode...[/yellow]")
             time.sleep(1)
             self.clear_screen()
 
