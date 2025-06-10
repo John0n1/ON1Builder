@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Tests for TransactionManager"""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from on1builder.config.settings import GlobalSettings
 from on1builder.core.nonce_manager import NonceManager
 from on1builder.core.transaction_manager import TransactionManager
@@ -629,7 +629,7 @@ class TestTransactionManager:
         """Test ETH withdrawal with insufficient balance."""
         # Set balance so low that even after gas estimation, insufficient for withdrawal
         mock_web3.eth.get_balance.return_value = 1000  # Very small amount
-        mock_web3.eth.gas_price.return_value = 20000000000  # 20 gwei
+        mock_web3.eth.gas_price = AsyncMock(return_value=20000000000)  # 20 gwei
 
         with pytest.raises(StrategyExecutionError, match="Insufficient balance"):
             await transaction_manager.withdraw_eth(
@@ -696,3 +696,172 @@ class TestTransactionManager:
             transaction_manager.notification_manager
             == mock_orchestrator.components["notification_manager"]
         )
+
+    # === Tests for missing coverage methods ===
+
+    @pytest.mark.asyncio
+    async def test_handle_eth_transaction(self, transaction_manager, mock_web3):
+        """Test handling ETH transactions."""
+        tx_spec = {
+            "to": "0x742d35Cc6635C0532925a3b8D8b5A8b3F3C4C7c6",
+            "value": 1000000000000000000,  # 1 ETH
+            "gas": 21000,
+        }
+        
+        result = await transaction_manager.handle_eth_transaction(tx_spec)
+        
+        assert "hash" in result
+        assert result["hash"] == "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+    @pytest.mark.asyncio
+    async def test_prepare_flashloan_transaction_basic(self, transaction_manager):
+        """Test basic flashloan transaction preparation."""
+        flashloan_data = {
+            "asset": "0xA0b86a33E6441b4a619C8c1F0B6c48D7F4be8A8b",  # USDC
+            "amount": 1000000000,  # 1000 USDC
+            "callback_function": "arbitrageTrade",
+        }
+        
+        # Mock the safety validation and contract deployment
+        with patch.object(transaction_manager, '_validate_flashloan_safety', return_value=None), \
+             patch.object(transaction_manager, '_ensure_flashloan_contract_deployed', return_value="0x123"):
+            
+            result = await transaction_manager.prepare_flashloan_transaction(flashloan_data)
+            
+            assert "contract_address" in result
+            assert "asset" in result
+            assert result["asset"] == flashloan_data["asset"]
+
+    @pytest.mark.asyncio
+    async def test_cancel_transaction(self, transaction_manager, mock_web3):
+        """Test transaction cancellation."""
+        nonce = 5
+        
+        result = await transaction_manager.cancel_transaction(nonce)
+        
+        assert result == "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        # Verify that a transaction with higher gas price was sent
+        mock_web3.eth.send_raw_transaction.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_transfer_profit_to_account(self, transaction_manager, mock_web3):
+        """Test profit transfer to account."""
+        amount = 500000000000000000  # 0.5 ETH
+        account = "0x742d35Cc6635C0532925a3b8D8b5A8b3F3C4C7c6"
+        
+        result = await transaction_manager.transfer_profit_to_account(amount, account)
+        
+        assert result == "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+    @pytest.mark.asyncio
+    async def test_get_flashloan_contract_info(self, transaction_manager):
+        """Test getting flashloan contract information."""
+        contract_address = "0x742d35Cc6635C0532925a3b8D8b5A8b3F3C4C7c6"
+        
+        with patch.object(transaction_manager.web3.eth, 'contract') as mock_contract:
+            mock_contract_instance = MagicMock()
+            mock_contract_instance.functions.getContractVersion.return_value.call = AsyncMock(return_value="1.0.0")
+            mock_contract_instance.functions.getOwner.return_value.call = AsyncMock(return_value=transaction_manager.address)
+            mock_contract.return_value = mock_contract_instance
+            
+            result = await transaction_manager.get_flashloan_contract_info(contract_address)
+            
+            assert "version" in result
+            assert "owner" in result
+            assert result["version"] == "1.0.0"
+
+    @pytest.mark.asyncio
+    async def test_validate_contract_integration(self, transaction_manager):
+        """Test contract integration validation."""
+        with patch.object(transaction_manager, '_check_aave_asset_availability', return_value=True):
+            result = await transaction_manager.validate_contract_integration()
+            
+            assert isinstance(result, dict)
+            assert "aave_integration" in result
+
+    @pytest.mark.asyncio
+    async def test_emergency_stop(self, transaction_manager):
+        """Test emergency stop functionality."""
+        result = await transaction_manager.emergency_stop()
+        
+        assert isinstance(result, dict)
+        assert "timestamp" in result
+        assert "stopped" in result
+        assert result["stopped"] is True
+
+    @pytest.mark.asyncio
+    async def test_front_run_transaction(self, transaction_manager, mock_web3):
+        """Test front-running transaction."""
+        target_tx = {
+            "to": "0x742d35Cc6635C0532925a3b8D8b5A8b3F3C4C7c6",
+            "value": 1000000000000000000,
+            "gasPrice": 20000000000,
+            "gas": 21000,
+        }
+        
+        result = await transaction_manager.front_run(target_tx)
+        
+        assert result == "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+    @pytest.mark.asyncio
+    async def test_back_run_transaction(self, transaction_manager, mock_web3):
+        """Test back-running transaction."""
+        target_tx = {
+            "to": "0x742d35Cc6635C0532925a3b8D8b5A8b3F3C4C7c6",
+            "value": 1000000000000000000,
+            "gasPrice": 20000000000,
+            "gas": 21000,
+        }
+        
+        result = await transaction_manager.back_run(target_tx)
+        
+        assert result == "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+    @pytest.mark.asyncio
+    async def test_send_bundle(self, transaction_manager, mock_web3):
+        """Test sending transaction bundle."""
+        transactions = [
+            {"to": "0x123", "value": 1000000000000000000, "gas": 21000},
+            {"to": "0x456", "value": 500000000000000000, "gas": 21000},
+        ]
+        
+        result = await transaction_manager.send_bundle(transactions)
+        
+        assert result == "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+    @pytest.mark.asyncio 
+    async def test_execute_sandwich_attack(self, transaction_manager, mock_web3):
+        """Test sandwich attack execution."""
+        target_tx = {
+            "to": "0x742d35Cc6635C0532925a3b8D8b5A8b3F3C4C7c6",
+            "value": 1000000000000000000,
+            "gasPrice": 20000000000,
+            "gas": 21000,
+        }
+        
+        front_run_params = {"gas": 22000, "gasPrice": 25000000000}
+        back_run_params = {"gas": 22000, "gasPrice": 15000000000}
+        
+        result = await transaction_manager.execute_sandwich_attack(
+            target_tx, front_run_params, back_run_params
+        )
+        
+        assert "front_run_hash" in result
+        assert "back_run_hash" in result
+
+    @pytest.mark.asyncio
+    async def test_get_integration_status(self, transaction_manager):
+        """Test getting integration status."""
+        with patch.object(transaction_manager, 'validate_contract_integration', return_value={"aave_integration": True}):
+            result = await transaction_manager.get_integration_status()
+            
+            assert isinstance(result, dict)
+            assert "last_check" in result
+            assert "integrations" in result
+
+    @pytest.mark.asyncio
+    async def test_stop_transaction_manager(self, transaction_manager):
+        """Test stopping transaction manager."""
+        result = await transaction_manager.stop()
+        
+        assert result is True
