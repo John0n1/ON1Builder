@@ -1,149 +1,62 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# SPDX-License-Identifier: MIT
-"""
-ON1Builder – CLI Configuration Management
-=========================================
-Configuration management commands for ON1Builder.
-==========================
-License: MIT
-==========================
-This module provides commands to validate, show, and manage configurations.
-"""
-
+# src/on1builder/cli/config_cmd.py
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Optional
-
+import json
 import typer
-import yaml
+from rich.console import Console
+from rich.syntax import Syntax
 
-from ..utils.logging_config import get_logger
+from on1builder.config.loaders import settings, load_settings
+from on1builder.utils.custom_exceptions import ConfigurationError
 
-logger = get_logger(__name__)
-app = typer.Typer(name="config", help="Configuration management commands")
+app = typer.Typer(help="Commands to inspect and validate configuration.")
+console = Console()
 
-
-def _load_yaml(path: Path) -> Dict[str, Any]:
-    """Load YAML file and return its contents as a dict."""
-    try:
-        return yaml.safe_load(path.read_text()) or {}
-    except yaml.YAMLError as e:
-        typer.secho(f"❌ YAML parsing error: {e}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1)
-
-
-@app.command("validate")
-def validate_command(
-    config_path: Path = typer.Argument(
-        Path("configs/common_settings.yaml"),
-        exists=True,
-        readable=True,
-        help="Path to the YAML configuration file to validate",
-    ),
-    chain_config: Optional[Path] = typer.Option(
-        None, "--chain", "-c", help="Path to chain-specific configuration file"
-    ),
-    multi_chain: bool = typer.Option(
-        False, "--multi-chain", "-m", help="Validate as multi-chain configuration"
-    ),
-) -> None:
+@app.command(name="show")
+def show_config(
+    show_keys: bool = typer.Option(False, "--show-keys", "-s", help="Show sensitive keys like WALLET_KEY.")
+):
     """
-    Validate ON1Builder YAML configuration files.
-
-    Checks:
-      - File exists and is valid YAML
-      - Top-level structure is a mapping
-      - Required fields are present
-      - Chain-specific configurations are valid
+    Displays the currently loaded configuration, redacting sensitive values by default.
     """
     try:
-        # Load main configuration
-        config = _load_yaml(config_path)
+        # Pydantic models have a method to dump to a dict
+        config_dict = settings.model_dump(mode='json')
+        
+        if not show_keys:
+            if "wallet_key" in config_dict:
+                config_dict["wallet_key"] = "[REDACTED]"
+            if "api" in config_dict:
+                for key in config_dict["api"]:
+                    if "key" in key or "token" in key:
+                         config_dict["api"][key] = "[REDACTED]"
+            if "notifications" in config_dict and "smtp_password" in config_dict["notifications"]:
+                config_dict["notifications"]["smtp_password"] = "[REDACTED]"
 
-        if not isinstance(config, dict):
-            typer.secho(
-                "❌ Configuration root must be a mapping (dictionary).",
-                fg=typer.colors.RED,
-            )
-            raise typer.Exit(code=1)
-
-        # Load chain configuration if provided
-        if chain_config:
-            chain_cfg = _load_yaml(chain_config)
-            if not isinstance(chain_cfg, dict):
-                typer.secho(
-                    "❌ Chain configuration root must be a mapping (dictionary).",
-                    fg=typer.colors.RED,
-                )
-                raise typer.Exit(code=1)
-
-        errors: list[str] = []
-
-        # Validate main configuration structure
-        if multi_chain:
-            # Multi-chain validation
-            chains = config.get("chains", [])
-            if not chains:
-                errors.append("Multi-chain config must have 'chains' section")
-
-            for i, chain in enumerate(chains):
-                if not isinstance(chain, dict):
-                    errors.append(f"Chain #{i}: must be a dictionary")
-                    continue
-
-                # Check required fields for each chain
-                required_fields = ["chain_id", "rpc_url"]
-                for field in required_fields:
-                    if field not in chain:
-                        errors.append(f"Chain #{i}: missing required field '{field}'")
-        else:
-            # Single chain validation
-            if chain_config:
-                # Validate chain-specific config
-                required_fields = ["chain_id", "rpc_url"]
-                for field in required_fields:
-                    if field not in chain_cfg:
-                        errors.append(f"Chain config: missing required field '{field}'")
-            else:
-                # Validate main config when no chain config is provided
-                required_fields = ["chain_id", "rpc_url"]
-                for field in required_fields:
-                    if field not in config:
-                        errors.append(f"Main config: missing required field '{field}'")
-
-        if errors:
-            for err in errors:
-                typer.secho(f"❌ {err}", fg=typer.colors.RED)
-            raise typer.Exit(code=1)
-
-        typer.secho("✅ Configuration is valid.", fg=typer.colors.GREEN)
+        # Pretty print the JSON using rich
+        json_str = json.dumps(config_dict, indent=2)
+        syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
+        console.print(syntax)
 
     except Exception as e:
-        logger.error(f"Configuration validation failed: {e}")
-        typer.secho(f"❌ Validation failed: {e}", fg=typer.colors.RED)
+        console.print(f"[bold red]Error displaying configuration:[/] {e}")
         raise typer.Exit(code=1)
 
-
-@app.command("show")
-def show_command(
-    config_path: Path = typer.Argument(
-        Path("configs/common_settings.yaml"),
-        exists=True,
-        readable=True,
-        help="Path to the configuration file to display",
-    )
-) -> None:
-    """Display configuration file contents."""
+@app.command(name="validate")
+def validate_config():
+    """
+    Validates the current .env configuration by attempting to load it.
+    Reports any validation errors found by Pydantic.
+    """
+    console.print("🔍 Validating configuration from .env file...")
     try:
-        config = _load_yaml(config_path)
-        typer.echo(yaml.dump(config, default_flow_style=False, indent=2))
-    except Exception as e:
-        logger.error(f"Failed to show configuration: {e}")
-        typer.secho(f"❌ Failed to show config: {e}", fg=typer.colors.RED)
+        # The act of loading the settings performs the validation
+        load_settings()
+        console.print("[bold green]✅ Configuration is valid![/]")
+    except (ConfigurationError, ValueError) as e:
+        console.print(f"[bold red]❌ Configuration validation failed![/]")
+        console.print(f"   [red]Error:[/red] {e}")
         raise typer.Exit(code=1)
-
-
-if __name__ == "__main__":
-    app()
+    except Exception as e:
+        console.print(f"[bold red]❌ An unexpected error occurred during validation:[/] {e}")
+        raise typer.Exit(code=1)

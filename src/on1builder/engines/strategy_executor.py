@@ -1,487 +1,455 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# SPDX-License-Identifier: MIT
-"""
-ON1Builder – StrategyExecutor
-========================
-A lightweight reinforcement learning agent that selects and executes the best strategy
-for a given transaction type, using an ε-greedy approach to explore and exploit.
-License: MIT
-"""
-
+# src/on1builder/engines/strategy_executor.py
 from __future__ import annotations
 
 import json
 import random
 import time
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
 import numpy as np
-from web3 import AsyncWeb3
 
-from ..config.settings import GlobalSettings
-
-# Break circular dependency
-if TYPE_CHECKING:
-    from ..core.transaction_manager import TransactionManager
-
-from ..monitoring.market_data_feed import MarketDataFeed
-from ..utils.logging_config import get_logger
-from .safety_guard import SafetyGuard
+from on1builder.config.loaders import settings
+from on1builder.core.balance_manager import BalanceManager
+from on1builder.utils.custom_exceptions import StrategyExecutionError
+from on1builder.utils.logging_config import get_logger
+from on1builder.utils.path_helpers import get_strategy_weights_path
 
 logger = get_logger(__name__)
 
-
-class StrategyPerformanceMetrics:
-    """Mutable container for per-strategy stats."""
-
-    def __init__(self) -> None:
-        self.successes: int = 0
-        self.failures: int = 0
-        self.profit: Decimal = Decimal("0")
-        self.total_executions: int = 0
-        self.avg_execution_time: float = 0.0
-
-    @property
-    def success_rate(self) -> float:
-        return (
-            (self.successes / self.total_executions) if self.total_executions else 0.0
-        )
-
-
-class StrategyGlobalSettings:
-    """Tunable hyper-parameters for learning."""
-
-    def __init__(self, config: GlobalSettings):
-        # Load from config or use defaults
-        self.decay_factor: float = config.strategy_decay_factor
-        self.base_learning_rate: float = config.strategy_learning_rate
-        self.exploration_rate: float = config.strategy_exploration_rate
-        self.min_weight: float = config.strategy_min_weight
-        self.max_weight: float = config.strategy_max_weight
-        self.market_weight: float = config.strategy_market_weight
-        self.gas_weight: float = config.strategy_gas_weight
-
-
 class StrategyExecutor:
-    """Chooses & executes the best strategy via lightweight reinforcement learning."""
+    """
+    Enhanced strategy executor with dynamic ML adaptation, balance awareness,
+    and sophisticated profit optimization.
+    """
 
-    def __init__(
-        self,
-        web3: AsyncWeb3,
-        config: GlobalSettings,
-        transaction_core: TransactionManager,
-        safety_net: SafetyGuard,
-        market_monitor: MarketDataFeed,
-        main_orchestrator: Optional[
-            Any
-        ] = None,  # Reference to MainOrchestrator for shared resources
-    ) -> None:
-        self.web3 = web3
-        self.cfg = config
-        self.txc = transaction_core
-        self.safety_net = safety_net
-        self.market_monitor = market_monitor
-        self.api_manager = getattr(config, "api", None)  # Use api attribute instead
-        self.main_orchestrator = (
-            main_orchestrator  # Store reference to MainOrchestrator
-        )
-
-        # Use path_helpers to get the correct resource path
-        from ..utils.path_helpers import get_resource_path
-
-        self._WEIGHT_FILE = get_resource_path("ml_models", "strategy_weights.json")
-        self._SAVE_EVERY = config.strategy_save_interval
-
-        # Set up access to shared components if MainCore is provided
-        self.db_manager = None
-        self.abi_registry = None
-        if main_orchestrator and hasattr(main_orchestrator, "components"):
-            self.db_manager = main_orchestrator.components.get("db_manager")
-            self.abi_registry = main_orchestrator.components.get("abi_registry")
-            if self.db_manager:
-                logger.debug("StrategyExecutor: Using shared DB manager from MainCore")
-            if self.abi_registry:
-                logger.debug(
-                    "StrategyExecutor: Using shared ABI registry from MainCore"
-                )
-
-        # Supported strategy types and their function lists
-        self._registry: Dict[str, List[Callable[[Dict[str, Any]], Awaitable[Any]]]] = {
-            "eth_transaction": [self.txc.handle_eth_transaction],
-            "front_run": [self.txc.front_run],
-            "back_run": [self.txc.back_run],
-            "sandwich_attack": [self.txc.execute_sandwich_attack],
+    def __init__(self, transaction_manager, balance_manager: BalanceManager):
+        self._tx_manager = transaction_manager
+        self._balance_manager = balance_manager
+        self._strategy_weights_path = get_strategy_weights_path()
+        
+        # Enhanced strategy mapping with metadata
+        self._strategies: Dict[str, Dict[str, Any]] = {
+            "arbitrage": {
+                "functions": [self._tx_manager.execute_arbitrage],
+                "risk_level": "low",
+                "min_balance_tier": "low",
+                "gas_efficiency": "high",
+                "profit_potential": "medium"
+            },
+            "front_run": {
+                "functions": [self._tx_manager.execute_front_run],
+                "risk_level": "medium",
+                "min_balance_tier": "medium",
+                "gas_efficiency": "medium",
+                "profit_potential": "high"
+            },
+            "back_run": {
+                "functions": [self._tx_manager.execute_back_run],
+                "risk_level": "low",
+                "min_balance_tier": "low",
+                "gas_efficiency": "high",
+                "profit_potential": "medium"
+            },
+            "sandwich": {
+                "functions": [self._tx_manager.execute_sandwich],
+                "risk_level": "high",
+                "min_balance_tier": "medium",
+                "gas_efficiency": "low",
+                "profit_potential": "very_high"
+            },
+            "flashloan_arbitrage": {
+                "functions": [self._tx_manager.execute_flashloan_arbitrage],
+                "risk_level": "medium",
+                "min_balance_tier": "emergency",  # Can work with very low balance
+                "gas_efficiency": "medium",
+                "profit_potential": "high"
+            }
         }
-
-        # Initialize metrics and weights
-        self.metrics: Dict[str, StrategyPerformanceMetrics] = {
-            stype: StrategyPerformanceMetrics() for stype in self._registry
-        }
-        self.weights: Dict[str, np.ndarray] = {
-            stype: np.ones(len(funcs), dtype=float)
-            for stype, funcs in self._registry.items()
-        }
-
-        self.learning_cfg = StrategyGlobalSettings(config)
-        self._update_counter: int = 0
-        self._last_saved_weights = ""  # Initialize to empty string
-
-    async def initialize(self) -> None:
-        """Load persisted weights from disk."""
+        
+        # ML state
+        self._weights: Dict[str, np.ndarray] = {}
+        self._strategy_history: List[Dict[str, Any]] = []
+        self._execution_count = 0
+        self._last_weight_update = 0
+        
+        # Dynamic parameters
+        self._exploration_rate = settings.ml_exploration_rate
+        self._learning_rate = settings.ml_learning_rate
+        self._decay_rate = settings.ml_decay_rate
+        
+        # Performance tracking
+        self._strategy_performance: Dict[str, Dict[str, float]] = {}
+        
         self._load_weights()
-        logger.info("StrategyExecutor initialized – weights loaded.")
+        self._initialize_performance_tracking()
+        logger.info("Enhanced StrategyExecutor initialized with ML and balance awareness.")
 
-    async def stop(self) -> None:
-        """Persist weights on shutdown."""
-        self._save_weights()
-        logger.info("StrategyExecutor state saved on shutdown.")
-
-    def _load_weights(self) -> None:
-        """Load strategy weights from JSON file."""
-        if self._WEIGHT_FILE.exists():
-            try:
-                data = json.loads(self._WEIGHT_FILE.read_text())
-                for stype, arr in data.items():
-                    if stype in self.weights and len(arr) == len(self.weights[stype]):
-                        self.weights[stype] = np.array(arr, dtype=float)
-            except Exception as e:
-                logger.warning(f"Failed to load strategy weights: {e}")
-
-    def _save_weights(self) -> None:
-        """Save strategy weights to disk if they have changed."""
+    def _load_weights(self):
+        """Enhanced weight loading with validation and migration."""
         try:
-            # Convert NumPy arrays to regular Python lists for JSON serialization
-            serializable_weights = {}
-            for stype, weights in self.weights.items():
-                if hasattr(weights, "tolist"):  # Check if it's a NumPy array or similar
-                    serializable_weights[stype] = weights.tolist()
+            if self._strategy_weights_path.exists():
+                with open(self._strategy_weights_path, "r") as f:
+                    data = json.load(f)
+                
+                # Support both old and new format
+                if "strategies" in data:
+                    # New format with metadata
+                    for strategy_name, strategy_data in data["strategies"].items():
+                        if strategy_name in self._strategies:
+                            weights = strategy_data.get("weight", [1.0])
+                            if isinstance(weights, (int, float)):
+                                weights = [weights]
+                            self._weights[strategy_name] = np.array(weights, dtype=float)
                 else:
-                    serializable_weights[stype] = weights
+                    # Old format - direct weights
+                    for strategy_name, weights_list in data.items():
+                        if strategy_name in self._strategies:
+                            self._weights[strategy_name] = np.array(weights_list, dtype=float)
+                
+                logger.info("Loaded strategy weights from file.")
+        except (IOError, json.JSONDecodeError) as e:
+            logger.warning(f"Could not load strategy weights: {e}. Using default weights.")
+        
+        # Initialize missing weights
+        for strategy_name, strategy_info in self._strategies.items():
+            if strategy_name not in self._weights:
+                num_functions = len(strategy_info["functions"])
+                self._weights[strategy_name] = np.ones(num_functions, dtype=float)
 
-            current = json.dumps(serializable_weights, sort_keys=True)
-            if self._last_saved_weights != current:
-                self._WEIGHT_FILE.write_text(current)
-                self._last_saved_weights = current
-                logger.debug(f"Saved strategy weights to {self._WEIGHT_FILE}")
-        except Exception as e:
+    def _save_weights(self):
+        """Enhanced weight saving with metadata."""
+        data = {
+            "version": "2.0",
+            "last_updated": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "execution_count": self._execution_count,
+            "strategies": {}
+        }
+        
+        for strategy_name, weights in self._weights.items():
+            performance = self._strategy_performance.get(strategy_name, {})
+            data["strategies"][strategy_name] = {
+                "weight": weights.tolist(),
+                "performance_metrics": performance,
+                "risk_level": self._strategies[strategy_name]["risk_level"],
+                "profit_potential": self._strategies[strategy_name]["profit_potential"]
+            }
+        
+        data["global_settings"] = {
+            "exploration_rate": self._exploration_rate,
+            "learning_rate": self._learning_rate,
+            "decay_rate": self._decay_rate
+        }
+        
+        try:
+            with open(self._strategy_weights_path, "w") as f:
+                json.dump(data, f, indent=2)
+        except IOError as e:
             logger.error(f"Failed to save strategy weights: {e}")
 
-    def get_strategies(
-        self, strategy_type: str
-    ) -> List[Callable[[Dict[str, Any]], Awaitable[Any]]]:
-        """Return the list of strategy callables for a given type."""
-        return self._registry.get(strategy_type, [])
-
-    async def execute_best_strategy(
-        self, target_tx: Dict[str, Any], strategy_type: str
-    ) -> bool:
-        """Select and run the best strategy for the given transaction."""
-        strategies = self.get_strategies(strategy_type)
-        if not strategies:
-            logger.debug(f"No strategies for type {strategy_type}")
-            return False
-
-        chosen = await self._select_strategy(strategies, strategy_type)
-        before_profit = getattr(self.txc, "current_profit", 0.0)
-        start_ts = time.perf_counter()
-
-        success: bool = await chosen(target_tx)
-
-        exec_time = time.perf_counter() - start_ts
-        after_profit = getattr(self.txc, "current_profit", before_profit)
-        profit = after_profit - before_profit
-
-        await self._update_after_run(
-            strategy_type, chosen.__name__, success, Decimal(profit), exec_time
-        )
-        return success
-
-    async def _select_strategy(
-        self,
-        strategies: List[Callable[[Dict[str, Any]], Awaitable[Any]]],
-        strategy_type: str,
-    ) -> Callable[[Dict[str, Any]], Awaitable[Any]]:
-        """ε-greedy selection over softmaxed weights with market condition adjustments."""
-        if random.random() < self.learning_cfg.exploration_rate:
-            choice = random.choice(strategies)
-            logger.debug(f"Exploration chose {choice.__name__} for {strategy_type}")
-            return choice
-
-        # Get base weights
-        w = self.weights[strategy_type].copy()
-
-        # Adjust weights based on market conditions
-        try:
-            market_adjustment = await self._get_market_condition_adjustment(
-                strategy_type
-            )
-            gas_adjustment = await self._get_gas_condition_adjustment(strategy_type)
-
-            # Apply adjustments with configurable weights
-            w = w * (
-                1.0
-                + self.learning_cfg.market_weight * market_adjustment
-                + self.learning_cfg.gas_weight * gas_adjustment
-            )
-
-        except Exception as e:
-            logger.debug(f"Error applying market adjustments: {e}")
-            # Continue with base weights if adjustment fails
-
-        # Softmax selection
-        exp_w = np.exp(w - w.max())
-        probs = exp_w / exp_w.sum()
-        idx = np.random.choice(len(strategies), p=probs)
-        selected = strategies[idx]
-        logger.debug(
-            f"Exploitation chose {selected.__name__} (weight={w[idx]:.3f}, p={probs[idx]:.3f})"
-        )
-        return selected
-
-    async def _update_after_run(
-        self,
-        stype: str,
-        sname: str,
-        success: bool,
-        profit: Decimal,
-        exec_time: float,
-    ) -> None:
-        """Update metrics and adjust weights based on outcome."""
-        m = self.metrics[stype]
-        m.total_executions += 1
-        m.avg_execution_time = (
-            m.avg_execution_time * self.learning_cfg.decay_factor
-            + exec_time * (1 - self.learning_cfg.decay_factor)
-        )
-
-        if success:
-            m.successes += 1
-            m.profit += profit
-        else:
-            m.failures += 1
-
-        idx = self._strategy_index(stype, sname)
-        if idx >= 0:
-            reward = self._calc_reward(success, profit, exec_time)
-            lr = self.learning_cfg.base_learning_rate / (1 + 0.001 * m.total_executions)
-            new_weight = self.weights[stype][idx] + lr * reward
-            clipped = float(
-                np.clip(
-                    new_weight,
-                    self.learning_cfg.min_weight,
-                    self.learning_cfg.max_weight,
-                )
-            )
-            self.weights[stype][idx] = clipped
-            logger.debug(
-                f"Updated weight for {stype}/{sname}: {clipped:.3f} (reward={reward:.3f})"
-            )
-
-        self._update_counter += 1
-        if self._update_counter % self._SAVE_EVERY == 0:
-            self._save_weights()
-
-    def _calc_reward(self, success: bool, profit: Decimal, exec_time: float) -> float:
-        """Compute reward: profit-based with time and success penalties/bonuses.
-
-        Enhanced reward function that considers:
-        - Profit magnitude (primary factor)
-        - Execution time penalty
-        - Success/failure bonus/penalty
-        - Diminishing returns for very high profits
-        """
-        base_reward = 0.0
-
-        if success:
-            # Profit-based reward with diminishing returns
-            profit_float = float(profit)
-            if profit_float > 0:
-                # Use log scale for large profits to prevent extreme rewards
-                base_reward = min(profit_float, 2.0 * np.log(profit_float + 1.0))
-            else:
-                # Small penalty for zero profit success
-                base_reward = -0.01
-
-            # Success bonus
-            base_reward += 0.05
-        else:
-            # Failure penalty scaled by expected profit potential
-            base_reward = -0.10
-
-        # Time penalty (encourage faster execution)
-        time_penalty = 0.01 * min(exec_time, 30.0)  # Cap time penalty at 30 seconds
-
-        # Gas efficiency bonus/penalty (if available)
-        gas_penalty = 0.0
-        # Gas usage tracking would require additional implementation in TransactionManager
-
-        total_reward = base_reward - time_penalty - gas_penalty
-        return float(np.clip(total_reward, -1.0, 5.0))  # Reasonable reward bounds
-
-    def _strategy_index(self, stype: str, name: str) -> int:
-        """Find index of a strategy by function name."""
-        for i, fn in enumerate(self.get_strategies(stype)):
-            if fn.__name__ == name:
-                return i
-        return -1
-
-    async def is_healthy(self) -> bool:
-        """Check if StrategyExecutor is in a healthy state."""
-        try:
-            # Ensure core dependencies exist
-            if not self.txc or not self.safety_net or not self.market_monitor:
-                logger.warning("Missing core dependencies")
-                return False
-
-            # Ensure at least one strategy is available
-            if not any(self._registry.values()):
-                logger.warning("No strategies registered")
-                return False
-
-            return True
-        except Exception as e:
-            logger.error(f"StrategyExecutor health check failed: {e}")
-            return False
-
-    async def _get_market_condition_adjustment(self, strategy_type: str) -> float:
-        """Calculate market condition adjustment factor for strategy weights.
-
-        Returns adjustment factor (-1.0 to 1.0) based on current market conditions.
-        Positive values favor the strategy, negative values discourage it.
-        """
-        try:
-            # Get current market data - use available methods
-            if not self.market_monitor:
-                return 0.0
-
-            # Use a simple market condition proxy since get_market_state doesn't exist
-            # This is a simplified implementation that could be enhanced
-            return 0.0  # Neutral market adjustment for now
-
-            # TODO: Implement proper market state analysis when methods are available
-            # market_state = await self.market_monitor.get_market_conditions()
-            # if not market_state:
-            #     return 0.0
-
-            # volatility = market_state.get("volatility", 0.0)
-            # volume = market_state.get("volume", 0.0)
-            # trend = market_state.get("trend", 0.0)  # -1 to 1, bearish to bullish
-
-            # Strategy-specific market condition preferences
-            # if strategy_type == "front_run":
-            #     # Front-running works better in high volatility, moderate volume
-            #     return min(1.0, volatility * 2.0 - 0.5 + volume * 0.3)
-            # elif strategy_type == "sandwich_attack":
-            #     # Sandwich attacks work better in high volume, moderate volatility
-            #     return min(1.0, volume * 1.5 + volatility * 0.5 - 0.3)
-            # elif strategy_type == "back_run":
-            #     # Back-running works well in trending markets
-            #     return min(1.0, abs(trend) * 1.2 + volatility * 0.3)
-            # else:
-            #     # Default: slight preference for stable conditions
-            #     return max(-0.5, min(0.5, 0.5 - volatility))
-
-        except Exception as e:
-            logger.debug(f"Error calculating market adjustment: {e}")
-            return 0.0
-
-    async def _get_gas_condition_adjustment(self, strategy_type: str) -> float:
-        """Calculate gas condition adjustment factor for strategy weights.
-
-        Returns adjustment factor (-1.0 to 1.0) based on current gas conditions.
-        """
-        try:
-            # Get current gas price from Web3
-            current_gas = await self.web3.eth.gas_price
-            current_gas_gwei = float(current_gas) / 1e9
-
-            # Define gas thresholds
-            low_gas_threshold = 20.0  # gwei
-            high_gas_threshold = 100.0  # gwei
-
-            # Normalize gas price to 0-1 scale
-            gas_factor = min(
-                1.0,
-                max(
-                    0.0,
-                    (current_gas_gwei - low_gas_threshold)
-                    / (high_gas_threshold - low_gas_threshold),
-                ),
-            )
-
-            # Strategy-specific gas preferences
-            if strategy_type in ["front_run", "sandwich_attack"]:
-                # These strategies are sensitive to gas costs, prefer low gas
-                return 1.0 - gas_factor * 1.5  # Strong penalty for high gas
-            elif strategy_type == "back_run":
-                # Back-running is less time-sensitive, moderate gas preference
-                return 0.5 - gas_factor * 0.8
-            else:
-                # Default: slight preference for lower gas
-                return 0.2 - gas_factor * 0.5
-
-        except Exception as e:
-            logger.debug(f"Error calculating gas adjustment: {e}")
-            return 0.0
-
-    def get_strategy_performance(self) -> Dict[str, Dict[str, Any]]:
-        """Get comprehensive performance metrics for all strategies."""
-        performance = {}
-
-        for strategy_type, metrics in self.metrics.items():
-            weights = self.weights[strategy_type]
-            strategies = self.get_strategies(strategy_type)
-
-            strategy_details = []
-            for i, strategy_func in enumerate(strategies):
-                strategy_details.append(
-                    {
-                        "name": strategy_func.__name__,
-                        "weight": float(weights[i]) if i < len(weights) else 1.0,
-                        "selection_probability": (
-                            float(
-                                np.exp(weights[i] - weights.max())
-                                / np.exp(weights - weights.max()).sum()
-                            )
-                            if len(weights) > i
-                            else 0.0
-                        ),
-                    }
-                )
-
-            performance[strategy_type] = {
-                "total_executions": metrics.total_executions,
-                "successes": metrics.successes,
-                "failures": metrics.failures,
-                "success_rate": metrics.success_rate,
-                "total_profit": float(metrics.profit),
-                "avg_execution_time": metrics.avg_execution_time,
-                "strategies": strategy_details,
-                "exploration_rate": self.learning_cfg.exploration_rate,
+    def _initialize_performance_tracking(self):
+        """Initialize performance tracking for all strategies."""
+        for strategy_name in self._strategies:
+            self._strategy_performance[strategy_name] = {
+                "success_rate": 0.0,
+                "avg_profit": 0.0,
+                "total_executions": 0,
+                "total_profit": 0.0,
+                "avg_gas_used": 0.0,
+                "last_execution": 0.0
             }
 
-        return performance
+    async def _get_eligible_strategies(self, opportunity: Dict[str, Any]) -> List[str]:
+        """
+        Filters strategies based on balance tier, risk tolerance, and opportunity type.
+        """
+        balance_summary = await self._balance_manager.get_balance_summary()
+        balance_tier = balance_summary["balance_tier"]
+        
+        eligible = []
+        
+        for strategy_name, strategy_info in self._strategies.items():
+            # Check balance tier requirement
+            min_tier = strategy_info["min_balance_tier"]
+            tier_order = ["emergency", "low", "medium", "high"]
+            
+            if tier_order.index(balance_tier) < tier_order.index(min_tier):
+                continue
+            
+            # Check if strategy matches opportunity type
+            opportunity_type = opportunity.get("strategy_type", "")
+            if opportunity_type and strategy_name.startswith(opportunity_type):
+                eligible.append(strategy_name)
+            elif not opportunity_type:
+                eligible.append(strategy_name)
+        
+        logger.debug(f"Eligible strategies for balance tier '{balance_tier}': {eligible}")
+        return eligible
 
-    async def reset_learning_state(self) -> None:
-        """Reset all learning weights and metrics (useful for testing or recalibration)."""
-        logger.warning("Resetting StrategyExecutor learning state")
+    def _calculate_strategy_score(self, strategy_name: str, opportunity: Dict[str, Any]) -> float:
+        """
+        Calculates a comprehensive score for strategy selection.
+        """
+        strategy_info = self._strategies[strategy_name]
+        performance = self._strategy_performance[strategy_name]
+        weights = self._weights[strategy_name]
+        
+        # Base score from ML weights
+        base_score = np.mean(weights)
+        
+        # Performance adjustments
+        success_rate_bonus = performance["success_rate"] * 0.3
+        profit_bonus = min(performance["avg_profit"] * 100, 0.5)  # Cap profit bonus
+        
+        # Opportunity-specific adjustments
+        expected_profit = opportunity.get("expected_profit_eth", 0)
+        profit_fit = min(expected_profit * 10, 0.3)
+        
+        # Gas efficiency consideration
+        gas_efficiency_map = {"high": 0.2, "medium": 0.1, "low": -0.1}
+        gas_bonus = gas_efficiency_map.get(strategy_info["gas_efficiency"], 0)
+        
+        # Risk adjustment based on balance
+        risk_penalty = 0
+        if strategy_info["risk_level"] == "high":
+            risk_penalty = -0.2
+        elif strategy_info["risk_level"] == "medium":
+            risk_penalty = -0.1
+        
+        total_score = base_score + success_rate_bonus + profit_bonus + profit_fit + gas_bonus + risk_penalty
+        
+        logger.debug(f"Strategy {strategy_name} score: {total_score:.3f} "
+                    f"(base: {base_score:.3f}, success: {success_rate_bonus:.3f}, "
+                    f"profit: {profit_bonus:.3f}, fit: {profit_fit:.3f})")
+        
+        return total_score
 
-        # Reset weights to uniform
-        for stype in self.weights:
-            self.weights[stype] = np.ones(len(self.get_strategies(stype)), dtype=float)
+    async def _select_strategy(self, opportunity: Dict[str, Any]) -> Tuple[Optional[Callable], str]:
+        """
+        Enhanced strategy selection with multi-factor optimization.
+        """
+        eligible_strategies = await self._get_eligible_strategies(opportunity)
+        
+        if not eligible_strategies:
+            logger.warning("No eligible strategies found for current balance tier and opportunity")
+            return None, ""
+        
+        # Exploration vs exploitation
+        if random.random() < self._exploration_rate:
+            chosen_strategy = random.choice(eligible_strategies)
+            chosen_function = random.choice(self._strategies[chosen_strategy]["functions"])
+            logger.info(f"Exploring strategy: {chosen_strategy}")
+            return chosen_function, chosen_strategy
+        
+        # Calculate scores for all eligible strategies
+        strategy_scores = {}
+        for strategy_name in eligible_strategies:
+            strategy_scores[strategy_name] = self._calculate_strategy_score(strategy_name, opportunity)
+        
+        # Select best strategy
+        best_strategy = max(strategy_scores, key=strategy_scores.get)
+        best_function = self._strategies[best_strategy]["functions"][0]  # Use first function for now
+        
+        logger.info(f"Selected best strategy: {best_strategy} (score: {strategy_scores[best_strategy]:.3f})")
+        return best_function, best_strategy
 
-        # Reset metrics
-        for metrics in self.metrics.values():
-            metrics.successes = 0
-            metrics.failures = 0
-            metrics.profit = Decimal("0")
-            metrics.total_executions = 0
-            metrics.avg_execution_time = 0.0
+    async def execute_opportunity(self, opportunity: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enhanced opportunity execution with comprehensive tracking and learning.
+        """
+        self._execution_count += 1
+        
+        # Check if we should proceed based on balance
+        balance_summary = await self._balance_manager.get_balance_summary()
+        if balance_summary["emergency_mode"] and opportunity.get("expected_profit_eth", 0) < 0.001:
+            return {
+                "success": False,
+                "reason": "Emergency mode: skipping low-profit opportunities",
+                "balance_tier": balance_summary["balance_tier"]
+            }
+        
+        strategy_func, strategy_name = await self._select_strategy(opportunity)
+        if not strategy_func:
+            return {
+                "success": False,
+                "reason": "No suitable strategy available",
+                "balance_tier": balance_summary["balance_tier"]
+            }
+        
+        # Enhance opportunity with balance-aware parameters
+        enhanced_opportunity = await self._enhance_opportunity_with_balance(opportunity)
+        
+        start_time = time.monotonic()
+        gas_used = 0
+        
+        try:
+            result = await strategy_func(enhanced_opportunity)
+            
+            success = result.get("success", False)
+            profit = result.get("profit_eth", 0.0)
+            gas_used = result.get("gas_used", 0)
+            
+            # Record profit with balance manager
+            if success and profit > 0:
+                await self._balance_manager.record_profit(Decimal(str(profit)), strategy_name)
+            
+            # Update learning
+            self._update_strategy_performance(strategy_name, success, profit, gas_used)
+            self._update_weights_ml(strategy_name, success, profit, opportunity)
+            
+            # Save state periodically
+            if self._execution_count % settings.ml_update_frequency == 0:
+                await self._update_ml_parameters()
+                self._save_weights()
+            
+            return result
+            
+        except StrategyExecutionError as e:
+            logger.error(f"Strategy '{strategy_name}' failed: {e}")
+            self._update_strategy_performance(strategy_name, False, 0.0, gas_used)
+            return {"success": False, "reason": str(e), "strategy": strategy_name}
+        finally:
+            execution_time = time.monotonic() - start_time
+            logger.info(f"Strategy '{strategy_name}' execution time: {execution_time:.4f}s")
 
-        self._update_counter = 0
+    async def _enhance_opportunity_with_balance(self, opportunity: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enhances opportunity parameters based on current balance situation.
+        """
+        enhanced = opportunity.copy()
+        balance_summary = await self._balance_manager.get_balance_summary()
+        
+        # Adjust investment amount
+        requested_amount = opportunity.get("investment_amount", 0)
+        max_amount = balance_summary["max_investment"]
+        
+        if requested_amount > max_amount:
+            enhanced["investment_amount"] = max_amount
+            enhanced["original_amount"] = requested_amount
+            enhanced["amount_limited"] = True
+        
+        # Set dynamic profit threshold
+        enhanced["min_profit_threshold"] = balance_summary["profit_threshold"]
+        enhanced["balance_tier"] = balance_summary["balance_tier"]
+        enhanced["flashloan_recommended"] = balance_summary["flashloan_recommended"]
+        
+        # Adjust gas parameters
+        expected_profit = opportunity.get("expected_profit_eth", 0)
+        if expected_profit > 0:
+            gas_price, should_proceed = await self._balance_manager.calculate_optimal_gas_price(
+                Decimal(str(expected_profit))
+            )
+            enhanced["optimal_gas_price"] = gas_price
+            enhanced["gas_viable"] = should_proceed
+        
+        return enhanced
 
-        # Save reset state
-        self._save_weights()
-        logger.info("StrategyExecutor learning state reset complete")
+    def _update_strategy_performance(self, strategy_name: str, success: bool, profit: float, gas_used: int):
+        """Updates detailed performance metrics for a strategy."""
+        perf = self._strategy_performance[strategy_name]
+        
+        total_executions = perf["total_executions"]
+        new_total = total_executions + 1
+        
+        # Update success rate (exponential moving average)
+        alpha = 0.1
+        perf["success_rate"] = (1 - alpha) * perf["success_rate"] + alpha * (1.0 if success else 0.0)
+        
+        # Update profit metrics
+        perf["total_profit"] += profit
+        perf["avg_profit"] = (perf["avg_profit"] * total_executions + profit) / new_total
+        
+        # Update gas usage
+        if gas_used > 0:
+            perf["avg_gas_used"] = (perf["avg_gas_used"] * total_executions + gas_used) / new_total
+        
+        perf["total_executions"] = new_total
+        perf["last_execution"] = time.time()
+
+    def _update_weights_ml(self, strategy_name: str, success: bool, profit: float, opportunity: Dict[str, Any]):
+        """Enhanced ML weight update with contextual learning."""
+        if strategy_name not in self._weights:
+            return
+        
+        # Calculate reward based on multiple factors
+        base_reward = 0.0
+        
+        if success:
+            # Profit-based reward (normalized)
+            profit_reward = min(profit * 50, 2.0)  # Cap at 2.0
+            
+            # Efficiency reward (profit per gas)
+            gas_used = opportunity.get("gas_used", 100000)
+            efficiency = profit / (gas_used / 1000000) if gas_used > 0 else 0
+            efficiency_reward = min(efficiency, 1.0)
+            
+            # Speed reward (faster execution = higher reward)
+            execution_time = opportunity.get("execution_time", 30)
+            speed_reward = max(0, (30 - execution_time) / 30 * 0.5)
+            
+            base_reward = profit_reward + efficiency_reward + speed_reward
+        else:
+            # Penalty for failure
+            base_reward = -1.0
+        
+        # Apply learning rate and update
+        current_weights = self._weights[strategy_name]
+        
+        # Use contextual bandits approach
+        context_vector = np.array([
+            opportunity.get("expected_profit_eth", 0) * 100,
+            1.0 if opportunity.get("flashloan_recommended", False) else 0.0,
+            {"emergency": 0, "low": 1, "medium": 2, "high": 3}.get(
+                opportunity.get("balance_tier", "medium"), 2
+            ) / 3.0
+        ])
+        
+        # Simple linear update (can be enhanced with more sophisticated ML)
+        for i in range(len(current_weights)):
+            gradient = base_reward * context_vector[min(i, len(context_vector) - 1)]
+            current_weights[i] += self._learning_rate * gradient
+            
+            # Ensure weights stay positive
+            current_weights[i] = max(current_weights[i], 0.1)
+
+    async def _update_ml_parameters(self):
+        """Updates ML parameters based on recent performance."""
+        # Decay exploration rate over time
+        self._exploration_rate *= self._decay_rate
+        self._exploration_rate = max(self._exploration_rate, 0.01)  # Minimum exploration
+        
+        # Adjust learning rate based on overall performance
+        recent_performance = self._calculate_recent_performance()
+        if recent_performance < 0.5:  # Poor performance
+            self._learning_rate = min(self._learning_rate * 1.1, 0.1)  # Increase learning
+        else:  # Good performance
+            self._learning_rate = max(self._learning_rate * 0.99, 0.001)  # Decrease learning
+        
+        logger.info(f"ML parameters updated - Exploration: {self._exploration_rate:.4f}, "
+                   f"Learning rate: {self._learning_rate:.6f}")
+
+    def _calculate_recent_performance(self) -> float:
+        """Calculates recent overall performance across all strategies."""
+        total_success = 0
+        total_executions = 0
+        
+        for perf in self._strategy_performance.values():
+            total_success += perf["success_rate"] * perf["total_executions"]
+            total_executions += perf["total_executions"]
+        
+        return total_success / total_executions if total_executions > 0 else 0.5
+
+    async def get_strategy_report(self) -> Dict[str, Any]:
+        """Returns comprehensive strategy performance report."""
+        return {
+            "execution_count": self._execution_count,
+            "ml_parameters": {
+                "exploration_rate": self._exploration_rate,
+                "learning_rate": self._learning_rate,
+                "decay_rate": self._decay_rate
+            },
+            "strategy_performance": self._strategy_performance,
+            "weights": {k: v.tolist() for k, v in self._weights.items()},
+            "recent_performance": self._calculate_recent_performance(),
+            "balance_summary": await self._balance_manager.get_balance_summary()
+        }

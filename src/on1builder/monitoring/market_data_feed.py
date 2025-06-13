@@ -1,438 +1,412 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# SPDX-License-Identifier: MIT
-"""
-ON1Builder – MarketMonitor
-======================
-
-Market data monitoring service. MarketMonitor provides real-time price and
-volume data for tokens, tracks market trends,
-and checks for arbitrage opportunities across multiple venues.
-It uses an in-memory cache to optimize performance and reduce API calls.
-==========================
-License: MIT
-=========================
-
-This file is part of the ON1Builder project, which is licensed under the MIT License.
-see https://opensource.org/licenses/MIT or https://github.com/John0n1/ON1Builder/blob/master/LICENSE
-"""
-
+# src/on1builder/monitoring/market_data_feed.py
 from __future__ import annotations
 
 import asyncio
-import functools
-import time
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Set
+from datetime import datetime, timedelta
+import statistics
 
-from on1builder.config.settings import APISettings, GlobalSettings
+from cachetools import TTLCache
 
-from ..utils.logging_config import get_logger
+from on1builder.config.loaders import settings
+from on1builder.integrations.external_apis import ExternalAPIManager
+from on1builder.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-
-def track(metric_name: str):
-    """Decorator to increment a metric counter on each call."""
-
-    def decorator(func):
-        @functools.wraps(func)
-        async def wrapper(self, *args, **kwargs):
-            self.metrics[metric_name] = self.metrics.get(metric_name, 0) + 1
-            return await func(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 class MarketDataFeed:
-    """Market data monitoring service."""
+    """Enhanced market data feed with volatility analysis, trend detection, and market sentiment."""
+    
+    def __init__(self, web3: Any):
+        self._web3 = web3
+        self._api_manager = ExternalAPIManager()
+        self._price_cache: TTLCache = TTLCache(maxsize=1000, ttl=settings.heartbeat_interval / 2)
+        self._price_history: Dict[str, List[Tuple[datetime, Decimal]]] = {}
+        self._volatility_cache: TTLCache = TTLCache(maxsize=500, ttl=300)  # 5-minute volatility cache
+        self._market_sentiment: Dict[str, float] = {}  # -1 to 1 scale
+        self._failed_tokens: Set[str] = set()  # Blacklist for tokens that consistently fail
+        self._token_failure_count: Dict[str, int] = {}  # Track failure counts
+        self._is_running = False
+        self._update_task: Optional[asyncio.Task] = None
+        self._analysis_task: Optional[asyncio.Task] = None
+        logger.info("Enhanced MarketDataFeed initialized.")
 
-    def __init__(
-        self,
-        web3: Any,
-        config: GlobalSettings,
-        api_config: APISettings,
-    ) -> None:
-        self.web3 = web3
-        self.config = config
-        self.api_config = api_config
-
-        # In-memory caches
-        self._price_cache: Dict[str, Dict[str, Any]] = {}
-        self._cache_lock = asyncio.Lock()
-        self._last_cache_cleanup = time.time()
-        self._cache_ttl = config.price_cache_ttl
-        self._cleanup_interval = config.cache_cleanup_interval
-
-        # Metrics counters
-        self.metrics: Dict[str, int] = {}
-
-        logger.info("MarketMonitor initialized")
-
-    async def initialize(self) -> None:
-        """Initialize the market monitor with configuration settings.
-
-        This method is called after construction to set up any async resources.
-        """
-        logger.debug("MarketMonitor: Starting initialization")
-        # Initialize any required async resources like HTTP sessions
-        self.session = self.api_config_client_session()
-        # Pre-warm cache for common tokens if needed
-        logger.debug("MarketMonitor: Initialization complete")
-        return
-
-    @track("price_lookup")
-    async def get_token_price(
-        self,
-        token: str,
-        quote_currency: str = "USD",
-        *args,
-        **kwargs,
-    ) -> Optional[Decimal]:
-        """Get the current price of a token."""
-        now = time.time()
-        if now - self._last_cache_cleanup > self._cleanup_interval:
-            await self._cleanup_cache()
-
-        cache_key = f"{token.lower()}_{quote_currency.lower()}"
-        async with self._cache_lock:
-            if cache_key in self._price_cache:
-                entry = self._price_cache[cache_key]
-                if now - entry["timestamp"] < self._cache_ttl:
-                    self.metrics["price_cache_hit"] = (
-                        self.metrics.get("price_cache_hit", 0) + 1
-                    )
-                    logger.debug(f"Cache hit for {token} price")
-                    return entry["price"]
-
-        # Delegate to APIConfig
-        price = await self.api_config_real_time_price(token, quote_currency)
-        if price is not None:
-            async with self._cache_lock:
-                self._price_cache[cache_key] = {"price": price, "timestamp": now}
-            logger.debug(f"Updated price for {token}: {price} {quote_currency}")
-        else:
-            # MarketMonitor-level fallback if APIConfig also fails
-            token_upper = token.upper()
-            fallback_prices = {
-                "ETH": Decimal("3400.00"),
-                "BTC": Decimal("62000.00"),
-                "USDT": Decimal("1.00"),
-                # ...etc
-            }
-            fallback = fallback_prices.get(token_upper)
-            if fallback is not None:
-                self.metrics["price_fallback"] = (
-                    self.metrics.get("price_fallback", 0) + 1
-                )
-                async with self._cache_lock:
-                    self._price_cache[cache_key] = {"price": fallback, "timestamp": now}
-                logger.debug(
-                    f"Using fallback price for {token}: {fallback} {quote_currency}"
-                )
-                price = fallback
-
-        return price
-
-    async def _cleanup_cache(self) -> None:
-        """Clean up expired cache entries."""
-        now = time.time()
-        self._last_cache_cleanup = now
-
-        async with self._cache_lock:
-            expired = [
-                key
-                for key, entry in self._price_cache.items()
-                if now - entry["timestamp"] > self._cache_ttl
-            ]
-            for key in expired:
-                del self._price_cache[key]
-            if expired:
-                logger.debug(f"Cleared {len(expired)} expired price cache entries")
-
-    async def get_market_trend(
-        self,
-        token: str,
-        timeframe: str = "1h",
-        quote_currency: str = "USD",
-    ) -> Dict[str, Any]:
-        """Get market trend data for a token."""
-        supported = ["5m", "15m", "1h", "4h", "12h", "24h", "7d"]
-        if timeframe not in supported:
-            logger.warning(f"Unsupported timeframe '{timeframe}', defaulting to 1h")
-            timeframe = "1h"
-
-        # Try history-based
-        if hasattr(self.api_config, "get_price_history"):
-            try:
-                history = await self.api_config_price_history(
-                    token, timeframe, quote_currency
-                )
-                if history:
-                    start = history[0]["price"]
-                    end = history[-1]["price"]
-                    change = end - start
-                    pct = (change / start * 100) if start else 0.0
-
-                    if pct > 3:
-                        trend = "bullish"
-                    elif pct < -3:
-                        trend = "bearish"
-                    else:
-                        trend = "sideways"
-
-                    return {
-                        "trend": trend,
-                        "current_price": end,
-                        "start_price": start,
-                        "price_change": change,
-                        "percent_change": pct,
-                        "timeframe": timeframe,
-                        "data_points": len(history),
-                    }
-            except Exception as e:
-                logger.error(f"Error fetching price history: {e}")
-
-        # Fallback simple
-        try:
-            curr = await self.get_token_price(token, quote_currency)
-            if curr is None:
-                return {"trend": "unknown", "error": "No price available"}
-            return {
-                "trend": "unknown",
-                "current_price": curr,
-                "note": "Limited trend data",
-            }
-        except Exception as e:
-            logger.error(f"Error calculating market trend: {e}")
-            return {"trend": "unknown", "error": str(e)}
-
-    @track("volume_lookup")
-    async def get_token_volume(
-        self,
-        token: str,
-        timeframe: str = "24h",
-        quote_currency: str = "USD",
-    ) -> Optional[Decimal]:
-        """Get trading volume for a token."""
-        cache_key = f"vol_{token.lower()}_{timeframe}_{quote_currency.lower()}"
-        now = time.time()
-
-        async with self._cache_lock:
-            if cache_key in self._price_cache:
-                entry = self._price_cache[cache_key]
-                if now - entry["timestamp"] < self._cache_ttl:
-                    self.metrics["volume_cache_hit"] = (
-                        self.metrics.get("volume_cache_hit", 0) + 1
-                    )
-                    logger.debug(f"Cache hit for {token} volume")
-                    return entry["volume"]
-
-        # Delegate
-        volume = None
-        try:
-            volume = await self.api_config_token_volume(token)
-        except Exception as e:
-            logger.error(f"Error getting token volume: {e}")
-
-        # Fallback volumes
-        if volume is None:
-            token_upper = token.upper()
-            fallback = {
-                "ETH": Decimal("5000000.00"),
-                "BTC": Decimal("20000000.00"),
-                # ...etc
-            }.get(token_upper)
-            if fallback is not None:
-                self.metrics["volume_fallback"] = (
-                    self.metrics.get("volume_fallback", 0) + 1
-                )
-                volume = fallback
-                logger.debug(
-                    f"Using fallback volume for {token}: {volume} {quote_currency}"
-                )
-
-        if volume is not None:
-            async with self._cache_lock:
-                self._price_cache[cache_key] = {"volume": volume, "timestamp": now}
-
-        return volume
-
-    async def schedule_updates(self) -> None:
-        """Schedule regular updates of market data."""
-        logger.info("Scheduling market data updates")
-        interval = self.config.market_update_interval
-        tokens = self.config.monitored_tokens
-
-        if not tokens:
-            logger.warning("No tokens configured for monitoring")
+    async def start(self):
+        if self._is_running:
+            logger.warning("MarketDataFeed is already running.")
             return
+            
+        self._is_running = True
+        logger.info("Starting Enhanced MarketDataFeed background updates...")
+        self._update_task = asyncio.create_task(self._update_loop())
+        self._analysis_task = asyncio.create_task(self._analysis_loop())
+        
+    async def stop(self):
+        if not self._is_running:
+            return
+            
+        self._is_running = False
+        
+        for task in [self._update_task, self._analysis_task]:
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        
+        await self._api_manager.close()
+        logger.info("Enhanced MarketDataFeed stopped.")
+        
+    async def get_price(self, token_symbol: str) -> Optional[Decimal]:
+        """Get current price with automatic caching and history tracking."""
+        symbol_upper = token_symbol.upper()
+        
+        # Check if token is blacklisted due to repeated failures
+        if symbol_upper in self._failed_tokens:
+            logger.debug(f"Skipping price lookup for blacklisted token: {symbol_upper}")
+            return None
+        
+        cached_price = self._price_cache.get(symbol_upper)
+        if cached_price is not None:
+            logger.debug(f"Cache hit for price of {symbol_upper}.")
+            return cached_price
 
-        asyncio.create_task(self._update_loop(interval, tokens))
+        logger.debug(f"Cache miss for price of {symbol_upper}. Fetching from API.")
+        
+        try:
+            price = await self._api_manager.get_price(token_symbol)
+            
+            if price is not None:
+                price_decimal = Decimal(str(price))
+                self._price_cache[symbol_upper] = price_decimal
+                
+                # Reset failure count on success
+                if symbol_upper in self._token_failure_count:
+                    del self._token_failure_count[symbol_upper]
+                
+                # Update price history
+                self._update_price_history(symbol_upper, price_decimal)
+                
+                return price_decimal
+            else:
+                # Track failures and blacklist after 5 consecutive failures
+                self._token_failure_count[symbol_upper] = self._token_failure_count.get(symbol_upper, 0) + 1
+                
+                if self._token_failure_count[symbol_upper] >= 5:
+                    self._failed_tokens.add(symbol_upper)
+                    logger.warning(f"Token {symbol_upper} blacklisted after 5 consecutive price lookup failures.")
+                    del self._token_failure_count[symbol_upper]
+                elif self._token_failure_count[symbol_upper] == 1:
+                    # Only log warning on first failure to reduce spam
+                    logger.warning(f"Could not retrieve price for {token_symbol}.")
+                
+                return None
+                
+        except Exception as e:
+            # Track failures for exceptions too
+            self._token_failure_count[symbol_upper] = self._token_failure_count.get(symbol_upper, 0) + 1
+            
+            if self._token_failure_count[symbol_upper] >= 5:
+                self._failed_tokens.add(symbol_upper)
+                logger.warning(f"Token {symbol_upper} blacklisted after 5 consecutive price lookup failures.")
+                del self._token_failure_count[symbol_upper]
+            elif self._token_failure_count[symbol_upper] == 1:
+                logger.warning(f"Error retrieving price for {token_symbol}: {e}")
+            
+            return None
 
-    async def _update_loop(self, interval: int, tokens: List[str]) -> None:
-        """Background loop to refresh market data in parallel."""
-        logger.info(
-            f"Starting update loop for {len(tokens)} tokens, interval {interval}s"
-        )
-        while True:
+    def _update_price_history(self, symbol: str, price: Decimal):
+        """Updates price history for volatility and trend analysis."""
+        now = datetime.now()
+        
+        if symbol not in self._price_history:
+            self._price_history[symbol] = []
+        
+        self._price_history[symbol].append((now, price))
+        
+        # Keep only last 24 hours of data
+        cutoff_time = now - timedelta(hours=24)
+        self._price_history[symbol] = [
+            (timestamp, price) for timestamp, price in self._price_history[symbol]
+            if timestamp > cutoff_time
+        ]
+
+    async def get_volatility(self, token_symbol: str, timeframe_minutes: int = 60) -> Optional[float]:
+        """Calculate volatility for a token over the specified timeframe."""
+        symbol_upper = token_symbol.upper()
+        cache_key = f"{symbol_upper}_{timeframe_minutes}m"
+        
+        cached_volatility = self._volatility_cache.get(cache_key)
+        if cached_volatility is not None:
+            return cached_volatility
+        
+        history = self._price_history.get(symbol_upper, [])
+        if len(history) < 10:  # Need at least 10 data points
+            return None
+        
+        # Filter to timeframe
+        cutoff_time = datetime.now() - timedelta(minutes=timeframe_minutes)
+        recent_prices = [
+            float(price) for timestamp, price in history
+            if timestamp > cutoff_time
+        ]
+        
+        if len(recent_prices) < 5:
+            return None
+        
+        # Calculate volatility as standard deviation of returns
+        returns = []
+        for i in range(1, len(recent_prices)):
+            return_rate = (recent_prices[i] - recent_prices[i-1]) / recent_prices[i-1]
+            returns.append(return_rate)
+        
+        if len(returns) < 2:
+            return None
+        
+        volatility = statistics.stdev(returns)
+        self._volatility_cache[cache_key] = volatility
+        
+        return volatility
+
+    async def get_price_trend(self, token_symbol: str, timeframe_minutes: int = 60) -> Optional[str]:
+        """Determine price trend: 'bullish', 'bearish', or 'sideways'."""
+        symbol_upper = token_symbol.upper()
+        history = self._price_history.get(symbol_upper, [])
+        
+        if len(history) < 5:
+            return None
+        
+        # Get prices for the timeframe
+        cutoff_time = datetime.now() - timedelta(minutes=timeframe_minutes)
+        recent_data = [
+            (timestamp, float(price)) for timestamp, price in history
+            if timestamp > cutoff_time
+        ]
+        
+        if len(recent_data) < 5:
+            return None
+        
+        # Calculate trend using simple moving average comparison
+        prices = [price for _, price in recent_data]
+        early_avg = statistics.mean(prices[:len(prices)//2])
+        recent_avg = statistics.mean(prices[len(prices)//2:])
+        
+        trend_strength = (recent_avg - early_avg) / early_avg
+        
+        if trend_strength > 0.02:  # 2% increase
+            return "bullish"
+        elif trend_strength < -0.02:  # 2% decrease
+            return "bearish"
+        else:
+            return "sideways"
+
+    async def get_market_sentiment(self, token_symbol: str) -> float:
+        """Get market sentiment score (-1 to 1) for a token."""
+        symbol_upper = token_symbol.upper()
+        return self._market_sentiment.get(symbol_upper, 0.0)
+
+    async def get_optimal_slippage(self, token_symbol: str, trade_size_usd: Decimal) -> Decimal:
+        """Calculate optimal slippage based on volatility and trade size."""
+        volatility = await self.get_volatility(token_symbol, 30)  # 30-minute volatility
+        
+        if volatility is None:
+            return Decimal('0.005')  # 0.5% default
+        
+        # Base slippage on volatility
+        base_slippage = Decimal(str(volatility * 2))  # 2x volatility as base
+        
+        # Adjust for trade size (larger trades need more slippage)
+        size_multiplier = Decimal('1') + (trade_size_usd / Decimal('10000'))  # +0.01% per $100
+        
+        optimal_slippage = base_slippage * size_multiplier
+        
+        # Cap between 0.1% and 5%
+        return max(min(optimal_slippage, Decimal('0.05')), Decimal('0.001'))
+
+    async def should_avoid_trading(self, token_symbol: str) -> bool:
+        """Determine if trading should be avoided due to high volatility or poor sentiment."""
+        volatility = await self.get_volatility(token_symbol, 60)
+        sentiment = await self.get_market_sentiment(token_symbol)
+        
+        # Avoid trading if volatility is extremely high
+        if volatility and volatility > 0.1:  # 10% volatility
+            return True
+        
+        # Avoid trading if sentiment is extremely negative
+        if sentiment < -0.8:
+            return True
+        
+        return False
+
+    async def get_prices(self, token_symbols: List[str]) -> Dict[str, Optional[Decimal]]:
+        # Create tasks explicitly to avoid "Passing coroutines is forbidden" error
+        tasks = [asyncio.create_task(self.get_price(symbol)) for symbol in token_symbols]
+        results = await asyncio.gather(*tasks)
+        return dict(zip(token_symbols, results))
+
+    async def _update_loop(self):
+        from on1builder.integrations.abi_registry import ABIRegistry
+        
+        registry = ABIRegistry()
+        
+        while self._is_running:
             try:
-                tasks: List[asyncio.Task] = []
-                for token in tokens:
-                    tasks.append(self.get_token_price(token))
-                    tasks.append(self.get_token_volume(token))
-                # fire off all at once
-                await asyncio.gather(*tasks)
+                all_symbols_to_update = set()
+                for chain_id in settings.chains:
+                    tokens_on_chain = registry.get_monitored_tokens(chain_id)
+                    all_symbols_to_update.update(tokens_on_chain.keys())
+                
+                if all_symbols_to_update:
+                    logger.debug(f"Updating prices for {len(all_symbols_to_update)} monitored tokens.")
+                    await self.get_prices(list(all_symbols_to_update))
+                
+                await asyncio.sleep(settings.heartbeat_interval)
             except asyncio.CancelledError:
-                logger.debug("Market data update loop was cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in market data update loop: {e}")
-            await asyncio.sleep(interval)
+                logger.error(f"Error in MarketDataFeed update loop: {e}", exc_info=True)
+                await asyncio.sleep(60)
 
-    async def is_healthy(self) -> bool:
-        """Check if the monitor can fetch price for a health-check token."""
+    async def _analysis_loop(self):
+        """Background loop for market analysis and sentiment calculation."""
+        cleanup_counter = 0
+        while self._is_running:
+            try:
+                await asyncio.sleep(300)  # Run analysis every 5 minutes
+                await self._calculate_market_sentiment()
+                await self._detect_market_anomalies()
+                
+                # Reset blacklist every hour (12 cycles of 5 minutes)
+                cleanup_counter += 1
+                if cleanup_counter >= 12:
+                    self.reset_failed_tokens()
+                    cleanup_counter = 0
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in market analysis loop: {e}", exc_info=True)
+                await asyncio.sleep(300)
+
+    async def _calculate_market_sentiment(self):
+        """Calculate market sentiment based on price movements and volatility."""
         try:
-            test = self.config.health_check_token
-            price = await self.get_token_price(test)
-            return price is not None
-        except Exception as e:
-            logger.error(f"Health check failed: {e}")
-            return False
-
-    async def stop(self) -> None:
-        """No-op: relies on APIConfig’s session cleanup."""
-        logger.info("MarketMonitor stopping (no local resources to close)")
-
-    async def check_market_conditions(
-        self,
-        token: str,
-        condition_type: str = "volatility",
-    ) -> Dict[str, Any]:
-        """Check specific market conditions: volatility, liquidity, momentum."""
-        result: Dict[str, Any] = {
-            "token": token,
-            "condition_type": condition_type,
-            "timestamp": time.time(),
-        }
-
-        try:
-            if condition_type == "volatility":
-                t1 = await self.get_market_trend(token, "1h")
-                t4 = await self.get_market_trend(token, "4h")
-                vol = abs(t1.get("percent_change", 0.0))
-                vol_long = abs(t4.get("percent_change", 0.0))
-                avg_vol = (vol + vol_long) / 2
-                if avg_vol > 10:
-                    cond = "high"
-                elif avg_vol > 5:
-                    cond = "medium"
-                else:
-                    cond = "low"
-                result.update({"condition": cond, "volatility": avg_vol})
-
-            elif condition_type == "liquidity":
-                vol = await self.get_token_volume(token)
-                price = await self.get_token_price(token)
-                if vol and price:
-                    score = float(vol) / float(price)
-                    cond = "high" if score > 1e6 else "medium" if score > 1e5 else "low"
-                    result.update({"condition": cond, "liquidity_score": score})
-                else:
-                    result.update({"condition": "unknown", "error": "No vol/price"})
-
-            elif condition_type == "momentum":
-                trends = [
-                    (await self.get_market_trend(token, tf))["percent_change"]
-                    for tf in ("1h", "4h", "24h")
-                    if isinstance(await self.get_market_trend(token, tf), dict)
-                ]
-                if trends:
-                    weighted = (trends[0] + trends[1] * 2 + trends[2] * 3) / 6
-                    if weighted > 5:
-                        cond = "strongly_positive"
-                    elif weighted > 2:
-                        cond = "positive"
-                    elif weighted < -5:
-                        cond = "strongly_negative"
-                    elif weighted < -2:
-                        cond = "negative"
-                    else:
-                        cond = "neutral"
-                    result.update({"condition": cond, "momentum_score": weighted})
-                else:
-                    result.update({"condition": "unknown", "error": "No trend data"})
-            else:
-                result.update(
-                    {"condition": "unknown", "error": f"Unsupported: {condition_type}"}
-                )
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error checking market conditions: {e}")
-            return {"token": token, "condition": "error", "error": str(e)}
-
-    async def get_token_prices_across_venues(self, token: str) -> Dict[str, float]:
-        """Fetch prices from each provider for arbitrage analysis."""
-        venues: Dict[str, float] = {}
-        try:
-            primary = await self.get_token_price(token)
-            if primary is not None:
-                venues["primary"] = float(primary)
-
-            for name, prov in self.api_config.providers.items():
-                try:
-                    price = await self.api_config._price_from_provider(
-                        prov, token, "usd"
-                    )
-                    if price is not None:
-                        venues[name] = float(price)
-                except Exception:
+            for symbol, history in self._price_history.items():
+                if len(history) < 10:
                     continue
-
-            if not venues:
-                base = 100.0
-                venues = {
-                    "uniswap": base,
-                    "sushiswap": base * 1.02,
-                    "balancer": base * 0.98,
-                }
+                
+                # Get recent price movements
+                recent_data = history[-10:]  # Last 10 data points
+                prices = [float(price) for _, price in recent_data]
+                
+                # Calculate momentum (price change rate)
+                momentum = (prices[-1] - prices[0]) / prices[0]
+                
+                # Calculate volatility factor
+                volatility = await self.get_volatility(symbol, 60)
+                volatility_factor = 1 - min(volatility or 0, 0.1) / 0.1 if volatility else 0.5
+                
+                # Combine momentum and volatility for sentiment
+                # Positive momentum + low volatility = positive sentiment
+                sentiment = momentum * volatility_factor * 10  # Scale to -1 to 1 range
+                sentiment = max(min(sentiment, 1.0), -1.0)  # Clamp to range
+                
+                self._market_sentiment[symbol] = sentiment
+                
+                logger.debug(f"Market sentiment for {symbol}: {sentiment:.3f}")
+                
         except Exception as e:
-            logger.error(f"Error fetching prices across venues: {e}")
+            logger.error(f"Error calculating market sentiment: {e}")
 
-        return venues
-
-    async def is_arbitrage_opportunity(
-        self, token: str, min_spread_percent: float = 1.0
-    ) -> bool:
-        """Check if arbitrage spread ≥ min_spread_percent exists."""
+    async def _detect_market_anomalies(self):
+        """Detect unusual market conditions that might indicate opportunities or risks."""
         try:
-            prices = await self.get_token_prices_across_venues(token)
-            if len(prices) < 2:
-                return False
-            vals = list(prices.values())
-            spread = (max(vals) - min(vals)) / min(vals) * 100 if min(vals) else 0.0
-            logger.debug(f"Arb spread for {token}: {spread:.2f}%")
-            return spread >= min_spread_percent
+            anomalies = []
+            
+            for symbol, history in self._price_history.items():
+                if len(history) < 20:
+                    continue
+                
+                recent_prices = [float(price) for _, price in history[-20:]]
+                
+                # Detect sudden price spikes
+                recent_change = (recent_prices[-1] - recent_prices[-5]) / recent_prices[-5]
+                if abs(recent_change) > 0.05:  # 5% change in recent period
+                    anomaly_type = "price_spike_up" if recent_change > 0 else "price_spike_down"
+                    anomalies.append({
+                        'symbol': symbol,
+                        'type': anomaly_type,
+                        'magnitude': recent_change,
+                        'timestamp': datetime.now()
+                    })
+                
+                # Detect unusual volatility
+                volatility = await self.get_volatility(symbol, 30)
+                if volatility and volatility > 0.08:  # 8% volatility threshold
+                    anomalies.append({
+                        'symbol': symbol,
+                        'type': 'high_volatility',
+                        'magnitude': volatility,
+                        'timestamp': datetime.now()
+                    })
+            
+            if anomalies:
+                logger.info(f"Detected {len(anomalies)} market anomalies")
+                for anomaly in anomalies:
+                    logger.info(f"Anomaly: {anomaly['symbol']} - {anomaly['type']} "
+                              f"(magnitude: {anomaly['magnitude']:.3f})")
+                
         except Exception as e:
-            logger.error(f"Error in arbitrage check: {e}")
-            return False
+            logger.error(f"Error detecting market anomalies: {e}")
 
-    async def _get_price_volatility(self, token: str) -> float:
-        """Calculate normalized volatility score (0.0–1.0)."""
-        try:
-            changes = []
-            for tf in ("1h", "4h", "24h"):
-                trend = await self.get_market_trend(token, tf)
-                if "percent_change" in trend:
-                    changes.append(abs(float(trend["percent_change"])))
-            if not changes:
-                return 0.05
-            avg = sum(changes) / len(changes)
-            return min(avg / 20.0, 1.0)
-        except Exception as e:
-            logger.error(f"Error calculating volatility: {e}")
-            return 0.05
+    def reset_failed_tokens(self):
+        """Reset the blacklist of failed tokens. Useful for periodic cleanup."""
+        cleared_count = len(self._failed_tokens)
+        self._failed_tokens.clear()
+        self._token_failure_count.clear()
+        if cleared_count > 0:
+            logger.info(f"Cleared blacklist of {cleared_count} failed tokens.")
+    
+    def get_failed_tokens(self) -> Set[str]:
+        """Get the current set of blacklisted tokens."""
+        return self._failed_tokens.copy()
+    
+    def remove_from_blacklist(self, token_symbol: str):
+        """Manually remove a token from the blacklist."""
+        symbol_upper = token_symbol.upper()
+        if symbol_upper in self._failed_tokens:
+            self._failed_tokens.remove(symbol_upper)
+            if symbol_upper in self._token_failure_count:
+                del self._token_failure_count[symbol_upper]
+            logger.info(f"Removed {symbol_upper} from blacklist.")
+
+    def get_market_data_summary(self) -> Dict[str, Any]:
+        """Get comprehensive market data summary for monitoring."""
+        summary = {
+            'total_tracked_symbols': len(self._price_history),
+            'cache_hit_ratio': len(self._price_cache) / max(len(self._price_history), 1),
+            'avg_price_history_length': 0,
+            'high_volatility_symbols': [],
+            'sentiment_summary': {
+                'bullish_count': 0,
+                'bearish_count': 0,
+                'neutral_count': 0
+            }
+        }
+        
+        if self._price_history:
+            total_history_length = sum(len(history) for history in self._price_history.values())
+            summary['avg_price_history_length'] = total_history_length / len(self._price_history)
+        
+        # Analyze sentiment distribution
+        for symbol, sentiment in self._market_sentiment.items():
+            if sentiment > 0.3:
+                summary['sentiment_summary']['bullish_count'] += 1
+            elif sentiment < -0.3:
+                summary['sentiment_summary']['bearish_count'] += 1
+            else:
+                summary['sentiment_summary']['neutral_count'] += 1
+        
+        return summary

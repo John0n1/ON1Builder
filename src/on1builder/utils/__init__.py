@@ -4,7 +4,7 @@ Common utilities for ON1Builder.
 
 from .container import Container
 from .custom_exceptions import (
-    ChainConnectionError,
+    ConnectionError,
     ConfigurationError,
     StrategyExecutionError,
     TransactionError,
@@ -22,6 +22,8 @@ from .path_helpers import (
     get_strategy_weights_path,
     get_token_data_path,
 )
+from .gas_optimizer import GasOptimizer
+from .profit_calculator import ProfitCalculator
 
 __all__ = [
     "Container",
@@ -40,4 +42,6 @@ __all__ = [
     "get_strategy_weights_path",
     "get_chain_config_path",
     "ensure_dir_exists",
+    "GasOptimizer",
+    "ProfitCalculator",
 ]

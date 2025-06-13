@@ -1,24 +1,12 @@
-include LICENSE
 include README.md
+include LICENSE
 include CHANGELOG.md
-include CONTRIBUTING.md
+include requirements.txt
+include .env.example
 include pyproject.toml
-include MANIFEST.in
-include src/on1builder/py.typed
-
-recursive-include configs *.yaml
 recursive-include src/on1builder/resources *.json *.sol
-
-prune venv
-prune data
-prune __pycache__
-prune *.pyc
-prune .git
-prune .github
-prune .vscode
-prune .env 
-prune .pytest_cache
-prune .mypy_cache
-prune .coverage
-prune .idea
-prune .DS_Store
+recursive-include logs .gitkeep
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .git*
+global-exclude .env

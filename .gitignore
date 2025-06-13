@@ -1,26 +1,19 @@
 # Virtual environments
 venv/
 .venv/
-venv/bin/
-coverage*
+
 # Environment variables
 .env
 !.env.example
 
-# Python caches
+# Python bytecode/caches
 __pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-.coverage
-htmlcov/
 
-# Logs
-data/logs/
+
+# Logs and data
 logs/
 *.log
-.ruff_cache
+data/
 
 # Build artifacts
 dist/
@@ -31,36 +24,31 @@ build/
 .Python
 develop-eggs/
 
-# Local development
+# IDE / Editor
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Database
+# Databases
 *.db
 *.sqlite
 *.sqlite3
-data/logs/
 
-# Jupyter Notebook checkpoints
-
-# Test data that should be generated at runtime
-test_data/
-data/
-
-# Ignore coverage reports
-coverage.xml
-.coverage.*
-*.coverage
-    *.coverage.*    
-
-# Ignore Jupyter Notebook checkpoints
+# Jupyter Notebook
 .ipynb_checkpoints/
-# Ignore Jupyter Notebook metadata
 *.ipynb
-.env
-# Local configurations
+
+# OS generated files
+.DS_Store
+
+# Local development/testing
 .hypothesis/
 .tox/
 build.sh
+test_data/
+
+# Coverage reports
+coverage.xml
+.coverage.*
+*.coverage

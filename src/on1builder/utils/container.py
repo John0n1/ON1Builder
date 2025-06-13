@@ -1,182 +1,129 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# SPDX-License-Identifier: MIT
-"""
-ON1Builder – Dependency Injection Container
-==========================================
-A simple dependency injection container to manage component lifecycle and
-resolve circular dependencies.
-License: MIT
-"""
-
+# src/on1builder/utils/container.py
 from __future__ import annotations
 
 import inspect
-from typing import Any, Callable, Dict, Optional, Set, TypeVar
+from typing import Any, Callable, Dict, Optional, TypeVar
 
-from ..utils.logging_config import get_logger
+from .logging_config import get_logger
 
 T = TypeVar("T")
-
 logger = get_logger(__name__)
 
-
 class Container:
-    """A simple DI container for ON1Builder components.
-
-    Manages instances and factory functions, and supports graceful shutdown.
-    """
+    """A simple dependency injection container for managing component lifecycles."""
 
     def __init__(self) -> None:
+        self._providers: Dict[str, Callable[[], Any]] = {}
         self._instances: Dict[str, Any] = {}
-        self._factories: Dict[str, Callable[..., Any]] = {}
-        self._resolving: Dict[str, bool] = {}
-        self._dependencies: Dict[str, Set[str]] = {}  # Track component dependencies
-        self._main_orchestrator: Optional[Any] = None  # Reference to MainOrchestrator
+        self._resolving: set[str] = set()
 
-    def register(self, key: str, instance: Any) -> None:
-        """Register a concrete instance under a key."""
+    def register_instance(self, key: str, instance: Any) -> None:
+        """
+        Registers a pre-existing instance of a component.
+        
+        Args:
+            key: The unique identifier for the component.
+            instance: The component instance to register.
+        """
+        logger.debug(f"Registering instance for key: '{key}'")
         self._instances[key] = instance
-        logger.debug("Registered instance '%s'", key)
 
-    def register_factory(self, key: str, factory: Callable[..., T]) -> None:
-        """Register a factory for lazy instantiation under a key."""
-        self._factories[key] = factory
-        logger.debug("Registered factory '%s'", key)
-
-    def register_main_orchestrator(self, main_orchestrator: Any) -> None:
-        """Register the MainOrchestrator instance for shared resource access."""
-        self._main_orchestrator = main_orchestrator
-        self.register("main_orchestrator", main_orchestrator)
-        logger.debug("Registered MainOrchestrator instance")
-
-    def get_main_orchestrator(self) -> Optional[Any]:
-        """Get the registered MainOrchestrator instance if available."""
-        return self._main_orchestrator
+    def register_provider(self, key: str, provider: Callable[[], T]) -> None:
+        """
+        Registers a provider (factory function) for lazy instantiation.
+        
+        Args:
+            key: The unique identifier for the component.
+            provider: A zero-argument function that returns an instance of the component.
+        """
+        logger.debug(f"Registering provider for key: '{key}'")
+        self._providers[key] = provider
 
     def get(self, key: str) -> Any:
-        """Resolve and return the component for `key`, instantiating if needed.
-
-        Raises:
-            KeyError: if neither instance nor factory is registered.
         """
-        if self._resolving.get(key):
-            logger.warning("Circular dependency detected for '%s'", key)
-            return None  # break the cycle temporarily
-
+        Resolves and returns a component by its key.
+        Instantiates the component using its provider if it hasn't been already.
+        
+        Args:
+            key: The unique identifier for the component.
+            
+        Returns:
+            The resolved component instance.
+            
+        Raises:
+            KeyError: If the key is not registered.
+            RuntimeError: If a circular dependency is detected.
+        """
         if key in self._instances:
             return self._instances[key]
 
-        if key in self._factories:
-            logger.debug("Creating '%s' via factory", key)
-            self._resolving[key] = True
-            try:
-                factory = self._factories[key]
-                sig = inspect.signature(factory)
+        if key in self._resolving:
+            raise RuntimeError(f"Circular dependency detected for key: '{key}'")
 
-                # Check if factory requires container or main_orchestrator params
-                kwargs = {}
-                if "container" in sig.parameters:
-                    kwargs["container"] = self
-                if "main_orchestrator" in sig.parameters and self._main_orchestrator:
-                    kwargs["main_orchestrator"] = self._main_orchestrator
+        if key not in self._providers:
+            raise KeyError(f"No provider registered for key: '{key}'")
 
-                # Track dependencies
-                if key not in self._dependencies:
-                    self._dependencies[key] = set()
-
-                if kwargs:
-                    instance = factory(**kwargs)
-                    # Record dependencies
-                    if "main_orchestrator" in kwargs:
-                        self._dependencies[key].add("main_orchestrator")
-                else:
-                    instance = factory()
-
-                self._instances[key] = instance
-                return instance
-            finally:
-                self._resolving[key] = False
-
-        raise KeyError(f"Component not registered: '{key}'")
+        logger.debug(f"Resolving component for key: '{key}' via provider.")
+        self._resolving.add(key)
+        
+        try:
+            provider = self._providers[key]
+            instance = provider()
+            self._instances[key] = instance
+        finally:
+            self._resolving.remove(key)
+            
+        return instance
 
     def get_or_none(self, key: str) -> Optional[Any]:
-        """Like `get`, but returns None if not registered."""
+        """
+        Safely resolves a component, returning None if not registered.
+        
+        Args:
+            key: The unique identifier for the component.
+            
+        Returns:
+            The resolved component instance or None.
+        """
         try:
             return self.get(key)
-        except KeyError:
+        except (KeyError, RuntimeError):
             return None
 
-    def has(self, key: str) -> bool:
-        """Return True if `key` is registered (as instance or factory)."""
-        return key in self._instances or key in self._factories
-
-    async def close(self) -> None:
-        """Call `.close()` or `.stop()` on all registered instances that provide it.
-
-        Components are closed in dependency-order to ensure proper cleanup.
+    async def shutdown(self) -> None:
         """
-        # Process in reverse dependency order (least dependent components first)
-        closed_components = set()
+        Gracefully shuts down all registered instances that have a 'stop' or 'close' method.
+        This is typically called once when the application is exiting.
+        """
+        logger.info("Shutting down all containerized components...")
+        
+        # We shut down in the reverse order of creation, which is a simple and
+        # effective way to handle dependencies (e.g., TransactionManager before DB).
+        for key, instance in reversed(list(self._instances.items())):
+            shutdown_method = None
+            if hasattr(instance, 'stop') and callable(instance.stop):
+                shutdown_method = instance.stop
+            elif hasattr(instance, 'close') and callable(instance.close):
+                shutdown_method = instance.close
 
-        # First pass: close any components that don't have stop/close methods
-        # to prevent them from being repeatedly visited
-        for key, instance in list(self._instances.items()):
-            if not hasattr(instance, "close") and not hasattr(instance, "stop"):
-                closed_components.add(key)
-
-        # Continue until all components are closed
-        while len(closed_components) < len(self._instances):
-            for key, instance in list(self._instances.items()):
-                if key in closed_components:
-                    continue
-
-                # Check if any other components depend on this one
-                # We should only close this component if no other unclosed components depend on it
-                has_dependents = False
-                for other_key, other_dependencies in self._dependencies.items():
-                    if other_key not in closed_components and key in other_dependencies:
-                        has_dependents = True
-                        break
-
-                if has_dependents:
-                    # Some components still depend on this one, skip this one
-                    continue
-
-                # Close this component
-                await self._close_component(key, instance)
-                closed_components.add(key)
-
-        logger.info("Closed %d components", len(closed_components))
-
-    async def _close_component(self, key: str, instance: Any) -> None:
-        """Close a single component using appropriate method."""
-        try:
-            # Try stop() first (standard for our components)
-            if hasattr(instance, "stop") and callable(instance.stop):
-                logger.debug("Stopping component '%s'", key)
-                if inspect.iscoroutinefunction(instance.stop):
-                    await instance.stop()
-                else:
-                    instance.stop()
-                return
-
-            # Fall back to close() for compatibility
-            if hasattr(instance, "close") and callable(instance.close):
-                logger.debug("Closing component '%s'", key)
-                if inspect.iscoroutinefunction(instance.close):
-                    await instance.close()
-                else:
-                    instance.close()
-                return
-        except Exception as e:
-            logger.error("Error closing component '%s': %s", key, e)
+            if shutdown_method:
+                logger.debug(f"Shutting down component: '{key}'")
+                try:
+                    if inspect.iscoroutinefunction(shutdown_method):
+                        await shutdown_method()
+                    else:
+                        shutdown_method()
+                except Exception as e:
+                    logger.error(f"Error shutting down component '{key}': {e}", exc_info=True)
+        
+        self._instances.clear()
+        self._providers.clear()
+        logger.info("All containerized components have been shut down.")
 
 
-# Global singleton container
-_container: Container = Container()
-
+# Global instance of the container
+_container = Container()
 
 def get_container() -> Container:
-    """Get the global container singleton."""
+    """Provides access to the global DI container."""
     return _container

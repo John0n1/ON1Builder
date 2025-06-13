@@ -1,753 +1,496 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# SPDX-License-Identifier: MIT
-"""
-ON1Builder – TxpoolMonitor
-===========================
-Monitors the Ethereum mempool through pending transaction filters or
-block polling. Surfaces profitable transactions for StrategyNet.
-"""
-
+# src/on1builder/monitoring/txpool_scanner.py
 from __future__ import annotations
 
 import asyncio
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import datetime, timedelta
+import re
 
-import psutil
 from web3 import AsyncWeb3
-from web3.exceptions import TransactionNotFound
+from web3.types import TxData
 
-from ..config.settings import APISettings, GlobalSettings
-from ..core.nonce_manager import NonceManager
-from ..engines.safety_guard import SafetyGuard
-from ..utils.logging_config import get_logger
-from .market_data_feed import MarketDataFeed
+from on1builder.config.loaders import settings
+from on1builder.engines.strategy_executor import StrategyExecutor
+from on1builder.integrations.abi_registry import ABIRegistry
+from on1builder.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-
 class TxPoolScanner:
-    """Watches the mempool (or latest blocks as a fallback) and surfaces
-    profitable transactions for StrategyNet."""
-
-    def __init__(
-        self,
-        web3: AsyncWeb3,
-        safety_net: SafetyGuard,
-        nonce_core: NonceManager,
-        api_config: APISettings,
-        monitored_tokens: List[str],
-        configuration: GlobalSettings,
-        market_monitor: MarketDataFeed,
-    ) -> None:
-        self.web3 = web3
-        self.safety_net = safety_net
-        self.nonce_core = nonce_core
-        self.api_config = api_config
-        self.market_monitor = market_monitor
-        self.configuration = configuration
-
-        # Normalize token list to lowercase addresses
-        self.monitored_tokens: Set[str] = set()
-        for t in monitored_tokens:
-            if t.startswith("0x"):
-                self.monitored_tokens.add(t.lower())
-            else:
-                # For now, skip non-address tokens as symbol resolution is not implemented
-                logger.warning(
-                    f"Token symbol '{t}' is not an address, skipping. "
-                    f"Please provide token address instead."
-                )
-
-        # Queues for hashes, analysis, and profitable txs
-        self._tx_hash_queue: asyncio.Queue[str] = asyncio.Queue()
-        self._tx_analysis_queue: asyncio.Queue[Tuple[int, str]] = asyncio.Queue()
-        self.profitable_transactions: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
-
-        self._tasks: List[asyncio.Task[Any]] = []
-        self._running: bool = False
-
-        self._processed_hashes: Set[str] = set()
-        self._tx_cache: Dict[str, Dict[str, Any]] = {}
-
-        max_parallel = configuration.get("MEMPOOL_MAX_PARALLEL_TASKS", 10)
-        self._semaphore = asyncio.Semaphore(max_parallel)
-
-        self._stop_event = asyncio.Event()
-
-        # Simple queue control
-        self.processed_txs: Set[str] = set()
-        self.tx_queue: List[Tuple[str, Dict[str, Any]]] = []
-        self.min_gas: int = configuration.get("MIN_GAS", 0)
-        self.max_queue_size: int = configuration.get("MAX_QUEUE_SIZE", 1000)
-        self.queue_event: asyncio.Event = asyncio.Event()
-        self.use_txpool_api: bool = configuration.get("USE_TXPOOL_API", False)
-
-    async def initialize(self) -> None:
-        """Prepare for monitoring; does not start background tasks yet."""
-        logger.info("Initializing TxpoolMonitor...")
-
-        # Set up internal data structures
-        self._tx_hash_queue = asyncio.Queue()
-        self._tx_analysis_queue = asyncio.Queue()
-        self.profitable_transactions = asyncio.Queue()
-        self._processed_hashes.clear()
-        self._tx_cache.clear()
-        self._running = False
-
-        # Ensure we have a session for API access if needed
-        self.client_session = None
-        if self.api_config and not getattr(self.api_config, "session", None):
-            try:
-                import aiohttp
-
-                self.client_session = aiohttp.ClientSession()
-                setattr(self.api_config, "session", self.client_session)
-                logger.debug("Created new client session for API access")
-            except ImportError:
-                logger.warning(
-                    "aiohttp not available, external API access may be limited"
-                )
-
-        # Verify we can connect to the node
-        try:
-            # Check basic connection by getting the latest block
-            block_number = await self.web3.eth.block_number
-            logger.info(f"Connected to node, current block: {block_number}")
-
-            # Check what mempool monitoring capabilities are available
-            txpool_supported = await self._check_txpool_support()
-            if txpool_supported:
-                logger.info(
-                    "Node supports direct txpool access - optimal monitoring available"
-                )
-                self.use_txpool_api = True
-            else:
-                logger.info(
-                    "Node does not support direct txpool access - will use alternative methods"
-                )
-                self.use_txpool_api = False
-
-            # Check if pending filters are supported
-            try:
-                filt = await self.web3.eth.filter("pending")
-                await filt.get_new_entries()  # Test if it works
-                logger.info("Node supports pending transaction filters")
-                # Store the filter for cleanup later
-                self._pending_filter = filt
-            except Exception as e:
-                logger.info(f"Node doesn't support pending filters: {e}")
-                logger.info("Will fall back to block polling if needed")
-                self._pending_filter = None
-
-        except Exception as e:
-            logger.warning(f"Error during TxpoolMonitor initialization: {e}")
-            logger.warning("Monitor will attempt to recover during start_monitoring")
-
-        # Initialize memory for tracking transaction handling
-        self._memory_usage = psutil.Process().memory_info().rss / 1024 / 1024
-        logger.info(f"Initial memory usage: {self._memory_usage:.2f} MB")
-
-        logger.info("TxpoolMonitor initialization complete")
-
-    async def start_monitoring(self) -> None:
-        """Start background tasks to collect and analyze transactions."""
-        if self._running:
-            return
-        self._running = True
-
-        self._tasks = [
-            asyncio.create_task(self._collect_hashes(), name="TXM_collect_hashes"),
-            asyncio.create_task(self._analysis_dispatcher(), name="TXM_analysis"),
-        ]
-        logger.info(f"TxpoolMonitor: started {len(self._tasks)} background tasks")
-        await asyncio.gather(*self._tasks, return_exceptions=True)
-
-    async def stop(self) -> None:
-        """Stop all background tasks and clean up resources."""
-        if not self._running:
-            return
-        self._running = False
-        logger.info("TxpoolMonitor: stopping…")
-
-        # Set stop event first to unblock any waiting tasks
-        self._stop_event.set()
-
-        # Cancel all background tasks
-        for t in self._tasks:
-            if not t.done() and not t.cancelled():
-                try:
-                    t.cancel()
-                    logger.debug(f"Cancelled task: {t.get_name()}")
-                except Exception as e:
-                    logger.warning(f"Error cancelling task {t.get_name()}: {e}")
-
-        # Wait for tasks to complete cancellation with timeout
-        if self._tasks:
-            try:
-                await asyncio.wait(self._tasks, timeout=5.0)
-                logger.debug("Tasks cancel wait completed")
-            except asyncio.TimeoutError:
-                logger.warning("Timeout waiting for tasks to cancel")
-            except Exception as e:
-                logger.error(f"Error waiting for tasks to cancel: {e}")
-
-        # Clear all data structures
-        try:
-            # Clear queues
-            while not self._tx_hash_queue.empty():
-                try:
-                    self._tx_hash_queue.get_nowait()
-                    self._tx_hash_queue.task_done()
-                except asyncio.QueueEmpty:
-                    break
-
-            while not self._tx_analysis_queue.empty():
-                try:
-                    self._tx_analysis_queue.get_nowait()
-                    self._tx_analysis_queue.task_done()
-                except asyncio.QueueEmpty:
-                    break
-
-            while not self.profitable_transactions.empty():
-                try:
-                    self.profitable_transactions.get_nowait()
-                    self.profitable_transactions.task_done()
-                except asyncio.QueueEmpty:
-                    break
-
-            # Clear sets and dictionaries
-            self._processed_hashes.clear()
-            self._tx_cache.clear()
-            self.processed_txs.clear()
-            self.tx_queue.clear()
-
-            # Clear tasks list
-            self._tasks.clear()
-
-        except Exception as e:
-            logger.error(f"Error clearing resources: {e}")
-
-        # Close any web3 filters we might have created
-        try:
-            if hasattr(self, "_pending_filter") and self._pending_filter:
-                await self.web3.eth.uninstall_filter(self._pending_filter.filter_id)
-                logger.debug("Uninstalled pending filter")
-        except Exception as e:
-            logger.warning(f"Error uninstalling filter: {e}")
-
-        # Close client session if we created it
-        if hasattr(self, "client_session") and self.client_session is not None:
-            try:
-                await self.client_session.close()
-                logger.debug("Closed client session")
-                self.client_session = None
-
-                # Remove reference from api_config if we set it there
-                if self.api_config and hasattr(self.api_config, "session"):
-                    if getattr(self.api_config, "session", None) == self.client_session:
-                        setattr(self.api_config, "session", None)
-            except Exception as e:
-                logger.warning(f"Error closing client session: {e}")
-
-        logger.info("TxpoolMonitor: successfully stopped")
-
-    async def _collect_hashes(self) -> None:
-        """Collect tx hashes via pending-filter, direct txpool access, or block polling."""
-        try:
-            # Try multiple approaches in order of preference:
-            # 1. Direct txpool access (most comprehensive)
-            # 2. Pending transaction filter (standard Web3 approach)
-            # 3. Block polling (fallback/most compatible)
-
-            logger.info("🚀 Starting transaction collection...")
-
-            # First try direct txpool access
-            txpool_supported = await self._check_txpool_support()
-
-            if txpool_supported:
-                logger.info("📊 Using direct txpool_content API for mempool monitoring")
-                await self._collect_from_txpool()
-            else:
-                # Try pending filter next
-                try:
-                    logger.info("🔄 Attempting to use pending transaction filter...")
-                    filt = await self.web3.eth.filter("pending")
-                    logger.info("✅ Using pending-tx filter for mempool monitoring")
-                    await self._collect_from_filter(filt)
-                except Exception as filter_error:
-                    # Fall back to block polling as last resort
-                    logger.warning(f"❌ Pending filter failed: {filter_error}")
-                    logger.info(
-                        "📦 Falling back to block polling for transaction monitoring"
-                    )
-                    await self._collect_from_blocks()
-        except asyncio.CancelledError:
-            logger.info("Transaction collection task cancelled")
-        except Exception as e:
-            logger.exception(f"Fatal error in _collect_hashes: {e}")
-            raise
-
-    async def _check_txpool_support(self) -> bool:
-        """Check if the connected node supports txpool_content RPC method.
-
-        Returns:
-            bool: True if txpool is supported, False otherwise
-        """
-        try:
-            logger.debug("🔍 Testing txpool_content API support...")
-            # Attempt to call txpool_content with empty params
-            result = await self.web3.manager.coro_request("txpool_content", [])
-            # If we get a result with the expected structure, txpool is supported
-            is_supported = (
-                result is not None
-                and "result" in result
-                and "pending" in result["result"]
-            )
-
-            if is_supported:
-                pending_count = len(result["result"].get("pending", {}))
-                queued_count = len(result["result"].get("queued", {}))
-                logger.info(
-                    f"✅ Txpool API supported! Found {pending_count} pending, {queued_count} queued transactions")
-            else:
-                logger.info(
-                    "💡 Txpool API not available - will use alternative monitoring methods"
-                )
-                logger.debug(f"Response structure: {result}")
-
-            return is_supported
-        except Exception as e:
-            logger.info(f"💡 Txpool API not available: {e}")
-            if "method not found" in str(e).lower():
-                logger.debug(
-                    "Note: Using a Geth node or node with txpool API support enables more efficient monitoring"
-                )
-            return False
-
-    async def _collect_from_txpool(self) -> None:
-        """Collect transaction hashes directly from the txpool.
-
-        This is the most direct method to monitor pending transactions,
-        but requires a node that supports the txpool_content API.
-        """
-        logger.info("Starting txpool collection - monitoring mempool directly")
-        collection_count = 0
-
-        while self._running:
-            try:
-                # Get all pending transactions from the txpool
-                pending_txs = await self.get_pending_transactions()
-
-                if pending_txs:
-                    logger.info(
-                        f"🔍 Found {len(pending_txs)} pending transactions in mempool"
-                    )
-
-                    # Process each transaction
-                    for tx in pending_txs:
-                        if "hash" in tx and tx["hash"]:
-                            tx_hash = tx["hash"]
-                            if isinstance(tx_hash, bytes):
-                                tx_hash = tx_hash.hex()
-
-                            # Store the transaction in our cache
-                            self._tx_cache[tx_hash] = tx
-
-                            # Enqueue the hash for analysis
-                            await self._enqueue_hash(tx_hash)
-                            collection_count += 1
-
-                    logger.info(
-                        f"📊 Enqueued {
-                            len(pending_txs)} transactions for analysis (total: {collection_count})")
-                else:
-                    logger.debug("No pending transactions found in mempool")
-
-                # Use an appropriate polling interval
-                poll_interval = self.configuration.get("TXPOOL_POLL_INTERVAL", 2.0)
-                await asyncio.sleep(poll_interval)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.warning(f"Error collecting from txpool: {e}")
-                await asyncio.sleep(5)  # Wait longer on error
-
-    async def _collect_from_filter(self, filt: Any) -> None:
-        while self._running:
-            try:
-                entries = await filt.get_new_entries()
-                for h in entries:
-                    await self._enqueue_hash(h.hex())
-            except Exception:
-                await asyncio.sleep(1)
-
-    async def _collect_from_blocks(self) -> None:
-        last = await self.web3.eth.block_number
-        while self._running:
-            try:
-                current = await self.web3.eth.block_number
-                for n in range(last + 1, current + 1):
-                    block = await self.web3.eth.get_block(n, full_transactions=True)
-                    for tx in block.transactions:  # type: ignore[attr-defined]
-                        txh = (tx.hash if hasattr(tx, "hash") else tx["hash"]).hex()
-                        await self._enqueue_hash(txh)
-                last = current
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-
-    async def _enqueue_hash(self, tx_hash: str) -> None:
-        if tx_hash in self._processed_hashes:
-            return
-        self._processed_hashes.add(tx_hash)
-        await self._tx_hash_queue.put(tx_hash)
-        logger.debug(f"📥 Enqueued transaction hash for analysis: {tx_hash[:10]}...")
-
-    async def _analysis_dispatcher(self) -> None:
-        """Dispatch analysis tasks for incoming hashes."""
-        while not self._stop_event.is_set():
-            try:
-                tx_hash = await self._tx_hash_queue.get()
-                await self._semaphore.acquire()
-                # Store task reference to avoid fire-and-forget warning
-                task = asyncio.create_task(self._process_transaction_safe(tx_hash))
-                # Add error callback to handle unhandled exceptions
-                task.add_done_callback(
-                    lambda t: (
-                        None
-                        if t.exception() is None
-                        else logger.error(f"Unhandled error in task: {t.exception()}")
-                    )
-                )
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Dispatcher error: {e}")
-
-    async def _process_transaction_safe(self, tx_hash: str) -> None:
-        """Wrapper that handles exceptions in analysis."""
-        try:
-            await self._analyse_transaction(tx_hash)
-        except Exception as e:
-            logger.error(f"Error analyzing {tx_hash}: {e}")
-        finally:
-            self._semaphore.release()
-            self._tx_hash_queue.task_done()
-
-    async def _analyse_transaction(self, tx_hash: str) -> None:
-        """Fetch, prioritize, and check profitability of a tx."""
-        logger.debug(f"🔍 Analyzing transaction: {tx_hash[:10]}...")
-
-        tx = await self._fetch_transaction(tx_hash)
-        if not tx:
-            logger.debug(f"❌ Could not fetch transaction data for {tx_hash[:10]}...")
-            return
-
-        priority = self._calc_priority(tx)
-        await self._tx_analysis_queue.put((priority, tx_hash))
-        logger.debug(
-            f"📊 Transaction {tx_hash[:10]}... queued with priority {priority}"
-        )
-
-        result = await self._is_profitable(tx_hash, tx)
-        if result:
-            logger.info(
-                f"💰 PROFITABLE TRANSACTION FOUND: {tx_hash[:10]}... - Strategy: {result.get('strategy_type', 'unknown')}"
-            )
-            await self.profitable_transactions.put(result)
-        else:
-            logger.debug(f"📉 Transaction {tx_hash[:10]}... not profitable")
-
-    async def _fetch_transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
-        """Retrieve tx data, with retries on not-found.
-
-        This method tries to get both confirmed and pending transactions from the mempool.
-        """
-        if tx_hash in self._tx_cache:
-            return self._tx_cache[tx_hash]
-
-        delay = self.configuration.get("MEMPOOL_RETRY_DELAY", 0.5)
-        max_retries = self.configuration.get("MEMPOOL_MAX_RETRIES", 3)
-
-        for _ in range(max_retries):
-            # Try standard method first
-            try:
-                tx = await self.web3.eth.get_transaction(tx_hash)
-                self._tx_cache[tx_hash] = tx
-                return tx
-            except TransactionNotFound:
-                # If not found with standard method, try direct RPC call for pending txs
-                try:
-                    # Make sure the tx_hash has the 0x prefix required by Ethereum JSON-RPC
-                    prefixed_hash = (
-                        tx_hash if tx_hash.startswith("0x") else f"0x{tx_hash}"
-                    )
-
-                    # Make a direct RPC call to get pending transaction
-                    tx = await self.web3.manager.coro_request(
-                        "eth_getTransactionByHash", [prefixed_hash]
-                    )
-                    if tx:
-                        # Process the raw transaction result
-                        processed_tx = self._process_raw_tx(tx)
-                        if processed_tx:
-                            self._tx_cache[tx_hash] = processed_tx
-                            return processed_tx
-                except Exception as inner_e:
-                    logger.debug(f"Direct RPC call for tx {tx_hash} failed: {inner_e}")
-
-                # Wait before retrying
-                await asyncio.sleep(delay)
-                delay *= 1.5
-            except Exception as e:
-                logger.debug(f"Fetch tx {tx_hash} error: {e}")
-                break
-        return None
-
-    def _process_raw_tx(self, raw_tx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Process a raw transaction response from JSON-RPC.
-
-        Args:
-            raw_tx: Raw transaction data from JSON-RPC
-
-        Returns:
-            Optional[Dict[str, Any]]: Processed transaction or None if invalid
-        """
-        try:
-            if not raw_tx or "result" not in raw_tx or not raw_tx["result"]:
-                return None
-
-            # Extract the result part which contains the actual transaction data
-            tx_data = raw_tx["result"]
-
-            # Convert hex values to integers where appropriate
-            processed_tx = {}
-            for key, value in tx_data.items():
-                if (
-                    key in ("blockNumber", "gas", "gasPrice", "nonce", "value", "v")
-                    and value
-                    and value.startswith("0x")
-                ):
-                    try:
-                        processed_tx[key] = int(value, 16)
-                    except ValueError:
-                        processed_tx[key] = value
-                else:
-                    processed_tx[key] = value
-
-            # Add any derived fields
-            if "hash" in processed_tx:
-                processed_tx["txHash"] = processed_tx["hash"]
-
-            return processed_tx
-        except Exception as e:
-            logger.debug(f"Error processing raw transaction: {e}")
-            return None
-
-    def _calc_priority(self, tx: Dict[str, Any]) -> int:
-        """Lower integers = higher priority (negate gas price)."""
-        gp_legacy = tx.get("gasPrice", 0) or 0
-        gp_1559 = tx.get("maxFeePerGas", 0) or 0
-        effective = max(gp_legacy, gp_1559)
-        return -int(effective)
-
-    async def _is_profitable(
-        self, tx_hash: str, tx: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        """Lightweight profit check: filter by monitored tokens and value."""
-        to_addr = (tx.get("to") or "").lower()
-        if to_addr not in self.monitored_tokens:
-            return None
-
-        value = tx.get("value", 0)
-        if value <= 0:
-            return None
-
-        gas_used = await self.safety_net.estimate_gas(tx)
-        gp = tx.get("gasPrice", tx.get("maxFeePerGas", 0))
-        gp_gwei = float(self.web3.from_wei(gp, "gwei"))
-
-        tx_data = {
-            "output_token": to_addr,
-            "amountIn": float(self.web3.from_wei(value, "ether")),
-            "amountOut": float(self.web3.from_wei(value, "ether")),
-            "gas_price": gp_gwei,
-            "gas_used": gas_used,
+    """Enhanced transaction pool scanner with sophisticated MEV opportunity detection."""
+    
+    def __init__(self, web3: AsyncWeb3, strategy_executor: StrategyExecutor):
+        self._web3 = web3
+        self._strategy_executor = strategy_executor
+        self._abi_registry = ABIRegistry()
+        self._is_running = False
+        self._scan_task: Optional[asyncio.Task] = None
+        self._monitored_addresses: Set[str] = self._get_all_monitored_addresses()
+        self._pending_tx_count = 0
+        self._opportunity_cache: Dict[str, Dict] = {}
+        self._tx_analysis_cache: Dict[str, Dict] = {}
+        self._dex_router_addresses = self._load_dex_addresses()
+        self._large_trader_addresses = set()
+        self._mev_patterns = self._compile_mev_patterns()
+        
+        logger.info(f"Enhanced TxPoolScanner initialized. Monitoring {len(self._monitored_addresses)} addresses.")
+
+    def _get_all_monitored_addresses(self) -> Set[str]:
+        """Gathers all unique token addresses to monitor across all configured chains."""
+        addresses = set()
+        for chain_id in settings.chains:
+            token_map = self._abi_registry.get_monitored_tokens(chain_id)
+            addresses.update(addr.lower() for addr in token_map.values())
+        return addresses
+
+    def _load_dex_addresses(self) -> Dict[str, str]:
+        """Loads known DEX router addresses for transaction analysis."""
+        return {
+            # Uniswap V2 Router
+            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": "uniswap_v2",
+            # Uniswap V3 Router  
+            "0xe592427a0aece92de3edee1f18e0157c05861564": "uniswap_v3",
+            # SushiSwap Router
+            "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f": "sushiswap",
+            # 1inch Router
+            "0x1111111254fb6c44bac0bed2854e76f90643097d": "1inch",
+            # Pancakeswap (BSC)
+            "0x10ed43c718714eb63d5aa57b78b54704e256024e": "pancakeswap"
         }
 
-        safe, details = await self.safety_net.check_transaction_safety(tx_data)
-        profit_passed = (
-            details["check_details"].get("profit_check", {}).get("passed", False)
-        )
-        if safe and profit_passed:
-            return {
-                "is_profitable": True,
-                "tx_hash": tx_hash,
-                "tx": tx,
-                "analysis": details,
-                "strategy_type": "front_run",
+    def _compile_mev_patterns(self) -> Dict[str, re.Pattern]:
+        """Compiles regex patterns for MEV detection."""
+        return {
+            'sandwich_attack': re.compile(r'swapExactTokensForTokens|swapTokensForExactTokens', re.IGNORECASE),
+            'arbitrage': re.compile(r'multicall|batchSwap', re.IGNORECASE),
+            'liquidation': re.compile(r'liquidate|seize', re.IGNORECASE),
+            'flash_loan': re.compile(r'flashLoan|flashSwap', re.IGNORECASE)
+        }
+
+    async def start(self):
+        if self._is_running:
+            logger.warning("TxPoolScanner is already running.")
+            return
+
+        self._is_running = True
+        logger.info("Starting Enhanced TxPoolScanner to monitor pending transactions...")
+        self._scan_task = asyncio.create_task(self._subscribe_to_pending_transactions())
+
+    async def stop(self):
+        if not self._is_running:
+            return
+
+        self._is_running = False
+        if self._scan_task:
+            self._scan_task.cancel()
+            try:
+                await self._scan_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("TxPoolScanner stopped.")
+
+    async def _subscribe_to_pending_transactions(self):
+        """
+        Establishes a WebSocket subscription to new pending transactions and
+        processes them in a continuous loop with enhanced analysis.
+        """
+        chain_id = await self._web3.eth.chain_id
+        ws_url = settings.websocket_urls.get(chain_id)
+        if not ws_url:
+            logger.error(f"No WebSocket URL configured for chain {chain_id}. TxPoolScanner cannot run.")
+            return
+
+        while self._is_running:
+            try:
+                # Create a WebSocket provider for this chain
+                from web3.providers import WebSocketProvider
+                ws_provider = WebSocketProvider(ws_url)
+                
+                # Connect to the WebSocket provider and handle both coroutine and context manager cases
+                connection = ws_provider.connect()
+                if hasattr(connection, '__aenter__'):
+                    # It's an async context manager
+                    async with connection as websocket:
+                        await self._handle_websocket_subscription(websocket)
+                else:
+                    # It's a coroutine, await it first
+                    websocket = await connection
+                    if websocket is None:
+                        logger.error("WebSocket connection returned None")
+                        continue
+                    try:
+                        await self._handle_websocket_subscription(websocket)
+                    finally:
+                        if hasattr(websocket, 'close'):
+                            await websocket.close()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"TxPoolScanner subscription error: {e}. Reconnecting in {settings.connection_retry_delay}s.", exc_info=True)
+                await asyncio.sleep(settings.connection_retry_delay)
+
+    async def _handle_websocket_subscription(self, websocket):
+        """Handle WebSocket subscription and message processing."""
+        if websocket is None:
+            logger.error("WebSocket connection is None, cannot subscribe to pending transactions")
+            return
+            
+        try:
+            # Subscribe to new pending transactions
+            subscription_id = await websocket.subscribe("newPendingTransactions")
+            logger.info(f"Successfully subscribed to pending transactions (subscription: {subscription_id})")
+        except Exception as e:
+            logger.error(f"Failed to subscribe to pending transactions: {e}")
+            return
+        
+        while self._is_running:
+            try:
+                message = await asyncio.wait_for(
+                    websocket.recv(), 
+                    timeout=settings.heartbeat_interval * 2
+                )
+                
+                # Extract transaction hash from the message
+                if hasattr(message, 'result'):
+                    tx_hash = message.result
+                elif isinstance(message, dict) and 'result' in message:
+                    tx_hash = message['result']
+                else:
+                    logger.debug(f"Unexpected message format: {message}")
+                    continue
+                    
+                if tx_hash:
+                    self._pending_tx_count += 1
+                    asyncio.create_task(self._process_tx_hash(tx_hash))
+                    
+            except asyncio.TimeoutError:
+                logger.debug("No new pending transactions received in timeout period.")
+                continue
+
+    async def _process_tx_hash(self, tx_hash: str):
+        """Enhanced transaction processing with comprehensive MEV analysis."""
+        try:
+            tx = await self._web3.eth.get_transaction(tx_hash)
+            if not tx:
+                return
+                
+            # Cache transaction for analysis
+            tx_analysis = self._analyze_transaction_comprehensive(tx)
+            self._tx_analysis_cache[tx_hash] = tx_analysis
+            
+            # Clean old cache entries
+            if len(self._tx_analysis_cache) > 1000:
+                old_hashes = list(self._tx_analysis_cache.keys())[:200]
+                for old_hash in old_hashes:
+                    del self._tx_analysis_cache[old_hash]
+            
+            if self._is_relevant_for_mev(tx, tx_analysis):
+                logger.info(f"MEV-relevant transaction detected: {tx_hash}")
+                opportunities = await self._analyze_for_opportunities(tx, tx_analysis)
+                for opportunity in opportunities:
+                    await self._strategy_executor.execute_opportunity(opportunity)
+                    
+        except Exception as e:
+            logger.debug(f"Could not process transaction {tx_hash}: {e}")
+
+    def _analyze_transaction_comprehensive(self, tx: TxData) -> Dict[str, Any]:
+        """Performs comprehensive analysis of a transaction for MEV opportunities."""
+        analysis = {
+            'tx_hash': tx['hash'].hex(),
+            'from': tx['from'],
+            'to': tx.get('to'),
+            'value_eth': float(self._web3.from_wei(tx.get('value', 0), 'ether')),
+            'gas_price': tx.get('gasPrice', 0),
+            'gas_limit': tx.get('gas', 0),
+            'timestamp': datetime.now(),
+            'input_data': tx.get('input', '').hex(),
+            'mev_type': None,
+            'target_dex': None,
+            'estimated_profit_potential': 0.0,
+            'risk_score': 0.0
+        }
+        
+        # Analyze target address
+        to_address = tx.get('to', '').lower() if tx.get('to') else ''
+        if to_address in self._dex_router_addresses:
+            analysis['target_dex'] = self._dex_router_addresses[to_address]
+        
+        # Detect MEV patterns in input data
+        input_data = analysis['input_data']
+        for mev_type, pattern in self._mev_patterns.items():
+            if pattern.search(input_data):
+                analysis['mev_type'] = mev_type
+                break
+        
+        # Calculate priority and profit potential
+        analysis['priority_score'] = self._calculate_priority_score(analysis)
+        analysis['estimated_profit_potential'] = self._estimate_profit_potential(analysis)
+        analysis['risk_score'] = self._calculate_risk_score(analysis)
+        
+        return analysis
+
+    def _is_relevant_for_mev(self, tx: TxData, analysis: Dict[str, Any]) -> bool:
+        """Enhanced relevance check for MEV opportunities."""
+        # Check if transaction targets monitored addresses
+        to_address = tx.get('to', '').lower() if tx.get('to') else ''
+        if to_address in self._monitored_addresses:
+            return True
+        
+        # Check if it's a DEX transaction with significant value
+        if analysis['target_dex'] and analysis['value_eth'] > 1.0:
+            return True
+        
+        # Check if it matches MEV patterns
+        if analysis['mev_type']:
+            return True
+        
+        # Check if it's from a known large trader
+        if tx['from'].lower() in self._large_trader_addresses:
+            return True
+        
+        # Check gas price (high gas might indicate MEV competition)
+        if analysis['gas_price'] > self._get_high_gas_threshold():
+            return True
+        
+        return False
+
+    async def _analyze_for_opportunities(self, tx: TxData, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Analyzes transaction for specific MEV opportunities."""
+        opportunities = []
+        
+        try:
+            # Front-running opportunities
+            if analysis['mev_type'] == 'sandwich_attack' or analysis['value_eth'] > 5.0:
+                front_run_opp = await self._analyze_front_running(tx, analysis)
+                if front_run_opp:
+                    opportunities.append(front_run_opp)
+            
+            # Back-running opportunities
+            back_run_opp = await self._analyze_back_running(tx, analysis)
+            if back_run_opp:
+                opportunities.append(back_run_opp)
+            
+            # Arbitrage opportunities
+            if analysis['target_dex']:
+                arb_opp = await self._analyze_arbitrage_opportunity(tx, analysis)
+                if arb_opp:
+                    opportunities.append(arb_opp)
+            
+            # Liquidation opportunities
+            if analysis['mev_type'] == 'liquidation':
+                liq_opp = await self._analyze_liquidation_opportunity(tx, analysis)
+                if liq_opp:
+                    opportunities.append(liq_opp)
+                    
+        except Exception as e:
+            logger.error(f"Error analyzing opportunities for {tx['hash'].hex()}: {e}")
+        
+        return opportunities
+
+    async def _analyze_front_running(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Analyzes potential front-running opportunities."""
+        if analysis['value_eth'] < 2.0:  # Not worth front-running small trades
+            return None
+        
+        # Estimate potential profit from front-running
+        estimated_slippage = min(analysis['value_eth'] * 0.01, 0.05)  # 1% per $1, max 5%
+        potential_profit = analysis['value_eth'] * estimated_slippage * 0.5  # Conservative estimate
+        
+        if potential_profit < 0.01:  # Minimum profit threshold
+            return None
+        
+        return {
+            'strategy_type': 'front_run',
+            'target_tx': analysis,
+            'estimated_profit_eth': potential_profit,
+            'confidence': min(analysis['priority_score'], 1.0),
+            'gas_price_multiplier': 1.2,  # 20% higher gas for priority
+            'execution_deadline': datetime.now() + timedelta(seconds=30)
+        }
+
+    async def _analyze_back_running(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Analyzes potential back-running opportunities."""
+        if not analysis['target_dex']:
+            return None
+        
+        # Look for potential arbitrage after the target transaction
+        potential_arbitrage = analysis['value_eth'] * 0.005  # Conservative 0.5% arbitrage
+        
+        if potential_arbitrage < 0.005:
+            return None
+        
+        return {
+            'strategy_type': 'back_run',
+            'target_tx': analysis,
+            'estimated_profit_eth': potential_arbitrage,
+            'confidence': 0.6,
+            'wait_for_confirmation': True,
+            'execution_deadline': datetime.now() + timedelta(minutes=2)
+        }
+
+    async def _analyze_arbitrage_opportunity(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Analyzes arbitrage opportunities created by the transaction."""
+        if not analysis['target_dex'] or analysis['value_eth'] < 1.0:
+            return None
+        
+        # Advanced arbitrage detection by decoding swap parameters
+        try:
+            # Decode transaction input data to get swap parameters
+            tx_input = transaction.get('input', '0x')
+            if len(tx_input) < 10:  # Must have function selector + data
+                return None
+            
+            # Common DEX function selectors
+            swap_selectors = {
+                '0x38ed1739': 'swapExactTokensForTokens',  # Uniswap V2
+                '0x8803dbee': 'swapTokensForExactTokens',  # Uniswap V2
+                '0x7ff36ab5': 'swapExactETHForTokens',     # Uniswap V2
+                '0x18cbafe5': 'swapExactTokensForETH',     # Uniswap V2
+                '0x414bf389': 'exactInputSingle',          # Uniswap V3
+                '0xc04b8d59': 'exactInput',                # Uniswap V3
             }
-        return None
-
-    async def is_healthy(self) -> bool:
-        """Check health of the txpool monitor."""
-        try:
-            if not await self.web3.is_connected():
-                logger.warning("Web3 connection is down")
-                return False
-
-            if self.use_txpool_api:
-                try:
-                    await self.web3.geth.txpool.status()
-                except Exception as e:
-                    logger.warning(f"Txpool API unavailable: {e}")
-
-            if not await self.safety_net.is_healthy():
-                logger.warning("SafetyNet is unhealthy")
-                return False
-
-            if self._stop_event.is_set():
-                logger.warning("TxpoolMonitor has been stopped")
-                return False
-
-            return True
-        except Exception as e:
-            logger.error(f"Health check failed: {e}")
-            return False
-
-    async def check_health(self) -> bool:
-        """Check if this component is healthy and functioning properly.
-
-        Returns:
-            bool: True if healthy, False if unhealthy
-        """
-        try:
-            # Check web3 connection
-            if not await self.web3.is_connected():
-                logger.warning(
-                    "TxpoolMonitor health check failed: web3 connection issue"
-                )
-                return False
-
-            # Check if running
-            if not self._running:
-                # It's okay if we're not running yet - just report the status
-                logger.debug("TxpoolMonitor not running (may be intentional)")
-                return True
-
-            # Check if tasks are alive
-            if self._tasks:
-                all_alive = True
-                for task in self._tasks:
-                    if task.done() or task.cancelled():
-                        logger.warning(
-                            f"TxpoolMonitor task {task.get_name()} is not running"
-                        )
-                        all_alive = False
-                if not all_alive:
-                    return False
-
-            # If we got this far, we're healthy
-            return True
-
-        except Exception as e:
-            logger.error(f"TxpoolMonitor health check error: {e}")
-            return False
-
-    async def _monitor_memory(self) -> None:
-        """Periodically clean caches based on memory pressure."""
-        interval = self.configuration.get("MEMORY_CHECK_INTERVAL", 300)
-        max_cache = self.configuration.get("MAX_TXPOOL_CACHE_SIZE", 10000)
-
-        while not self._stop_event.is_set():
-            await asyncio.sleep(interval)
-            mem = psutil.virtual_memory().percent
-            logger.debug(f"Memory usage: {mem}%")
-
-            if mem > 80:
-                logger.warning(f"High memory usage ({mem}%), clearing caches")
-                self.processed_txs.clear()
-                self._tx_cache.clear()
-            elif len(self.processed_txs) > max_cache:
-                kept = list(self.processed_txs)[-max_cache:]
-                self.processed_txs = set(kept)
-                logger.info(f"Trimmed processed_txs to {max_cache} entries")
-
-            logger.debug(
-                f"TxpoolMonitor memory stats: {len(self.processed_txs)} processed txs, "
-                f"{len(self.tx_queue)} queued"
-            )
-
-    async def get_pending_transactions(self) -> List[Dict[str, Any]]:
-        """Fetch all current pending transactions from the txpool.
-
-        This method uses the geth-specific RPC method 'txpool_content' to get all
-        pending transactions directly from the mempool.
-
-        Returns:
-            List of pending transactions
-        """
-        pending_txs = []
-
-        try:
-            logger.debug("🔗 Calling txpool_content RPC method...")
-            # Call the non-standard RPC method to get txpool content
-            txpool_content = await self.web3.manager.coro_request("txpool_content", [])
-
-            # Extract pending transactions from the result
-            if txpool_content and "result" in txpool_content:
-                pending_data = txpool_content["result"].get("pending", {})
-                logger.debug(
-                    f"📊 Txpool response: {
-                        len(pending_data)} sender addresses with pending transactions")
-
-                # Process each pending transaction
-                for sender_address, nonce_dict in pending_data.items():
-                    for nonce, tx_data in nonce_dict.items():
-                        # Get transaction hash and ensure it has 0x prefix
-                        tx_hash = tx_data.get("hash", "")
-                        if tx_hash and not tx_hash.startswith("0x"):
-                            tx_hash = f"0x{tx_hash}"
-
-                        # Process the transaction data
-                        processed_tx = {
-                            "hash": tx_hash,
-                            "from": sender_address,
-                            "to": tx_data.get("to"),
-                            "value": int(tx_data.get("value", "0x0"), 16),
-                            "gasPrice": int(tx_data.get("gasPrice", "0x0"), 16),
-                            "gas": int(tx_data.get("gas", "0x0"), 16),
-                            "nonce": int(nonce, 16),  # Convert nonce from hex to int
-                            "input": tx_data.get("input"),
-                            "pending": True,
-                        }
-
-                        # Add gas_price for consistency with Web3.py naming
-                        processed_tx["gas_price"] = processed_tx["gasPrice"]
-
-                        # Add to our list
-                        pending_txs.append(processed_tx)
-
-                        # Cache the transaction
-                        if "hash" in tx_data:
-                            self._tx_cache[tx_data["hash"]] = processed_tx
-
-                logger.debug(
-                    f"✅ Processed {len(pending_txs)} transactions from txpool"
-                )
+            
+            func_selector = tx_input[:10]
+            if func_selector not in swap_selectors:
+                estimated_price_impact = analysis['value_eth'] * 0.002  # Fallback estimate
             else:
-                logger.warning("❌ Txpool response missing 'result' or 'pending' data")
-                logger.debug(f"Txpool response structure: {txpool_content}")
-
+                # Parse swap parameters for better analysis
+                try:
+                    from eth_abi import decode_abi
+                    
+                    # Decode based on function type
+                    if func_selector == '0x38ed1739':  # swapExactTokensForTokens
+                        # (uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)
+                        decoded = decode_abi(['uint256', 'uint256', 'address[]', 'address', 'uint256'], 
+                                           bytes.fromhex(tx_input[10:]))
+                        amount_in = decoded[0]
+                        amount_out_min = decoded[1]
+                        token_path = decoded[2]
+                        
+                        # Calculate price impact based on amounts
+                        if amount_in > 0:
+                            # Estimate price impact using liquidity-based model
+                            impact_factor = min(amount_in / 10**18 / 100, 0.05)  # Max 5% impact
+                            estimated_price_impact = impact_factor
+                        else:
+                            estimated_price_impact = 0.001
+                    else:
+                        # For other functions, use heuristic
+                        estimated_price_impact = analysis['value_eth'] * 0.001
+                        
+                except Exception as decode_error:
+                    self.logger.debug(f"Failed to decode swap parameters: {decode_error}")
+                    estimated_price_impact = analysis['value_eth'] * 0.002
+                    
         except Exception as e:
-            logger.warning(f"❌ Failed to fetch txpool content: {e}")
-            # Log more details about the error
-            if "method not found" in str(e).lower() or "txpool" in str(e).lower():
-                logger.warning(
-                    "🚨 Node does not support txpool_content method - falling back to filter/polling"
-                )
+            self.logger.warning(f"Error in arbitrage detection: {e}")
+            estimated_price_impact = analysis['value_eth'] * 0.002  # Fallback estimate
+        
+        if estimated_price_impact < 0.01:
+            return None
+        
+        return {
+            'strategy_type': 'arbitrage',
+            'dex': analysis['target_dex'],
+            'estimated_profit_eth': estimated_price_impact * 0.8,
+            'confidence': 0.7,
+            'requires_flash_loan': analysis['value_eth'] > 10.0
+        }
 
-        logger.debug(f"📤 Returning {len(pending_txs)} pending transactions")
-        return pending_txs
+    async def _analyze_liquidation_opportunity(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Analyzes liquidation opportunities."""
+        if analysis['mev_type'] != 'liquidation':
+            return None
+        
+        # Liquidation opportunities typically have good profit margins
+        estimated_profit = analysis['value_eth'] * 0.05  # 5% liquidation bonus estimate
+        
+        return {
+            'strategy_type': 'liquidation',
+            'target_tx': analysis,
+            'estimated_profit_eth': estimated_profit,
+            'confidence': 0.8,
+            'high_priority': True
+        }
+
+    def _calculate_priority_score(self, analysis: Dict[str, Any]) -> float:
+        """Calculates priority score for the transaction."""
+        score = 0.0
+        
+        # Value contribution
+        score += min(analysis['value_eth'] / 10, 0.3)  # Max 0.3 for value
+        
+        # Gas price contribution (higher gas = higher priority)
+        if analysis['gas_price'] > 0:
+            gas_score = min(analysis['gas_price'] / self._get_high_gas_threshold(), 0.2)
+            score += gas_score
+        
+        # MEV type contribution
+        mev_scores = {
+            'sandwich_attack': 0.3,
+            'arbitrage': 0.25,
+            'liquidation': 0.35,
+            'flash_loan': 0.2
+        }
+        if analysis['mev_type'] in mev_scores:
+            score += mev_scores[analysis['mev_type']]
+        
+        # DEX interaction bonus
+        if analysis['target_dex']:
+            score += 0.15
+        
+        return min(score, 1.0)
+
+    def _estimate_profit_potential(self, analysis: Dict[str, Any]) -> float:
+        """Estimates profit potential for the transaction."""
+        base_profit = analysis['value_eth'] * 0.01  # 1% base estimate
+        
+        # Adjust based on MEV type
+        multipliers = {
+            'sandwich_attack': 1.5,
+            'arbitrage': 1.2,
+            'liquidation': 2.0,
+            'flash_loan': 1.8
+        }
+        
+        if analysis['mev_type'] in multipliers:
+            base_profit *= multipliers[analysis['mev_type']]
+        
+        return base_profit
+
+    def _calculate_risk_score(self, analysis: Dict[str, Any]) -> float:
+        """Calculates risk score for the opportunity."""
+        risk = 0.5  # Base risk
+        
+        # Higher value = higher risk
+        if analysis['value_eth'] > 10:
+            risk += 0.2
+        
+        # Unknown MEV type = higher risk
+        if not analysis['mev_type']:
+            risk += 0.2
+        
+        # Very high gas = competition risk
+        if analysis['gas_price'] > self._get_high_gas_threshold() * 2:
+            risk += 0.1
+        
+        return min(risk, 1.0)
+
+    def _get_high_gas_threshold(self) -> int:
+        """Gets the threshold for considering gas price as high."""
+        # This would ideally be dynamic based on network conditions
+        return 50 * 10**9  # 50 gwei
+
+    def get_pending_tx_count(self) -> int:
+        """Returns the count of processed pending transactions."""
+        return self._pending_tx_count
+
+    def get_cache_stats(self) -> Dict[str, int]:
+        """Returns cache statistics for monitoring."""
+        return {
+            'tx_analysis_cache_size': len(self._tx_analysis_cache),
+            'opportunity_cache_size': len(self._opportunity_cache),
+            'monitored_addresses': len(self._monitored_addresses),
+            'dex_addresses': len(self._dex_router_addresses)
+        }

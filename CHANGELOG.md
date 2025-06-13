@@ -1,70 +1,64 @@
 # Changelog
 
-All notable changes to the ON1Builder project will be documented in this file.
+All notable changes to ON1Builder will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] - 2025-06-12
+
+### Added
+- Comprehensive multi-chain architecture with ChainWorker design
+- Interactive TUI launcher (ignition.py) for easy setup and monitoring
+- Robust CLI interface with Typer for advanced users
+- Safety mechanisms with circuit-breaker and pre-transaction checks
+- Real-time notification service with multiple channels (Slack, Telegram, Discord, Email)
+- Database integration with SQLAlchemy for transaction and profit logging
+- Resource management for ABIs, contracts, and token configurations
+- Comprehensive configuration management with Pydantic settings
+
+### Features
+- **Multi-Chain Support**: Native support for Ethereum and EVM-compatible networks
+- **Asynchronous Core**: Built on asyncio for high-performance, non-blocking operations
+- **Strategy Engine**: Lightweight reinforcement learning for profit optimization
+- **Flash Loan Integration**: Complete toolkit for Aave flash loans and MEV strategies
+- **Monitoring**: Real-time mempool scanning and market data feeds
+- **Security**: Encrypted wallet handling and secure configuration management
+
+### Technical
+- Python 3.10+ compatibility
+- Modern async/await patterns throughout
+- Type hints and Pydantic validation
+- Comprehensive error handling and logging
+- Modular architecture with clean separation of concerns
+- Docker support for containerized deployment
+
+### Dependencies
+- Web3.py for blockchain interactions
+- Pydantic for configuration validation
+- SQLAlchemy for database operations
+- Rich for beautiful terminal output
+- Typer for CLI interface
+- Questionary for interactive prompts
+- And many more (see requirements.txt)
+
+### Documentation
+- Comprehensive README with setup instructions
+- Example configuration files
+- API documentation for core modules
+- Development setup guides
+
+### Security
+- Secure wallet key handling
+- Environment variable validation
+- Safe configuration loading
+- No hardcoded secrets or keys
+
 ## [Unreleased]
 
-### Added
-- Complete package restructuring following PEP 660 src/ layout
-- PEP 621-compliant pyproject.toml with setuptools backend
-- Proper module hierarchy with organized subpackages
-- Typer-based enhanced CLI with fallback to basic argparse
-- Dependency injection system to avoid circular imports
-- Graceful shutdown handlers for all core components
-- CI/CD setup with GitHub Actions
-- Restructured test directory to mirror src/ layout
-- Added edge case tests for transaction retry logic and network failures
-- Implemented robust websocket reconnection logic with exponential backoff
-- Fixed web3.py v7 provider compatibility issues
-- Fixed import paths throughout codebase for compatibility with package structure
-- Improved logging system with string/int level handling
-
-### Changed
-- Updated file and directory structure to follow Python best practices
-- Replaced ad-hoc configuration with centralized config management
-- Updated all import statements in tests to use the new package structure
-- Updated shell scripts to reference new source directory structure
-- Enhanced logging with structured log format
-- Moved all Docker-related files to docker/ directory
-- Updated resource paths in configuration files
-
-### Fixed
-- Fixed circular dependency issues between core modules
-- Improved error handling and reporting
-- Fixed memory leaks in long-running monitors
-
-## [0.1.0] - 2025-05-15
-
-### Added
-- Initial release of ON1Builder framework
-- Support for multi-chain operations
-- Mempool monitoring and transaction submission
-- Market data integration
-- Strategy execution framework
-
-### Changed
-- Initial codebase cleanup and refactoring
-- Improved documentation and code comments
-### Fixed
-- Fixed initial bugs in transaction handling
-- Resolved initial memory leaks in monitors                 
-- Fixed initial websocket connection issues
-## [2.0.1] - 2025-05-26
-
-### Added
-- Added support for new blockchain networks
-- Enhanced transaction retry logic
-- Improved error handling in websocket connections
-### Changed
-- Updated dependency versions for security and performance
-### Fixed
-- Fixed issues with transaction submission under high load
-- Resolved websocket reconnection issues
-## [2.0.0] - 2025-05-26
-### Added
-- Major refactor of core components
-- Introduced new configuration management system
-
+### Planned
+- Enhanced strategy algorithms
+- Additional DEX integrations
+- Performance optimizations
+- Extended test coverage
+- Advanced monitoring dashboards

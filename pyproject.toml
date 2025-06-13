@@ -1,181 +1,196 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "on1builder"
-version = "2.1.3"
-description = "Multi-chain blockchain transaction execution framework"
+version = "2.2.0"
+authors = [
+    { name = "john0n1", email = "john@on1.no" },
+]
+description = "A high-performance, multi-chain MEV and trading bot framework."
 readme = "README.md"
-license = "MIT"
-authors = [{name = "ON1Builder Team", email = "john@on1.no"}]
-maintainers = [{name = "ON1Builder Team", email = "john@on1.no"}]
-keywords = ["mev", "blockchain", "ethereum", "async", "mempool", "defi", "arbitrage"]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = [
+    "blockchain", "ethereum", "trading", "mev", "arbitrage", "defi", 
+    "flashloan", "crypto", "bot", "automated-trading", "web3", "uniswap",
+    "multi-chain", "async", "framework"
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Operating System :: OS Independent",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Office/Business :: Financial",
+    "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
 ]
-requires-python = ">=3.12,<3.14"
 dependencies = [
-    "aiohappyeyeballs>=2.6.1",
-    "aiohttp>=3.12.9",
-    "aiosignal>=1.3.2",
-    "aiosqlite>=0.19.0",
-    "annotated-types>=0.7.0",
-    "anyio>=4.9.0",
-    "attrs>=25.3.0",
-    "bitarray>=3.4.2",
-    "cachetools>=6.0.0",
-    "certifi>=2025.4.26",
-    "cffi>=1.17.1",
-    "charset-normalizer>=3.4.2",
-    "ckzg>=2.1.1",
-    "click>=8.2.1",
-    "cryptography>=45.0.3",
-    "cytoolz>=1.0.1",
-    "eth-account>=0.13.7",
-    "eth-hash>=0.7.1",
-    "eth-keyfile>=0.8.1",
-    "eth-keys>=0.7.0",
-    "eth-rlp>=2.2.0",
-    "eth-typing>=5.2.1",
-    "eth-utils>=5.3.0",
-    "eth_abi>=5.2.0",
-    "hexbytes>=1.3.1",
-    "httpcore>=1.0.9",
-    "httpx>=0.28.1",
-    "idna>=3.10",
-    "joblib>=1.3.2",
-    "numpy>=2.2.6",
-    "pandas>=2.1.0",
-    "parsimonious>=0.10.0",
+    "aiohappyeyeballs==2.6.1",
+    "aiohttp==3.12.12",
+    "aiosignal==1.3.2",
+    "python-dotenv==0.9.0",
+    "aiosqlite>=0.21.0",
+    "annotated-types==0.7.0",
+    "attrs==25.3.0",
+    "Automat==25.4.16",
+    "bitarray==3.4.2",
+    "build==1.2.2.post1",
+    "buildtools==1.0.6",
+    "cachetools==6.0.0",
+    "certifi==2025.4.26",
+    "charset-normalizer==3.4.2",
+    "ckzg==2.1.1",
+    "colorlog==6.9.0",
+    "constantly==23.10.4",
+    "cytoolz==1.0.1",
+    "docopt==0.6.2",
+    "eth-account==0.13.7",
+    "eth-hash==0.7.1",
+    "eth-keyfile==0.8.1",
+    "eth-keys==0.7.0",
+    "eth-rlp==2.2.0",
+    "eth-typing==5.2.1",
+    "eth-utils==5.3.0",
+    "eth_abi==5.2.0",
+    "frozenlist==1.7.0",
+    "furl==2.1.4",
+    "greenlet==3.2.3",
+    "hexbytes==1.3.1",
+    "hyperlink==21.0.0",
+    "idna==3.10",
+    "incremental==24.7.2",
+    "Jinja2==3.1.6",
+    "MarkupSafe==3.0.2",
+    "multidict==6.4.4",
+    "numpy==2.3.0",
+    "orderedmultidict==1.0.1",
+    "packaging==25.0",
+    "parsimonious==0.10.0",
+    "pathlib==1.0.1",
+    "propcache==0.3.2",
     "psutil>=7.0.0",
-    "pycryptodome>=3.23.0",
-    "pydantic>=2.11.5",
-    "pydantic_core>=2.33.2",
-    "python-dotenv>=1.1.0",
-    "pyunormalize>=16.0.0",
-    "pyyaml>=6.0.2",
-    "questionary>=2.1.0",
-    "regex>=2024.11.6",
-    "requests>=2.32.3",
-    "rich>=14.0.0",
-    "rlp>=4.1.0",
-    "sqlalchemy>=2.0.41",
-    "toolz>=1.0.0",
-    "typer>=0.16.0",
-    "typing_extensions>=4.14.0",
-    "urllib3>=2.4.0",
-    "web3>=7.12.0",
-    "websockets>=15.0.1",
+    "pyaml==25.5.0",
+    "pycryptodome==3.23.0",
+    "pydantic==2.11.5",
+    "pydantic_core==2.33.2",
+    "pydantic-settings>=2.1.0",
+    "pyproject_hooks==1.2.0",
+    "python-dateutil==2.9.0.post0",
+    "python-dotenv>=1.0.0",
+    "pyunormalize==16.0.0",
+    "PyYAML==6.0.2",
+    "questionary>=2.0.0",
+    "redo==3.0.0",
+    "regex==2024.11.6",
+    "requests==2.32.4",
+    "rich>=13.7.0",
+    "rlp==4.1.0",
+    "setuptools==80.9.0",
+    "simplejson==3.20.1",
+    "six==1.17.0",
+    "SQLAlchemy==2.0.41",
+    "toolz==1.0.0",
+    "Twisted==25.5.0",
+    "types-requests==2.32.4.20250611",
+    "typing==3.7.4.3",
+    "typing-inspection==0.4.1",
+    "typing_extensions==4.14.0",
+    "typer[all]>=0.9.0",
+    "urllib3==2.4.0",
+    "web3==7.12.0",
+    "websockets==15.0.1",
+    "yarl==1.20.1",
+    "zope.interface==7.2"
 ]
 
 [project.optional-dependencies]
-dev = [
-    "black>=23.7.0",
-    "isort>=5.12.0",
-    "mypy>=1.10.0",
-    "pytest>=8.3.5",
-    "pytest-asyncio>=0.22.0",
-    "pytest-cov>=4.1.0",
-    "flake8>=6.1.0",
-    "bandit>=1.7.4",
-    "safety>=2.4.0",
-    "pre-commit>=3.0.0",
-    "types-PyYAML>=6.0.0",
-    "types-requests>=2.32.0",
-    "colorlog>=6.9.0",
-]
 test = [
-    "pytest>=8.3.5",
-    "pytest-asyncio>=0.22.0",
-    "pytest-cov>=4.1.0",
+    "pytest>=8.4.0",
+    "pytest-cov>=6.2.1",
+    "pytest-asyncio>=1.0.0",
+    "coverage[toml]>=7.9.0",
 ]
-lint = [
-    "black>=23.7.0",
+dev = [
+    "pytest>=8.4.0",
+    "pytest-cov>=6.2.1",
+    "pytest-asyncio>=1.0.0",
+    "coverage[toml]>=7.9.0",
+    "black>=25.1.0",
     "isort>=5.12.0",
-    "mypy>=1.10.0",
-    "flake8>=6.1.0",
-    "bandit>=1.7.4",
-    "types-PyYAML>=6.0.0",
-    "types-requests>=2.32.0",
-    "colorlog>=6.9.0",
+    "flake8>=6.0.0",
+    "mypy>=1.16.0",
+    "pre-commit>=4.2.0",
+    "twine>=6.1.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/john0n1/ON1Builder"
-Repository = "https://github.com/john0n1/ON1Builder"
-Documentation = "https://github.com/john0n1/ON1Builder#readme"
 "Bug Tracker" = "https://github.com/john0n1/ON1Builder/issues"
-Changelog = "https://github.com/john0n1/ON1Builder/blob/main/CHANGELOG.md"
 
 [project.scripts]
-on1builder = "on1builder.__main__:main"
-
-[tool.setuptools]
-zip-safe = false
-include-package-data = true
+on1builder = "on1builder.__main__:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["on1builder*"]
-exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-on1builder = [
-    "py.typed",
-    "configs/**/*.yaml",
-    "resources/**/*",
-]
+"on1builder" = ["resources/abi/*.json", "resources/tokens/*.json", "resources/ml_models/*.json", "resources/contracts/*.sol"]
 
-# Development and testing tools configuration
+[tool.setuptools.data-files]
+"." = [".env.example"]
+
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
+minversion = "7.0"
 addopts = [
     "--strict-markers",
-    "--strict-config",
-    "--verbose",
-    "--tb=short",
-    "--cov=on1builder",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=17",
+    "--disable-warnings",
+    "-ra",
 ]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src/on1builder"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
 ]
-filterwarnings = [
-    "ignore::DeprecationWarning:websockets.*",
-    "ignore::DeprecationWarning:aiohttp.*",
-    "ignore::RuntimeWarning:.*_pytest.*",
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
 ]
 
 [tool.black]
-line-length = 88
-target-version = ["py312", "py313"]
-include = '\\.pyi?$'
+line-length = 100
+target-version = ["py310"]
+include = '\.pyi?$'
 extend-exclude = '''
 /(
   # directories
-  \\.eggs
-  | \\.git
-  | \\.hg
-  | \\.mypy_cache
-  | \\.tox
-  | \\.venv
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
   | build
   | dist
 )/
@@ -183,13 +198,15 @@ extend-exclude = '''
 
 [tool.isort]
 profile = "black"
+line_length = 100
 multi_line_output = 3
-line_length = 88
-known_first_party = ["on1builder"]
-known_third_party = ["pytest", "web3", "aiohttp", "pydantic", "typer", "rich"]
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -202,37 +219,12 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = [
     "web3.*",
     "eth_account.*",
-    "pandas.*",
-    "numpy.*",
-    "psutil.*",
+    "questionary.*",
+    "colorlog.*",
 ]
 ignore_missing_imports = true
-
-[tool.bandit]
-exclude_dirs = ["tests", "docs"]
-skips = ["B101", "B601"]
-
-[tool.coverage.run]
-source = ["src/on1builder"]
-omit = [
-    "*/tests/*",
-    "*/test_*",
-    "*/__pycache__/*",
-    "*/.*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-]

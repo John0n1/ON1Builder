@@ -1,55 +1,40 @@
-"""
-Run command for ON1Builder CLI.
-"""
+# src/on1builder/cli/run_cmd.py
+from __future__ import annotations
 
 import asyncio
-from typing import Optional
+import sys
 
 import typer
 
-from ..config.loaders import load_configuration
-from ..utils.logging_config import get_logger
+from on1builder.core.main_orchestrator import MainOrchestrator
+from on1builder.utils.custom_exceptions import InitializationError
+from on1builder.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+app = typer.Typer(help="Commands to run the ON1Builder bot.")
 
-app = typer.Typer()
-
-
-@app.command()
-def run(
-    config: Optional[str] = typer.Option(
-        None, "--config", "-c", help="Configuration file path"
-    ),
-    chain: Optional[str] = typer.Option(None, "--chain", help="Chain to run on"),
-    debug: bool = typer.Option(False, "--debug", help="Enable debug mode"),
-):
-    """Run the ON1Builder main application."""
-    logger.info(
-        f"Starting ON1Builder with config: {config}, chain: {chain}, debug: {debug}"
-    )
-
+@app.command(name="start")
+def start_bot():
+    """
+    Initializes and starts the ON1Builder main application.
+    This command boots the orchestrator and runs until interrupted.
+    """
+    logger.info("CLI: 'start' command invoked.")
+    
     try:
-        # Load configuration
-        config_data = load_configuration(config_path=config, chain=chain)
-
-        # Import and use the main orchestrator
-        if config_data.get("multi_chain", False):
-            from ..core.multi_chain_orchestrator import MultiChainOrchestrator
-
-            orchestrator = MultiChainOrchestrator(config=config_data)
-        else:
-            from ..core.main_orchestrator import MainOrchestrator
-
-            orchestrator = MainOrchestrator(config=config_data)
-
-        # Run the orchestrator
+        orchestrator = MainOrchestrator()
         asyncio.run(orchestrator.run())
-
+    except InitializationError as e:
+        logger.critical(f"A critical component failed to initialize, which prevents the application from starting: {e}", exc_info=True)
+        typer.secho(f"FATAL ERROR: Could not start the application. {e}", fg=typer.colors.RED, err=True)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("Application shutdown requested by user (Ctrl+C).")
+        typer.echo("\nShutting down gracefully...")
     except Exception as e:
-        logger.error(f"Failed to run ON1Builder: {e}")
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
-
-
-if __name__ == "__main__":
-    app()
+        logger.critical(f"An unexpected fatal error occurred during startup or runtime: {e}", exc_info=True)
+        typer.secho(f"UNEXPECTED FATAL ERROR: {e}", fg=typer.colors.RED, err=True)
+        sys.exit(1)
+        
+    logger.info("ON1Builder has shut down.")
+    typer.echo("Goodbye!")
