@@ -5,7 +5,7 @@ aiosqlite>=0.19.0
 annotated-types==0.7.0
 attrs==25.3.0
 Automat==25.4.16
-bitarray==3.4.2
+bitarray==3.4.3
 build==1.2.2.post1
 buildtools==1.0.6
 cachetools==6.1.0
@@ -33,7 +33,7 @@ idna==3.10
 incremental==24.7.2
 Jinja2==3.1.6
 MarkupSafe==3.0.2
-multidict==6.5.0
+multidict==6.6.2
 numpy==2.3.0
 orderedmultidict==1.0.1
 packaging==25.0
