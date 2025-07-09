@@ -222,40 +222,6 @@ class GasOptimizer:
         cost_wei = gas_limit * gas_price
         return Decimal(cost_wei) / Decimal(10**18)
 
-    async def get_gas_efficiency_report(self) -> Dict[str, Any]:
-        """Generate gas efficiency analysis report."""
-        try:
-            if not self._gas_history:
-                return {"error": "No gas history available"}
-            
-            recent_prices = [price for _, price in self._gas_history[-50:]]
-            
-            report = {
-                "current_gas_price_gwei": self._web3.from_wei(recent_prices[-1], 'gwei') if recent_prices else 0,
-                "avg_gas_price_gwei": self._web3.from_wei(statistics.mean(recent_prices), 'gwei') if recent_prices else 0,
-                "min_gas_price_gwei": self._web3.from_wei(min(recent_prices), 'gwei') if recent_prices else 0,
-                "max_gas_price_gwei": self._web3.from_wei(max(recent_prices), 'gwei') if recent_prices else 0,
-                "gas_price_volatility": statistics.stdev(recent_prices) / statistics.mean(recent_prices) if len(recent_prices) > 1 else 0,
-                "eip1559_supported": self._is_eip1559_supported,
-                "data_points": len(recent_prices)
-            }
-            
-            if self._is_eip1559_supported and self._base_fee_history:
-                recent_base_fees = [fee for _, fee in self._base_fee_history[-20:]]
-                recent_priority_fees = [fee for _, fee in self._priority_fee_history[-20:]]
-                
-                report.update({
-                    "current_base_fee_gwei": self._web3.from_wei(recent_base_fees[-1], 'gwei') if recent_base_fees else 0,
-                    "avg_base_fee_gwei": self._web3.from_wei(statistics.mean(recent_base_fees), 'gwei') if recent_base_fees else 0,
-                    "avg_priority_fee_gwei": self._web3.from_wei(statistics.mean(recent_priority_fees), 'gwei') if recent_priority_fees else 0,
-                })
-            
-            return report
-            
-        except Exception as e:
-            logger.error(f"Error generating gas efficiency report: {e}")
-            return {"error": str(e)}
-
     async def should_delay_transaction(self, priority_level: str = "normal") -> Tuple[bool, Optional[int]]:
         """
         Determine if transaction should be delayed due to high gas prices.
@@ -324,7 +290,10 @@ class GasOptimizer:
             return False, None
 
     def get_gas_analytics(self) -> Dict[str, Any]:
-        """Get comprehensive gas analytics for monitoring dashboard."""
+        """
+        Get comprehensive gas analytics for monitoring dashboard.
+        Consolidates efficiency reporting and basic analytics.
+        """
         analytics = {
             "gas_history_count": len(self._gas_history),
             "base_fee_history_count": len(self._base_fee_history),
@@ -333,12 +302,38 @@ class GasOptimizer:
             "last_update": self._gas_history[-1][0].isoformat() if self._gas_history else None
         }
         
-        if self._gas_history:
-            recent_prices = [price for _, price in self._gas_history[-10:]]
+        if not self._gas_history:
+            analytics["error"] = "No gas history available"
+            return analytics
+        
+        # Use recent data for analysis (last 50 data points for efficiency, last 10 for recent)
+        recent_prices = [price for _, price in self._gas_history[-50:]]
+        very_recent_prices = [price for _, price in self._gas_history[-10:]]
+        
+        if recent_prices:
+            # Consolidated analytics combining both efficiency and recent data
             analytics.update({
-                "recent_avg_gas_gwei": float(self._web3.from_wei(statistics.mean(recent_prices), 'gwei')),
-                "recent_min_gas_gwei": float(self._web3.from_wei(min(recent_prices), 'gwei')),
-                "recent_max_gas_gwei": float(self._web3.from_wei(max(recent_prices), 'gwei'))
+                "current_gas_price_gwei": float(self._web3.from_wei(recent_prices[-1], 'gwei')),
+                "avg_gas_price_gwei": float(self._web3.from_wei(statistics.mean(recent_prices), 'gwei')),
+                "min_gas_price_gwei": float(self._web3.from_wei(min(recent_prices), 'gwei')),
+                "max_gas_price_gwei": float(self._web3.from_wei(max(recent_prices), 'gwei')),
+                "recent_avg_gas_gwei": float(self._web3.from_wei(statistics.mean(very_recent_prices), 'gwei')),
+                "recent_min_gas_gwei": float(self._web3.from_wei(min(very_recent_prices), 'gwei')),
+                "recent_max_gas_gwei": float(self._web3.from_wei(max(very_recent_prices), 'gwei')),
+                "gas_price_volatility": float(statistics.stdev(recent_prices) / statistics.mean(recent_prices)) if len(recent_prices) > 1 else 0,
+                "data_points": len(recent_prices)
             })
+        
+        # Add EIP-1559 specific data if available
+        if self._is_eip1559_supported and self._base_fee_history:
+            recent_base_fees = [fee for _, fee in self._base_fee_history[-20:]]
+            recent_priority_fees = [fee for _, fee in self._priority_fee_history[-20:]]
+            
+            if recent_base_fees and recent_priority_fees:
+                analytics.update({
+                    "current_base_fee_gwei": float(self._web3.from_wei(recent_base_fees[-1], 'gwei')),
+                    "avg_base_fee_gwei": float(self._web3.from_wei(statistics.mean(recent_base_fees), 'gwei')),
+                    "avg_priority_fee_gwei": float(self._web3.from_wei(statistics.mean(recent_priority_fees), 'gwei')),
+                })
         
         return analytics

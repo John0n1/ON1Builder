@@ -12,7 +12,7 @@ def test_package_import():
     """Test that the main package can be imported."""
     try:
         import on1builder
-        assert on1builder.__version__ == "2.1.4"
+        assert on1builder.__version__ == "2.2.0"
         assert on1builder.__author__ == "john0n1"
     except ImportError as e:
         pytest.fail(f"Failed to import on1builder package: {e}")
@@ -47,9 +47,9 @@ def test_utils_import():
 
 def test_resource_files_exist():
     """Test that required resource files exist."""
-    from on1builder.utils.path_helpers import get_resources_dir
+    from on1builder.utils.path_helpers import get_resource_dir
     
-    resources_dir = get_resources_dir()
+    resources_dir = get_resource_dir()
     assert resources_dir.exists(), f"Resources directory not found: {resources_dir}"
     
     # Check for key resource files

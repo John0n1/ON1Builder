@@ -31,7 +31,8 @@ def get_resource_path(resource_type: str, filename: str) -> Path:
 def get_abi_path(abi_name: str) -> Path:
     """
     Get the absolute path to a specific ABI JSON file.
-
+    This is a convenience wrapper around get_resource_path for ABI files.
+    
     Args:
         abi_name: The base name of the ABI file (e.g., 'uniswap_v2_router').
 
@@ -64,12 +65,15 @@ def get_monitored_tokens_path() -> Path:
         settings = get_settings()
         return settings.monitored_tokens_path
     except Exception:
-        # Fallback to default path
-        return get_resource_dir() / "tokens" / "all_chains_tokens.json"
+        # Fallback to default path using the standard token path function
+        return get_token_data_path("all_chains_tokens.json")
 
 def get_token_data_path(filename: str) -> Path:
-    """Get the path to a token data file."""
-    return get_resource_dir() / "tokens" / filename
+    """
+    Get the path to a token data file.
+    This is a convenience wrapper around get_resource_path for token files.
+    """
+    return get_resource_path("tokens", filename)
 
 @lru_cache(maxsize=1)
 def get_strategy_weights_path() -> Path:
