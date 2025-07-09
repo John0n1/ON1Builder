@@ -10,7 +10,8 @@ from .custom_exceptions import (
     TransactionError,
 )
 from .logging_config import get_logger
-from .notification_service import NotificationService
+# NotificationService import disabled due to aiohttp dependency
+# from .notification_service import NotificationService
 from .path_helpers import (
     ensure_dir_exists,
     get_abi_path,
@@ -22,16 +23,17 @@ from .path_helpers import (
     get_strategy_weights_path,
     get_token_data_path,
 )
-from .gas_optimizer import GasOptimizer
-from .profit_calculator import ProfitCalculator
+# Gas optimizer and profit calculator imports disabled due to web3/aiohttp dependencies
+# from .gas_optimizer import GasOptimizer
+# from .profit_calculator import ProfitCalculator
 
 __all__ = [
     "Container",
-    "get_logger",
-    "NotificationService",
+    "get_logger", 
+    # "NotificationService",  # Disabled due to dependencies
     "StrategyExecutionError",
     "ConfigurationError",
-    "ChainConnectionError",
+    "ConnectionError",  # Note: fixed name from ChainConnectionError
     "TransactionError",
     "get_base_dir",
     "get_config_dir",
@@ -42,6 +44,6 @@ __all__ = [
     "get_strategy_weights_path",
     "get_chain_config_path",
     "ensure_dir_exists",
-    "GasOptimizer",
-    "ProfitCalculator",
+    # "GasOptimizer",      # Disabled due to dependencies
+    # "ProfitCalculator",  # Disabled due to dependencies
 ]

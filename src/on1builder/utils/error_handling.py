@@ -22,19 +22,14 @@ logger = get_logger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class ComponentInitializationError(Exception):
-    """Raised when a component fails to initialize."""
-    pass
-
-
-class ConnectionError(Exception):
-    """Raised when connection establishment fails."""
-    pass
-
+from .custom_exceptions import ConnectionError, InitializationError
 
 class RecoveryError(Exception):
     """Raised when error recovery attempts fail."""
     pass
+
+# Use ComponentInitializationError as alias to maintain compatibility
+ComponentInitializationError = InitializationError
 
 
 def with_error_handling(
@@ -76,7 +71,7 @@ def with_error_handling(
                         )
             
             if critical:
-                raise ComponentInitializationError(
+                raise InitializationError(
                     f"Critical component {component_name} failed to initialize: {last_exception}"
                 )
             
@@ -108,7 +103,7 @@ def with_error_handling(
                         )
             
             if critical:
-                raise ComponentInitializationError(
+                raise InitializationError(
                     f"Critical component {component_name} failed to initialize: {last_exception}"
                 )
             
