@@ -1,23 +1,20 @@
 # src/on1builder/utils/web3_factory.py
+from __future__ import annotations
+
 import asyncio
-from typing import Optional
+from typing import Optional, Dict
 
 from web3 import AsyncWeb3
 from web3.middleware import ExtraDataToPOAMiddleware
-from web3.providers.auto import load_provider_from_uri
 from web3.providers import AsyncHTTPProvider
 
 # Try to import websocket provider, but make it optional
 try:
-    from web3.providers.websocket import WebSocketProviderV2
+    from web3.providers import WebSocketProvider as WebSocketProviderV2
     WEBSOCKET_AVAILABLE = True
 except ImportError:
-    try:
-        from web3.providers import WebSocketProvider as WebSocketProviderV2
-        WEBSOCKET_AVAILABLE = True
-    except ImportError:
-        WebSocketProviderV2 = None
-        WEBSOCKET_AVAILABLE = False
+    WebSocketProviderV2 = None
+    WEBSOCKET_AVAILABLE = False
 
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.custom_exceptions import ConnectionError
@@ -25,173 +22,152 @@ from on1builder.utils.custom_exceptions import ConnectionError
 logger = get_logger(__name__)
 
 class Web3ConnectionFactory:
-    """A factory for creating and managing AsyncWeb3 connections."""
+    """A factory for creating and managing AsyncWeb3 connections with connection pooling."""
+
+    _connections: Dict[int, AsyncWeb3] = {}
+    _connection_lock = asyncio.Lock()
 
     @classmethod
-    async def create_connection(cls, chain_id: int) -> AsyncWeb3:
+    async def create_connection(cls, chain_id: int, force_new: bool = False) -> AsyncWeb3:
         """
-        Creates a reliable AsyncWeb3 connection for a given chain ID.
-        It tries WebSocket first, then falls back to HTTP.
-
+        Creates or returns a cached reliable AsyncWeb3 connection for a given chain ID.
+        
         Args:
-            chain_id: The ID of the chain to connect to.
-
+            chain_id: The ID of the chain to connect to
+            force_new: If True, creates a new connection even if one is cached
+            
         Returns:
-            A configured and connected AsyncWeb3 instance.
+            A configured and connected AsyncWeb3 instance
             
         Raises:
-            ConnectionError: If a connection cannot be established.
+            ConnectionError: If a connection cannot be established
         """
+        # Return cached connection if available and not forcing new
+        if not force_new and chain_id in cls._connections:
+            web3 = cls._connections[chain_id]
+            if await cls._test_connection(web3):
+                logger.debug(f"Using cached Web3 connection for chain {chain_id}")
+                return web3
+            else:
+                logger.warning(f"Cached connection for chain {chain_id} is stale, creating new")
+                del cls._connections[chain_id]
+
+        async with cls._connection_lock:
+            # Double-check after acquiring lock
+            if not force_new and chain_id in cls._connections:
+                web3 = cls._connections[chain_id]
+                if await cls._test_connection(web3):
+                    return web3
+                del cls._connections[chain_id]
+
+            logger.info(f"Creating new Web3 connection for chain {chain_id}")
+            web3 = await cls._create_new_connection(chain_id)
+            cls._connections[chain_id] = web3
+            return web3
+
+    @classmethod
+    async def _create_new_connection(cls, chain_id: int) -> AsyncWeb3:
+        """Create a new Web3 connection with fallback logic."""
         from on1builder.config.loaders import get_settings
         settings = get_settings()
-        
-        logger.info(f"Creating Web3 connection for chain ID: {chain_id}...")
 
-        # Try WebSocket connection first if available, but with limited retries
+        # Try WebSocket first if available
         ws_url = settings.websocket_urls.get(chain_id)
         if ws_url and WEBSOCKET_AVAILABLE:
-            connection = await cls._try_connect_with_limited_retries(
-                chain_id,
-                ws_url,
-                "WebSocket",
-                lambda url: WebSocketProviderV2(url),
-                max_attempts=1  # Only try WebSocket once before falling back
-            )
-            if connection:
-                return connection
-        elif ws_url and not WEBSOCKET_AVAILABLE:
-            logger.warning("WebSocket URL configured but WebSocket provider not available. Falling back to HTTP.")
+            try:
+                web3 = await cls._create_websocket_connection(chain_id, ws_url)
+                if web3 and await cls._test_connection(web3):
+                    logger.info(f"WebSocket connection established for chain {chain_id}")
+                    return web3
+            except Exception as e:
+                logger.warning(f"WebSocket connection failed for chain {chain_id}: {e}")
 
-        # Fallback to HTTP connection
+        # Fallback to HTTP
         http_url = settings.rpc_urls.get(chain_id)
-        if http_url:
-            connection = await cls._try_connect(
-                chain_id,
-                http_url,
-                "HTTP",
-                lambda url: AsyncHTTPProvider(url)
+        if not http_url:
+            raise ConnectionError(f"No RPC URL configured for chain {chain_id}", chain_id=chain_id)
+
+        try:
+            web3 = await cls._create_http_connection(chain_id, http_url)
+            if web3 and await cls._test_connection(web3):
+                logger.info(f"HTTP connection established for chain {chain_id}")
+                return web3
+        except Exception as e:
+            raise ConnectionError(
+                f"Failed to establish connection to chain {chain_id}",
+                endpoint=http_url,
+                chain_id=chain_id,
+                cause=e
             )
-            if connection:
-                return connection
-        
-        raise ConnectionError(f"Failed to establish any Web3 connection for chain ID: {chain_id}")
+
+        raise ConnectionError(f"All connection attempts failed for chain {chain_id}", chain_id=chain_id)
 
     @classmethod
-    async def _try_connect_with_limited_retries(
-        cls,
-        chain_id: int,
-        url: str,
-        provider_type: str,
-        provider_factory,
-        max_attempts: int = 1
-    ) -> Optional[AsyncWeb3]:
-        """
-        Attempts to connect using a specific provider, with limited retries.
-        Used for WebSocket connections to fail fast and fallback to HTTP.
-        """
+    async def _create_websocket_connection(cls, chain_id: int, ws_url: str) -> Optional[AsyncWeb3]:
+        """Create a WebSocket connection."""
+        if not WEBSOCKET_AVAILABLE:
+            return None
+            
+        try:
+            provider = WebSocketProviderV2(ws_url)
+            web3 = AsyncWeb3(provider)
+            cls._configure_web3_instance(web3, chain_id)
+            return web3
+        except Exception as e:
+            logger.debug(f"WebSocket connection creation failed: {e}")
+            return None
+
+    @classmethod
+    async def _create_http_connection(cls, chain_id: int, http_url: str) -> AsyncWeb3:
+        """Create an HTTP connection."""
+        provider = AsyncHTTPProvider(http_url)
+        web3 = AsyncWeb3(provider)
+        cls._configure_web3_instance(web3, chain_id)
+        return web3
+
+    @classmethod
+    def _configure_web3_instance(cls, web3: AsyncWeb3, chain_id: int) -> None:
+        """Configure a Web3 instance with necessary middleware."""
         from on1builder.config.loaders import get_settings
         settings = get_settings()
         
-        for attempt in range(1, max_attempts + 1):
-            try:
-                logger.debug(f"Attempt {attempt}: Connecting to {provider_type} endpoint for chain {chain_id} at {url}")
-                provider = provider_factory(url)
-                web3 = AsyncWeb3(provider)
-                
-                # Verify connection and chain ID
-                if not await web3.is_connected():
-                    raise ConnectionError("Provider reports not connected.")
-                
-                actual_chain_id = await web3.eth.chain_id
-                if actual_chain_id != chain_id:
-                    logger.warning(
-                        f"Chain ID mismatch for {url}! "
-                        f"Expected: {chain_id}, Got: {actual_chain_id}. "
-                        "Proceeding, but this may cause issues."
-                    )
-                
-                # Apply PoA middleware if necessary
-                if chain_id in settings.poa_chains:
-                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(f"Applied PoA middleware for PoA chain ID: {chain_id}")
-
-                logger.info(f"Successfully connected to {provider_type} for chain ID {chain_id}.")
-                return web3
-
-            except Exception as e:
-                logger.warning(
-                    f"Failed to connect to {provider_type} for chain {chain_id} (Attempt {attempt}/{max_attempts}): {e}"
-                )
-                if attempt < max_attempts:
-                    await asyncio.sleep(min(settings.connection_retry_delay, 2))  # Shorter delay for fast fallback
-                else:
-                    logger.info(f"Fast-failing {provider_type} for chain {chain_id} to allow HTTP fallback.")
-                    return None
-        return None
+        # Add PoA middleware for PoA chains
+        if chain_id in settings.poa_chains:
+            web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            logger.debug(f"PoA middleware added for chain {chain_id}")
 
     @classmethod
-    async def _try_connect(
-        cls,
-        chain_id: int,
-        url: str,
-        provider_type: str,
-        provider_factory
-    ) -> Optional[AsyncWeb3]:
-        """
-        Attempts to connect using a specific provider, with retries.
-        """
-        from on1builder.config.loaders import get_settings
-        settings = get_settings()
-        
-        for attempt in range(1, settings.connection_retry_count + 1):
-            try:
-                logger.debug(f"Attempt {attempt}: Connecting to {provider_type} endpoint for chain {chain_id} at {url}")
-                provider = provider_factory(url)
-                web3 = AsyncWeb3(provider)
-                
-                # Verify connection and chain ID
-                if not await web3.is_connected():
-                    raise ConnectionError("Provider reports not connected.")
-                
-                actual_chain_id = await web3.eth.chain_id
-                if actual_chain_id != chain_id:
-                    logger.warning(
-                        f"Chain ID mismatch for {url}! "
-                        f"Expected: {chain_id}, Got: {actual_chain_id}. "
-                        "Proceeding, but this may cause issues."
-                    )
-                
-                # Apply PoA middleware if necessary
-                if chain_id in settings.poa_chains:
-                    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-                    logger.info(f"Applied PoA middleware for PoA chain ID: {chain_id}")
+    async def _test_connection(cls, web3: AsyncWeb3) -> bool:
+        """Test if a Web3 connection is working."""
+        try:
+            await asyncio.wait_for(web3.eth.get_block('latest'), timeout=5.0)
+            return True
+        except Exception:
+            return False
 
-                logger.info(f"Successfully connected to {provider_type} for chain ID {chain_id}.")
-                return web3
+    @classmethod
+    async def close_all_connections(cls) -> None:
+        """Close all cached connections."""
+        async with cls._connection_lock:
+            for chain_id, web3 in cls._connections.items():
+                try:
+                    if hasattr(web3.provider, 'disconnect'):
+                        await web3.provider.disconnect()
+                    logger.debug(f"Closed connection for chain {chain_id}")
+                except Exception as e:
+                    logger.warning(f"Error closing connection for chain {chain_id}: {e}")
+            cls._connections.clear()
 
-            except Exception as e:
-                logger.warning(
-                    f"Failed to connect to {provider_type} for chain {chain_id} (Attempt {attempt}/{settings.connection_retry_count}): {e}"
-                )
-                if attempt < settings.connection_retry_count:
-                    await asyncio.sleep(settings.connection_retry_delay)
-                else:
-                    logger.error(f"All connection attempts to {provider_type} for chain {chain_id} failed.")
-                    return None
-        return None
 
 # Convenience function for backward compatibility
 async def create_web3_instance(chain_id: int) -> AsyncWeb3:
     """
-    Creates an AsyncWeb3 instance for the specified chain ID.
+    Create a Web3 instance for the given chain ID.
     
     Args:
-        chain_id: The chain ID to connect to.
+        chain_id: The chain ID to create a connection for
         
     Returns:
-        An initialized AsyncWeb3 instance.
-        
-    Raises:
-        ConnectionError: If a connection cannot be established.
+        Configured AsyncWeb3 instance
     """
     return await Web3ConnectionFactory.create_connection(chain_id)

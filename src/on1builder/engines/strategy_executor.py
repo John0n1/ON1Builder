@@ -5,7 +5,7 @@ import json
 import random
 import time
 from decimal import Decimal
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 

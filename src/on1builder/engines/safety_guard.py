@@ -2,14 +2,12 @@
 from __future__ import annotations
 
 import time
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 from web3 import AsyncWeb3
 from web3.types import TxParams
 
 from on1builder.config.loaders import settings
-from on1builder.utils.custom_exceptions import InsufficientFundsError
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.notification_service import NotificationService
 
@@ -21,12 +19,30 @@ class SafetyGuard:
     and adaptive circuit breaking.
     """
     
+    # Safety check configuration
+    SAFETY_CHECKS = [
+        ("balance", "_check_balance"),
+        ("gas_price", "_check_gas_price"),
+        ("gas_limit", "_check_gas_limit"),
+        ("duplicate", "_check_duplicate_tx"),
+        ("rate_limit", "_check_rate_limits"),
+        ("profit_viability", "_check_profit_viability"),
+        ("market_conditions", "_check_market_conditions")
+    ]
+    
+    # Balance tier thresholds for dynamic risk management
+    BALANCE_TIER_RESERVES = {
+        'emergency': 0.005,  # Very small reserve in emergency
+        'low': 0.01,         # Small reserve for low balance
+        'normal': None       # Use configured minimum
+    }
+    
     def __init__(self, web3: AsyncWeb3):
         self._web3 = web3
         self._notification_service = NotificationService()
         self._settings = settings
         
-        # Transaction tracking
+        # Transaction tracking with efficient storage
         self._recent_tx_signatures = set()
         self._last_clear_time = time.time()
         
@@ -50,7 +66,8 @@ class SafetyGuard:
             "failed_balance_checks": 0,
             "failed_gas_checks": 0,
             "failed_duplicate_checks": 0,
-            "circuit_breaks": 0
+            "circuit_breaks": 0,
+            "check_distribution": {check_name: 0 for check_name, _ in self.SAFETY_CHECKS}
         }
         
         logger.info("Enhanced SafetyGuard initialized with advanced risk management.")
@@ -79,19 +96,12 @@ class SafetyGuard:
         # Reset hourly gas tracking if needed
         self._reset_hourly_gas_if_needed()
 
-        # Run all safety checks
-        checks = [
-            ("balance", self._check_balance),
-            ("gas_price", self._check_gas_price),
-            ("gas_limit", self._check_gas_limit),
-            ("duplicate", self._check_duplicate_tx),
-            ("rate_limit", self._check_rate_limits),
-            ("profit_viability", self._check_profit_viability),
-            ("market_conditions", self._check_market_conditions)
-        ]
-
-        for check_name, check_func in checks:
+        # Run all safety checks efficiently
+        for check_name, check_method in self.SAFETY_CHECKS:
+            self._safety_stats["check_distribution"][check_name] += 1
+            
             try:
+                check_func = getattr(self, check_method)
                 is_safe, reason = await check_func(tx_params)
                 if not is_safe:
                     self._record_failed_check(check_name)
@@ -123,12 +133,7 @@ class SafetyGuard:
             total_required_eth = float(self._web3.from_wei(total_required, "ether"))
             
             # Dynamic minimum balance based on current balance tier
-            if balance_eth <= self._settings.emergency_balance_threshold:
-                min_reserve = 0.005  # Very small reserve in emergency
-            elif balance_eth <= self._settings.low_balance_threshold:
-                min_reserve = 0.01   # Small reserve for low balance
-            else:
-                min_reserve = self._settings.min_wallet_balance
+            min_reserve = self._get_dynamic_reserve(balance_eth)
             
             if balance_eth < total_required_eth + min_reserve:
                 return False, f"Insufficient balance. Required: {total_required_eth + min_reserve:.6f} ETH, Available: {balance_eth:.6f} ETH"
@@ -142,6 +147,15 @@ class SafetyGuard:
         except Exception as e:
             logger.error(f"Balance check failed: {e}")
             return False, "Error during balance check."
+    
+    def _get_dynamic_reserve(self, balance_eth: float) -> float:
+        """Get dynamic reserve based on balance tier."""
+        if balance_eth <= self._settings.emergency_balance_threshold:
+            return self.BALANCE_TIER_RESERVES['emergency']
+        elif balance_eth <= self._settings.low_balance_threshold:
+            return self.BALANCE_TIER_RESERVES['low']
+        else:
+            return self._settings.min_wallet_balance
 
     async def _check_gas_price(self, tx_params: TxParams) -> Tuple[bool, str]:
         """Enhanced gas price validation with market awareness."""
@@ -331,13 +345,27 @@ class SafetyGuard:
             )
 
     def _auto_reset_circuit_breaker(self):
-        """Automatically reset circuit breaker after delay."""
-        if self._circuit_broken:
-            self._circuit_broken = False
-            self._circuit_break_reason = ""
-            self._failed_tx_count = 0  # Reset failure counter
+        """Automatically reset circuit breaker and clear stats."""
+        logger.info("Circuit breaker auto-reset triggered")
+        self._circuit_broken = False
+        self._circuit_break_reason = ""
+        self._circuit_break_time = 0
+        self._failed_tx_count = 0
+        
+        # Clean recent transaction signatures periodically
+        if len(self._recent_tx_signatures) > 1000:
+            # Keep only the most recent half
+            signatures_list = list(self._recent_tx_signatures)
+            self._recent_tx_signatures = set(signatures_list[-500:])
             
-            logger.info("Circuit breaker auto-reset. Operations can resume.")
+        # Send notification
+        try:
+            self._notification_service.send_message(
+                "SafetyGuard circuit breaker has been automatically reset",
+                level="INFO"
+            )
+        except Exception as e:
+            logger.debug(f"Failed to send circuit breaker reset notification: {e}")
 
     def reset_circuit_breaker(self):
         """Manually reset the circuit breaker."""
@@ -362,4 +390,22 @@ class SafetyGuard:
             "gas_spent_last_hour": self._gas_spent_last_hour,
             "hourly_gas_limit": self._hourly_gas_limit,
             "auto_reset_delay_minutes": self._auto_reset_delay / 60
+        }
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get comprehensive performance statistics for monitoring."""
+        total_checks = max(self._safety_stats["total_checks"], 1)
+        
+        return {
+            "total_checks": self._safety_stats["total_checks"],
+            "passed_checks": self._safety_stats["passed_checks"],
+            "failed_checks": total_checks - self._safety_stats["passed_checks"],
+            "success_rate": (self._safety_stats["passed_checks"] / total_checks) * 100,
+            "circuit_breaks": self._safety_stats["circuit_breaks"],
+            "check_distribution": self._safety_stats["check_distribution"].copy(),
+            "current_gas_spent_hour": self._gas_spent_last_hour,
+            "hourly_gas_limit": self._hourly_gas_limit,
+            "failed_tx_count": self._failed_tx_count,
+            "is_circuit_broken": self._circuit_broken,
+            "recent_tx_cache_size": len(self._recent_tx_signatures)
         }

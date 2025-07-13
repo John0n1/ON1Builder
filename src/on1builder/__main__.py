@@ -7,7 +7,7 @@ import sys
 from on1builder.cli.config_cmd import app as config_app
 from on1builder.cli.run_cmd import app as run_app
 from on1builder.cli.status_cmd import app as status_app
-from on1builder.utils.logging_config import get_logger, setup_logging
+from on1builder.utils.logging_config import get_logger
 
 app = typer.Typer(
     name="on1builder",

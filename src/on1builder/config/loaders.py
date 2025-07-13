@@ -1,10 +1,12 @@
 # src/on1builder/config/loaders.py
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 from dotenv import load_dotenv
-from pydantic import Field
+from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .settings import (
@@ -15,10 +17,11 @@ from .settings import (
     DatabaseSettings
 )
 from ..utils.logging_config import get_logger
+from ..utils.custom_exceptions import ConfigurationError
 
 logger = get_logger(__name__)
 
-def find_dotenv() -> Path | None:
+def find_dotenv() -> Optional[Path]:
     """Find the .env file by searching upwards from the current file."""
     current_dir = Path(__file__).resolve().parent
     for _ in range(5):  # Search up to 5 levels
@@ -40,21 +43,26 @@ class _EnvSettings(BaseSettings):
         extra='allow'
     )
 
-    # Re-declare all fields from GlobalSettings and its nested models
-    # to ensure they are picked up from the environment by pydantic-settings.
+    # Required fields
+    wallet_key: str = Field(..., description="Private key for the wallet (required)")
+    wallet_address: str = Field(..., description="Wallet address (required)")
+    
+    # Core settings with defaults
     debug: bool = False
-    base_path: Path = Path.cwd()
-    wallet_key: str
-    wallet_address: str
+    base_path: Path = Field(default_factory=Path.cwd)
     profit_receiver_address: Optional[str] = None
     chains: str = "1"
     poa_chains: str = ""
+    
+    # Transaction settings
     transaction_retry_count: int = 3
     transaction_retry_delay: float = 2.0
     max_gas_price_gwei: int = 200
     gas_price_multiplier: float = 1.1
     default_gas_limit: int = 500000
     fallback_gas_price_gwei: int = 50
+    
+    # Balance and profit settings
     min_wallet_balance: float = 0.05
     min_profit_eth: float = 0.005
     min_profit_percentage: float = 0.1
@@ -233,9 +241,12 @@ def load_settings() -> GlobalSettings:
         global_settings = GlobalSettings(**final_config_data)
         logger.info("Configuration loaded and validated successfully.")
         return global_settings
+    except ValidationError as ve:
+        logger.error(f"Configuration validation error: {ve.errors()}")
+        raise ConfigurationError("Configuration validation failed. See logs for details.") from ve
     except Exception as e:
         logger.critical(f"Failed to create GlobalSettings: {e}", exc_info=True)
-        raise ValueError(f"Configuration validation failed: {e}") from e
+        raise ConfigurationError(f"Configuration validation failed: {e}") from e
 
 # Global instance of the settings - lazy loaded
 _settings: Optional[GlobalSettings] = None

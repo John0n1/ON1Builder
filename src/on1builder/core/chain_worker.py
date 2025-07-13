@@ -17,6 +17,7 @@ from on1builder.monitoring.market_data_feed import MarketDataFeed
 from on1builder.monitoring.txpool_scanner import TxPoolScanner
 from on1builder.utils.custom_exceptions import InitializationError
 from on1builder.utils.logging_config import get_logger
+from on1builder.utils.memory_optimizer import get_memory_optimizer
 from on1builder.utils.web3_factory import Web3ConnectionFactory
 
 logger = get_logger(__name__)
@@ -45,14 +46,19 @@ class ChainWorker:
         self.safety_guard: Optional[SafetyGuard] = None
         self.nonce_manager: Optional[NonceManager] = None
         
-        # Performance tracking
+        # Performance tracking with enhanced metrics
         self._performance_stats = {
             "opportunities_detected": 0,
             "opportunities_executed": 0,
             "total_profit_eth": 0.0,
-            "uptime_seconds": 0
+            "uptime_seconds": 0,
+            "memory_cleanups": 0,
+            "balance_updates": 0,
+            "error_count": 0,
+            "last_heartbeat": 0
         }
         self._start_time = 0
+        self._memory_optimizer = get_memory_optimizer()
         
         logger.info(f"Enhanced ChainWorker created for chain ID: {self.chain_id}")
 
@@ -110,6 +116,9 @@ class ChainWorker:
                 web3=self.web3,
                 strategy_executor=self.strategy_executor
             )
+            
+            # Register memory cleanup callbacks
+            self._memory_optimizer.register_cleanup_callback(self._cleanup_worker_caches)
             
             logger.info(f"[Chain {self.chain_id}] Enhanced worker initialized successfully.")
             logger.info(f"[Chain {self.chain_id}] Balance tier: {balance_summary['balance_tier']}, "
@@ -170,6 +179,35 @@ class ChainWorker:
 
         logger.info(f"[Chain {self.chain_id}] Enhanced worker stopped.")
         
+    def _cleanup_worker_caches(self) -> None:
+        """Memory cleanup callback for worker-specific caches."""
+        try:
+            cleanup_count = 0
+            
+            # Clean transaction scanner caches
+            if self.tx_scanner:
+                cache_stats = self.tx_scanner.get_cache_stats()
+                if cache_stats['tx_analysis_cache_size'] > 500:
+                    # Force cache cleanup in scanner
+                    self.tx_scanner._manage_cache_size()
+                    cleanup_count += 1
+            
+            # Clean transaction manager caches
+            if self.tx_manager:
+                # Transaction manager specific cleanup can be added here
+                pass
+            
+            # Clean strategy executor memory
+            if self.strategy_executor:
+                # Strategy executor specific cleanup can be added here
+                pass
+            
+            self._performance_stats["memory_cleanups"] += cleanup_count
+            logger.debug(f"[Chain {self.chain_id}] Worker cache cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"[Chain {self.chain_id}] Error in worker cache cleanup: {e}")
+
     async def _enhanced_heartbeat(self):
         """Enhanced heartbeat with comprehensive status reporting."""
         while self.is_running:
@@ -177,11 +215,15 @@ class ChainWorker:
                 # Update performance stats
                 current_time = asyncio.get_event_loop().time()
                 self._performance_stats["uptime_seconds"] = int(current_time - self._start_time)
+                self._performance_stats["last_heartbeat"] = current_time
                 
                 # Get comprehensive status
                 balance_summary = await self.balance_manager.get_balance_summary()
                 tx_manager_stats = await self.tx_manager.get_performance_stats()
                 strategy_report = await self.strategy_executor.get_strategy_report()
+                
+                # Get memory metrics
+                memory_metrics = self._memory_optimizer.get_current_metrics()
                 
                 logger.info(
                     f"[Chain {self.chain_id} Enhanced Heartbeat] "
@@ -190,7 +232,8 @@ class ChainWorker:
                     f"Pending TXs: {self.tx_scanner.get_pending_tx_count()} | "
                     f"Success Rate: {tx_manager_stats['success_rate_percentage']:.1f}% | "
                     f"Net Profit: {tx_manager_stats['net_profit_eth']:.6f} ETH | "
-                    f"Opportunities: {self._performance_stats['opportunities_detected']}"
+                    f"Opportunities: {self._performance_stats['opportunities_detected']} | "
+                    f"Memory: {memory_metrics.process_memory_mb:.1f}MB"
                 )
                 
                 # Emergency balance warning
@@ -202,6 +245,7 @@ class ChainWorker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
+                self._performance_stats["error_count"] += 1
                 logger.error(f"[Chain {self.chain_id} Enhanced Heartbeat] Error: {e}")
                 await asyncio.sleep(settings.heartbeat_interval)
 
@@ -218,6 +262,7 @@ class ChainWorker:
                 balance_change = new_summary["balance"] - old_summary["balance"]
                 if abs(balance_change) > 0.001:  # More than 0.001 ETH change
                     logger.info(f"[Chain {self.chain_id}] Balance change: {balance_change:+.6f} ETH")
+                    self._performance_stats["balance_updates"] += 1
                 
                 # Emergency stop if balance too low
                 if new_summary["emergency_mode"] and old_summary["balance_tier"] != "emergency":

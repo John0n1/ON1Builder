@@ -7,6 +7,10 @@ from typing import Dict, List, Optional, Any
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
+from ..utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class APISettings(BaseModel):
     """Configuration for external APIs."""
@@ -87,10 +91,85 @@ class GlobalSettings(BaseModel):
     poa_chains: List[int] = Field(default_factory=list)
 
     @field_validator('chains', 'poa_chains', mode='before')
+    @classmethod
     def split_chain_ids(cls, v):
+        """Split comma-separated chain IDs and validate them."""
         if isinstance(v, str):
-            return [int(item.strip()) for item in v.split(',') if item.strip().isdigit()]
+            chain_ids = [int(item.strip()) for item in v.split(',') if item.strip().isdigit()]
+            if not chain_ids and v.strip():
+                raise ValueError(f"No valid chain IDs found in: {v}")
+            return chain_ids
         return v
+
+    @field_validator('wallet_address', mode='after')
+    @classmethod
+    def validate_wallet_address(cls, v):
+        """Validate wallet address format using the validation framework."""
+        from .validation import ConfigValidator
+        return ConfigValidator.validate_wallet_address(v)
+
+    @field_validator('wallet_key', mode='after')
+    @classmethod
+    def validate_wallet_key(cls, v):
+        """Validate private key format using the validation framework."""
+        from .validation import ConfigValidator
+        return ConfigValidator.validate_private_key(v)
+
+    @field_validator('chains', 'poa_chains', mode='after')
+    @classmethod
+    def validate_chain_list(cls, v):
+        """Validate chain IDs using the validation framework."""
+        if v:  # Only validate if not empty
+            from .validation import ConfigValidator
+            return ConfigValidator.validate_chain_ids(v)
+        return v
+
+    @model_validator(mode='after')
+    def validate_balance_thresholds(self):
+        """Validate balance threshold ordering using the validation framework."""
+        from .validation import ConfigValidator
+        ConfigValidator.validate_balance_thresholds(
+            self.emergency_balance_threshold,
+            self.low_balance_threshold, 
+            self.high_balance_threshold
+        )
+        return self
+
+    @model_validator(mode='after')
+    def validate_gas_settings(self):
+        """Validate gas-related settings using the validation framework."""
+        from .validation import ConfigValidator
+        ConfigValidator.validate_gas_settings(
+            self.max_gas_price_gwei,
+            self.gas_price_multiplier,
+            self.default_gas_limit
+        )
+        return self
+
+    @model_validator(mode='after')
+    def validate_complete_settings(self):
+        """Perform complete validation using the validation framework."""
+        try:
+            from .validation import validate_complete_config
+            
+            # Convert to dict for validation
+            config_dict = self.model_dump()
+            
+            # Validate complete configuration
+            validated_config = validate_complete_config(config_dict)
+            
+            # Update any normalized values
+            for key, value in validated_config.items():
+                if hasattr(self, key) and getattr(self, key) != value:
+                    setattr(self, key, value)
+                    
+        except ImportError:
+            # Validation module not available, skip enhanced validation
+            pass
+        except Exception as e:
+            logger.warning(f"Enhanced validation failed: {e}")
+            
+        return self
 
     # RPC Endpoints (will be populated by the loader)
     rpc_urls: Dict[int, str] = Field(default_factory=dict)

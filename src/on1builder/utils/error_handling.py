@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-from .custom_exceptions import ConnectionError, InitializationError
+from .custom_exceptions import InitializationError
 
 class RecoveryError(Exception):
     """Raised when error recovery attempts fail."""

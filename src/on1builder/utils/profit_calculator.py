@@ -375,7 +375,7 @@ class ProfitCalculator:
                     ]
                     
                     token_contract = self._web3.eth.contract(
-                        address=Web3.to_checksum_address(token_address),
+                        address=self._web3.to_checksum_address(token_address),
                         abi=erc20_abi
                     )
                     

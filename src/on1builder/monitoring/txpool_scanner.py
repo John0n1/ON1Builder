@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 from datetime import datetime, timedelta
 import re
 
@@ -14,27 +14,77 @@ from on1builder.config.loaders import settings
 from on1builder.engines.strategy_executor import StrategyExecutor
 from on1builder.integrations.abi_registry import ABIRegistry
 from on1builder.utils.logging_config import get_logger
+from on1builder.utils.constants import DEX_ROUTER_IDENTIFIERS, TXPOOL_SCAN_INTERVAL
 
 logger = get_logger(__name__)
 
 class TxPoolScanner:
     """Enhanced transaction pool scanner with sophisticated MEV opportunity detection."""
     
-    def __init__(self, web3: AsyncWeb3, strategy_executor: StrategyExecutor):
+    # MEV pattern detection
+    MEV_PATTERNS = {
+        'sandwich_attack': re.compile(r'swapExactTokensForTokens|swapTokensForExactTokens', re.IGNORECASE),
+        'arbitrage': re.compile(r'multicall|batchSwap', re.IGNORECASE),
+        'liquidation': re.compile(r'liquidate|seize', re.IGNORECASE),
+        'flash_loan': re.compile(r'flashLoan|flashSwap', re.IGNORECASE)
+    }
+    
+    # Cache management constants
+    MAX_TX_CACHE_SIZE = 1000
+    MAX_OPPORTUNITY_CACHE_SIZE = 500
+    CACHE_CLEANUP_THRESHOLD = 0.8
+    
+    def __init__(self, web3: AsyncWeb3, strategy_executor: StrategyExecutor, chain_id: int):
         self._web3 = web3
         self._strategy_executor = strategy_executor
+        self._chain_id = chain_id
         self._abi_registry = ABIRegistry()
         self._is_running = False
         self._scan_task: Optional[asyncio.Task] = None
+        
+        # Build chain-specific DEX router mapping
+        self._dex_routers = self._build_dex_router_mapping()
+        # Initialize cached data
         self._monitored_addresses: Set[str] = self._get_all_monitored_addresses()
+        self._large_trader_addresses: Set[str] = set()
+        
+        # Performance tracking
         self._pending_tx_count = 0
-        self._opportunity_cache: Dict[str, Dict] = {}
+        self._processed_tx_count = 0
+        self._opportunity_count = 0
+        
+        # Enhanced caching with size management
         self._tx_analysis_cache: Dict[str, Dict] = {}
-        self._dex_router_addresses = self._load_dex_addresses()
-        self._large_trader_addresses = set()
-        self._mev_patterns = self._compile_mev_patterns()
+        self._opportunity_cache: Dict[str, Dict] = {}
+        self._cache_access_times: Dict[str, datetime] = {}
         
         logger.info(f"Enhanced TxPoolScanner initialized. Monitoring {len(self._monitored_addresses)} addresses.")
+
+    def _build_dex_router_mapping(self) -> Dict[str, str]:
+        """Build chain-specific DEX router address mapping."""
+        dex_routers = {}
+        
+        # Get chain-specific router addresses from settings
+        for dex_name, default_address in DEX_ROUTER_IDENTIFIERS.items():
+            # Try to get chain-specific address from settings
+            try:
+                router_addresses = getattr(settings.contracts, f"{dex_name}_router", {})
+                chain_address = router_addresses.get(str(self._chain_id))
+                
+                if chain_address:
+                    dex_routers[chain_address.lower()] = dex_name
+                else:
+                    # Fallback to default address for major chains
+                    if self._chain_id in [1, 5]:  # Ethereum mainnet and Goerli
+                        dex_routers[default_address.lower()] = dex_name
+                        
+            except AttributeError:
+                # If settings don't have this router, skip it
+                logger.debug(f"No configuration found for {dex_name} on chain {self._chain_id}")
+                continue
+        
+        logger.info(f"Built DEX router mapping for chain {self._chain_id}: {len(dex_routers)} routers")
+        return dex_routers
 
     def _get_all_monitored_addresses(self) -> Set[str]:
         """Gathers all unique token addresses to monitor across all configured chains."""
@@ -44,29 +94,29 @@ class TxPoolScanner:
             addresses.update(addr.lower() for addr in token_map.values())
         return addresses
 
-    def _load_dex_addresses(self) -> Dict[str, str]:
-        """Loads known DEX router addresses for transaction analysis."""
-        return {
-            # Uniswap V2 Router
-            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": "uniswap_v2",
-            # Uniswap V3 Router  
-            "0xe592427a0aece92de3edee1f18e0157c05861564": "uniswap_v3",
-            # SushiSwap Router
-            "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f": "sushiswap",
-            # 1inch Router
-            "0x1111111254fb6c44bac0bed2854e76f90643097d": "1inch",
-            # Pancakeswap (BSC)
-            "0x10ed43c718714eb63d5aa57b78b54704e256024e": "pancakeswap"
-        }
-
-    def _compile_mev_patterns(self) -> Dict[str, re.Pattern]:
-        """Compiles regex patterns for MEV detection."""
-        return {
-            'sandwich_attack': re.compile(r'swapExactTokensForTokens|swapTokensForExactTokens', re.IGNORECASE),
-            'arbitrage': re.compile(r'multicall|batchSwap', re.IGNORECASE),
-            'liquidation': re.compile(r'liquidate|seize', re.IGNORECASE),
-            'flash_loan': re.compile(r'flashLoan|flashSwap', re.IGNORECASE)
-        }
+    def _manage_cache_size(self) -> None:
+        """Efficiently manage cache sizes to prevent memory bloat."""
+        current_time = datetime.now()
+        
+        # Clean tx analysis cache
+        if len(self._tx_analysis_cache) > int(self.MAX_TX_CACHE_SIZE * self.CACHE_CLEANUP_THRESHOLD):
+            # Remove oldest 20% of entries
+            removal_count = len(self._tx_analysis_cache) // 5
+            oldest_keys = sorted(
+                self._cache_access_times.keys(),
+                key=lambda k: self._cache_access_times.get(k, current_time)
+            )[:removal_count]
+            
+            for key in oldest_keys:
+                self._tx_analysis_cache.pop(key, None)
+                self._cache_access_times.pop(key, None)
+        
+        # Clean opportunity cache
+        if len(self._opportunity_cache) > int(self.MAX_OPPORTUNITY_CACHE_SIZE * self.CACHE_CLEANUP_THRESHOLD):
+            removal_count = len(self._opportunity_cache) // 5
+            oldest_opportunities = list(self._opportunity_cache.keys())[:removal_count]
+            for key in oldest_opportunities:
+                self._opportunity_cache.pop(key, None)
 
     async def start(self):
         if self._is_running:
@@ -171,24 +221,35 @@ class TxPoolScanner:
     async def _process_tx_hash(self, tx_hash: str):
         """Enhanced transaction processing with comprehensive MEV analysis."""
         try:
-            tx = await self._web3.eth.get_transaction(tx_hash)
-            if not tx:
-                return
+            # Check cache first
+            if tx_hash in self._tx_analysis_cache:
+                self._cache_access_times[tx_hash] = datetime.now()
+                tx_analysis = self._tx_analysis_cache[tx_hash]
+                tx = None  # Don't need full tx data if cached
+            else:
+                tx = await self._web3.eth.get_transaction(tx_hash)
+                if not tx:
+                    return
+                    
+                # Perform analysis
+                tx_analysis = self._analyze_transaction_comprehensive(tx)
                 
-            # Cache transaction for analysis
-            tx_analysis = self._analyze_transaction_comprehensive(tx)
-            self._tx_analysis_cache[tx_hash] = tx_analysis
+                # Cache with access time tracking
+                self._tx_analysis_cache[tx_hash] = tx_analysis
+                self._cache_access_times[tx_hash] = datetime.now()
+                
+                # Manage cache size efficiently
+                if len(self._tx_analysis_cache) > self.MAX_TX_CACHE_SIZE:
+                    self._manage_cache_size()
             
-            # Clean old cache entries
-            if len(self._tx_analysis_cache) > 1000:
-                old_hashes = list(self._tx_analysis_cache.keys())[:200]
-                for old_hash in old_hashes:
-                    del self._tx_analysis_cache[old_hash]
+            self._processed_tx_count += 1
             
-            if self._is_relevant_for_mev(tx, tx_analysis):
+            if self._is_relevant_for_mev(tx_analysis):
                 logger.info(f"MEV-relevant transaction detected: {tx_hash}")
-                opportunities = await self._analyze_for_opportunities(tx, tx_analysis)
+                opportunities = await self._analyze_for_opportunities(tx_analysis)
+                
                 for opportunity in opportunities:
+                    self._opportunity_count += 1
                     await self._strategy_executor.execute_opportunity(opportunity)
                     
         except Exception as e:
@@ -211,14 +272,14 @@ class TxPoolScanner:
             'risk_score': 0.0
         }
         
-        # Analyze target address
+        # Analyze target address efficiently
         to_address = tx.get('to', '').lower() if tx.get('to') else ''
-        if to_address in self._dex_router_addresses:
-            analysis['target_dex'] = self._dex_router_addresses[to_address]
+        if to_address in self._dex_routers:
+            analysis['target_dex'] = self._dex_routers[to_address]
         
         # Detect MEV patterns in input data
         input_data = analysis['input_data']
-        for mev_type, pattern in self._mev_patterns.items():
+        for mev_type, pattern in self.MEV_PATTERNS.items():
             if pattern.search(input_data):
                 analysis['mev_type'] = mev_type
                 break
@@ -230,10 +291,10 @@ class TxPoolScanner:
         
         return analysis
 
-    def _is_relevant_for_mev(self, tx: TxData, analysis: Dict[str, Any]) -> bool:
+    def _is_relevant_for_mev(self, analysis: Dict[str, Any]) -> bool:
         """Enhanced relevance check for MEV opportunities."""
         # Check if transaction targets monitored addresses
-        to_address = tx.get('to', '').lower() if tx.get('to') else ''
+        to_address = analysis.get('to', '').lower() if analysis.get('to') else ''
         if to_address in self._monitored_addresses:
             return True
         
@@ -246,7 +307,8 @@ class TxPoolScanner:
             return True
         
         # Check if it's from a known large trader
-        if tx['from'].lower() in self._large_trader_addresses:
+        from_address = analysis.get('from', '').lower()
+        if from_address in self._large_trader_addresses:
             return True
         
         # Check gas price (high gas might indicate MEV competition)
@@ -255,40 +317,40 @@ class TxPoolScanner:
         
         return False
 
-    async def _analyze_for_opportunities(self, tx: TxData, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _analyze_for_opportunities(self, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Analyzes transaction for specific MEV opportunities."""
         opportunities = []
         
         try:
             # Front-running opportunities
             if analysis['mev_type'] == 'sandwich_attack' or analysis['value_eth'] > 5.0:
-                front_run_opp = await self._analyze_front_running(tx, analysis)
+                front_run_opp = await self._analyze_front_running(analysis)
                 if front_run_opp:
                     opportunities.append(front_run_opp)
             
             # Back-running opportunities
-            back_run_opp = await self._analyze_back_running(tx, analysis)
+            back_run_opp = await self._analyze_back_running(analysis)
             if back_run_opp:
                 opportunities.append(back_run_opp)
             
             # Arbitrage opportunities
             if analysis['target_dex']:
-                arb_opp = await self._analyze_arbitrage_opportunity(tx, analysis)
+                arb_opp = await self._analyze_arbitrage_opportunity(analysis)
                 if arb_opp:
                     opportunities.append(arb_opp)
             
             # Liquidation opportunities
             if analysis['mev_type'] == 'liquidation':
-                liq_opp = await self._analyze_liquidation_opportunity(tx, analysis)
+                liq_opp = await self._analyze_liquidation_opportunity(analysis)
                 if liq_opp:
                     opportunities.append(liq_opp)
                     
         except Exception as e:
-            logger.error(f"Error analyzing opportunities for {tx['hash'].hex()}: {e}")
+            logger.error(f"Error analyzing opportunities for {analysis['tx_hash']}: {e}")
         
         return opportunities
 
-    async def _analyze_front_running(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _analyze_front_running(self, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Analyzes potential front-running opportunities."""
         if analysis['value_eth'] < 2.0:  # Not worth front-running small trades
             return None
@@ -309,7 +371,7 @@ class TxPoolScanner:
             'execution_deadline': datetime.now() + timedelta(seconds=30)
         }
 
-    async def _analyze_back_running(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _analyze_back_running(self, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Analyzes potential back-running opportunities."""
         if not analysis['target_dex']:
             return None
@@ -329,7 +391,7 @@ class TxPoolScanner:
             'execution_deadline': datetime.now() + timedelta(minutes=2)
         }
 
-    async def _analyze_arbitrage_opportunity(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _analyze_arbitrage_opportunity(self, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Analyzes arbitrage opportunities created by the transaction."""
         if not analysis['target_dex'] or analysis['value_eth'] < 1.0:
             return None
@@ -337,7 +399,7 @@ class TxPoolScanner:
         # Advanced arbitrage detection by decoding swap parameters
         try:
             # Decode transaction input data to get swap parameters
-            tx_input = transaction.get('input', '0x')
+            tx_input = analysis.get('input_data', '0x')
             if len(tx_input) < 10:  # Must have function selector + data
                 return None
             
@@ -380,11 +442,11 @@ class TxPoolScanner:
                         estimated_price_impact = analysis['value_eth'] * 0.001
                         
                 except Exception as decode_error:
-                    self.logger.debug(f"Failed to decode swap parameters: {decode_error}")
+                    logger.debug(f"Failed to decode swap parameters: {decode_error}")
                     estimated_price_impact = analysis['value_eth'] * 0.002
                     
         except Exception as e:
-            self.logger.warning(f"Error in arbitrage detection: {e}")
+            logger.warning(f"Error in arbitrage detection: {e}")
             estimated_price_impact = analysis['value_eth'] * 0.002  # Fallback estimate
         
         if estimated_price_impact < 0.01:
@@ -398,7 +460,7 @@ class TxPoolScanner:
             'requires_flash_loan': analysis['value_eth'] > 10.0
         }
 
-    async def _analyze_liquidation_opportunity(self, tx: TxData, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _analyze_liquidation_opportunity(self, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Analyzes liquidation opportunities."""
         if analysis['mev_type'] != 'liquidation':
             return None
@@ -492,5 +554,26 @@ class TxPoolScanner:
             'tx_analysis_cache_size': len(self._tx_analysis_cache),
             'opportunity_cache_size': len(self._opportunity_cache),
             'monitored_addresses': len(self._monitored_addresses),
-            'dex_addresses': len(self._dex_router_addresses)
+            'dex_addresses': len(self._dex_routers),
+            'processed_transactions': self._processed_tx_count,
+            'detected_opportunities': self._opportunity_count,
+            'cache_access_entries': len(self._cache_access_times)
+        }
+        
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive performance metrics."""
+        total_pending = max(self._pending_tx_count, 1)
+        
+        return {
+            'pending_transactions': self._pending_tx_count,
+            'processed_transactions': self._processed_tx_count,
+            'detected_opportunities': self._opportunity_count,
+            'processing_rate': self._processed_tx_count / total_pending,
+            'opportunity_detection_rate': self._opportunity_count / total_pending,
+            'cache_hit_efficiency': len(self._cache_access_times) / max(len(self._tx_analysis_cache), 1),
+            'memory_usage': {
+                'tx_cache_size': len(self._tx_analysis_cache),
+                'opportunity_cache_size': len(self._opportunity_cache),
+                'monitored_addresses': len(self._monitored_addresses)
+            }
         }

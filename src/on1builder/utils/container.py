@@ -10,22 +10,26 @@ T = TypeVar("T")
 logger = get_logger(__name__)
 
 class Container:
-    """A simple dependency injection container for managing component lifecycles."""
+    """A dependency injection container for managing component lifecycles with async support."""
 
     def __init__(self) -> None:
-        self._providers: Dict[str, Callable[[], Any]] = {}
         self._instances: Dict[str, Any] = {}
+        self._providers: Dict[str, Callable[[], T]] = {}
         self._resolving: set[str] = set()
+        self._singleton_instances: Dict[str, Any] = {}
 
     def register_instance(self, key: str, instance: Any) -> None:
         """
-        Registers a pre-existing instance of a component.
+        Registers a pre-instantiated object in the container.
         
         Args:
-            key: The unique identifier for the component.
-            instance: The component instance to register.
+            key: The unique identifier for the component
+            instance: The already-created instance to register
         """
-        logger.debug(f"Registering instance for key: '{key}'")
+        if not key:
+            raise ValueError("Key cannot be empty")
+        
+        logger.debug(f"Registering instance for key: '{key}' (type: {type(instance).__name__})")
         self._instances[key] = instance
 
     def register_provider(self, key: str, provider: Callable[[], T]) -> None:
@@ -33,11 +37,38 @@ class Container:
         Registers a provider (factory function) for lazy instantiation.
         
         Args:
-            key: The unique identifier for the component.
-            provider: A zero-argument function that returns an instance of the component.
+            key: The unique identifier for the component
+            provider: A zero-argument function that returns an instance of the component
         """
+        if not key:
+            raise ValueError("Key cannot be empty")
+        if not callable(provider):
+            raise TypeError("Provider must be callable")
+            
         logger.debug(f"Registering provider for key: '{key}'")
         self._providers[key] = provider
+
+    def register_singleton(self, key: str, provider: Callable[[], T]) -> None:
+        """
+        Registers a singleton provider that will only be instantiated once.
+        
+        Args:
+            key: The unique identifier for the singleton
+            provider: A zero-argument function that returns an instance
+        """
+        if not key:
+            raise ValueError("Key cannot be empty")
+        if not callable(provider):
+            raise TypeError("Provider must be callable")
+            
+        logger.debug(f"Registering singleton provider for key: '{key}'")
+        
+        def singleton_wrapper():
+            if key not in self._singleton_instances:
+                self._singleton_instances[key] = provider()
+            return self._singleton_instances[key]
+        
+        self._providers[key] = singleton_wrapper
 
     def get(self, key: str) -> Any:
         """

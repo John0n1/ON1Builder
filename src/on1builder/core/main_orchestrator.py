@@ -4,10 +4,10 @@ from __future__ import annotations
 import asyncio
 import signal
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
-from on1builder.config.loaders import settings
+from on1builder.config.manager import get_config_manager, initialize_global_config
 from on1builder.core.chain_worker import ChainWorker
 from on1builder.core.balance_manager import BalanceManager
 from on1builder.core.multi_chain_orchestrator import MultiChainOrchestrator
@@ -15,6 +15,8 @@ from on1builder.utils.custom_exceptions import InitializationError
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.notification_service import NotificationService
 from on1builder.utils.web3_factory import create_web3_instance
+from on1builder.utils.error_recovery import get_error_recovery_manager, with_error_recovery
+from on1builder.utils.constants import PERFORMANCE_MONITORING_INTERVAL
 from on1builder.persistence.db_interface import DatabaseInterface
 
 logger = get_logger(__name__)
@@ -27,6 +29,10 @@ class MainOrchestrator:
     """
 
     def __init__(self):
+        # Initialize configuration first
+        self._config_manager = get_config_manager()
+        self._config = None  # Will be set during initialization
+        
         self._workers: List[ChainWorker] = []
         self._balance_managers: Dict[int, BalanceManager] = {}
         self._multi_chain_orchestrator: Optional[MultiChainOrchestrator] = None
@@ -34,15 +40,24 @@ class MainOrchestrator:
         self._shutdown_event = asyncio.Event()
         self._notification_service = NotificationService()
         self._db_interface = DatabaseInterface()
+        self._error_recovery_manager = get_error_recovery_manager()
         self._performance_monitor_task: Optional[asyncio.Task] = None
         self._last_profit_report = datetime.now()
-        logger.info("MainOrchestrator created with enhanced features.")
+        self._startup_time = datetime.now()
+        self._error_count = 0
+        self._max_consecutive_errors = 5
+        logger.info("MainOrchestrator initialized successfully")
 
     async def _setup_signal_handlers(self):
         """Sets up signal handlers for graceful shutdown."""
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(self.stop(s)))
+        try:
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(self.stop(s)))
+            logger.debug("Signal handlers configured successfully")
+        except Exception as e:
+            logger.warning(f"Could not set up signal handlers: {e}")
+            # Continue without signal handlers - user can still stop manually
 
     async def run(self):
         """
@@ -50,84 +65,140 @@ class MainOrchestrator:
         Initializes workers and runs them until a shutdown signal is received.
         """
         if self._is_running:
-            logger.warning("MainOrchestrator is already running.")
+            logger.warning("MainOrchestrator is already running")
             return
+
+        try:
+            # Initialize configuration first
+            initialize_global_config()
+            self._config = self._config_manager.get_config()
+            logger.info("Configuration loaded and validated")
+            
+        except Exception as e:
+            logger.critical(f"Failed to initialize configuration: {e}")
+            raise InitializationError(f"Configuration initialization failed: {e}", cause=e)
 
         self._is_running = True
         logger.info("Starting ON1Builder Orchestrator...")
         
-        await self._setup_signal_handlers()
-
         try:
-            await self._db_interface.initialize_db()
-            
-            # Initialize workers and balance managers
-            for chain_id in settings.chains:
-                try:
-                    worker = ChainWorker(chain_id)
-                    await worker.initialize()
-                    self._workers.append(worker)
-                    
-                    # Create balance manager for each chain
-                    web3 = await create_web3_instance(chain_id)
-                    balance_manager = BalanceManager(web3, settings.wallet_address)
-                    await balance_manager.update_balance()
-                    self._balance_managers[chain_id] = balance_manager
-                    
-                    logger.info(f"Initialized worker and balance manager for chain {chain_id}")
-                    
-                except InitializationError as e:
-                    logger.critical(f"Failed to initialize worker for chain {chain_id}: {e}")
-                    await self._notification_service.send_alert(
-                        title=f"Critical Initialization Failure",
-                        message=f"Could not initialize worker for chain {chain_id}. The application may not function correctly.",
-                        level="CRITICAL",
-                        details={"error": str(e)}
-                    )
-            
-            if not self._workers:
-                logger.critical("No workers were initialized successfully. Shutting down.")
-                return
-
-            # Initialize multi-chain orchestrator if we have multiple chains
-            if len(self._workers) >= 2:
-                self._multi_chain_orchestrator = MultiChainOrchestrator(self._workers)
-                logger.info("Multi-chain orchestrator initialized for cross-chain operations.")
-
-            # Start all workers
-            worker_tasks = [asyncio.create_task(worker.start()) for worker in self._workers]
-            
-            # Start multi-chain orchestrator if available
-            if self._multi_chain_orchestrator:
-                worker_tasks.append(asyncio.create_task(self._multi_chain_orchestrator.start()))
-            
-            # Start performance monitoring
-            self._performance_monitor_task = asyncio.create_task(self._performance_monitor_loop())
+            await self._setup_signal_handlers()
+            await self._initialize_database()
+            await self._initialize_workers()
+            await self._start_services()
             
             await self._notification_service.send_alert(
                 title="ON1Builder Started",
-                message=f"Application is now running and monitoring {len(self._workers)} chain(s).",
+                message=f"Application is now running and monitoring {len(self._workers)} chain(s)",
                 level="INFO",
-                details={
-                    "active_chains": settings.chains,
-                    "multi_chain_enabled": self._multi_chain_orchestrator is not None,
-                    "balance_managers": len(self._balance_managers)
-                }
+                details=self._get_startup_details()
             )
 
+            # Main loop - wait for shutdown
             await self._shutdown_event.wait()
 
         except Exception as e:
-            logger.critical(f"An unhandled error occurred in the MainOrchestrator: {e}", exc_info=True)
-            await self._notification_service.send_alert(
-                title="Critical Orchestrator Failure",
-                message="A fatal error occurred, and the application is shutting down.",
-                level="CRITICAL",
-                details={"error": str(e)}
-            )
+            logger.critical(f"Fatal error in MainOrchestrator: {e}", exc_info=True)
+            await self._handle_critical_error(e)
         finally:
-            logger.info("MainOrchestrator run loop exiting. Final cleanup...")
+            logger.info("MainOrchestrator run loop exiting...")
             await self._shutdown()
+
+    async def _initialize_database(self):
+        """Initialize the database with error handling."""
+        try:
+            await self._db_interface.initialize_db()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            raise InitializationError(f"Database initialization failed: {e}", "database", e)
+
+    async def _initialize_workers(self):
+        """Initialize all chain workers with comprehensive error handling."""
+        if not self._config.chains:
+            raise InitializationError("No chains configured")
+            
+        successful_workers = 0
+        failed_chains = []
+        
+        for chain_id in self._config.chains:
+            try:
+                await self._initialize_chain_worker(chain_id)
+                successful_workers += 1
+                logger.info(f"Successfully initialized worker for chain {chain_id}")
+                
+            except Exception as e:
+                failed_chains.append(chain_id)
+                logger.error(f"Failed to initialize worker for chain {chain_id}: {e}")
+                await self._notification_service.send_alert(
+                    title=f"Chain {chain_id} Initialization Failed",
+                    message=f"Could not initialize worker for chain {chain_id}",
+                    level="ERROR",
+                    details={"chain_id": chain_id, "error": str(e)}
+                )
+        
+        if successful_workers == 0:
+            raise InitializationError("No workers were initialized successfully")
+            
+        if failed_chains:
+            logger.warning(f"Failed to initialize workers for chains: {failed_chains}")
+
+    async def _initialize_chain_worker(self, chain_id: int):
+        """Initialize a single chain worker and its balance manager."""
+        worker = ChainWorker(chain_id)
+        await worker.initialize()
+        self._workers.append(worker)
+        
+        # Create balance manager for the chain
+        web3 = await create_web3_instance(chain_id)
+        balance_manager = BalanceManager(web3, self._config.wallet_address)
+        await balance_manager.update_balance()
+        self._balance_managers[chain_id] = balance_manager
+
+    async def _start_services(self):
+        """Start all services and background tasks."""
+        # Initialize multi-chain orchestrator if we have multiple chains
+        if len(self._workers) >= 2:
+            self._multi_chain_orchestrator = MultiChainOrchestrator(self._workers)
+            logger.info("Multi-chain orchestrator initialized")
+
+        # Start all workers
+        worker_tasks = [asyncio.create_task(worker.start()) for worker in self._workers]
+        
+        # Start multi-chain orchestrator if available
+        if self._multi_chain_orchestrator:
+            worker_tasks.append(asyncio.create_task(self._multi_chain_orchestrator.start()))
+        
+        # Start performance monitoring
+        self._performance_monitor_task = asyncio.create_task(self._performance_monitor_loop())
+
+    def _get_startup_details(self) -> Dict[str, Any]:
+        """Get startup details for notifications."""
+        return {
+            "active_chains": self._config.chains,
+            "multi_chain_enabled": self._multi_chain_orchestrator is not None,
+            "balance_managers": len(self._balance_managers),
+            "startup_time": self._startup_time.isoformat(),
+            "version": "2.2.0"
+        }
+
+    async def _handle_critical_error(self, error: Exception):
+        """Handle critical errors with proper notifications."""
+        self._error_count += 1
+        
+        await self._notification_service.send_alert(
+            title="Critical Orchestrator Failure",
+            message="A fatal error occurred, shutting down the application",
+            level="CRITICAL",
+            details={
+                "error": str(error),
+                "error_count": self._error_count,
+                "uptime_seconds": (datetime.now() - self._startup_time).total_seconds()
+            }
+        )
+        
+        if self._error_count >= self._max_consecutive_errors:
+            logger.critical(f"Maximum consecutive errors ({self._max_consecutive_errors}) reached")
+            # Additional emergency shutdown logic could go here
 
     async def stop(self, sig: Optional[signal.Signals] = None):
         """Initiates the graceful shutdown of the application."""
@@ -171,7 +242,7 @@ class MainOrchestrator:
         """Monitors overall system performance and generates periodic reports."""
         while self._is_running:
             try:
-                await asyncio.sleep(settings.performance_report_interval)
+                await asyncio.sleep(PERFORMANCE_MONITORING_INTERVAL)
                 
                 # Generate performance report every hour
                 if datetime.now() - self._last_profit_report >= timedelta(hours=1):
