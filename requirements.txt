@@ -1,5 +1,5 @@
 aiohappyeyeballs==2.6.1
-aiohttp==3.12.13
+aiohttp==3.12.14
 aiosignal==1.4.0
 aiosqlite>=0.19.0
 annotated-types==0.7.0
@@ -9,7 +9,7 @@ bitarray==3.5.0
 build==1.2.2.post1
 buildtools==1.0.6
 cachetools==6.1.0
-certifi==2025.6.15
+certifi==2025.7.14
 charset-normalizer==3.4.2
 ckzg==2.1.1
 colorlog==6.9.0
@@ -41,7 +41,7 @@ parsimonious==0.10.0
 pathlib==1.0.1
 propcache==0.3.2
 psutil>=7.0.0
-pyaml==25.5.0
+pyaml==25.7.0
 pycryptodome==3.23.0
 pydantic==2.11.7
 pydantic_core==2.33.2
