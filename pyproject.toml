@@ -36,7 +36,7 @@ classifiers = [
 ]
 dependencies = [
     "aiohappyeyeballs==2.6.1",
-    "aiohttp==3.12.13",
+    "aiohttp==3.12.14",
     "aiosignal==1.4.0",
     "python-dotenv==1.1.1",
     "aiosqlite>=0.21.0",
