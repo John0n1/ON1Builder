@@ -11,7 +11,7 @@ buildtools==1.0.6
 cachetools==6.2.0
 certifi==2025.8.3
 charset-normalizer==3.4.3
-ckzg==2.1.2
+ckzg==2.1.4
 colorlog==6.9.0
 constantly==23.10.4
 cytoolz==1.0.1
@@ -43,7 +43,7 @@ propcache==0.3.2
 psutil>=7.0.0
 pyaml==25.7.0
 pycryptodome==3.23.0
-pydantic==2.11.7
+pydantic==2.11.9
 pydantic_core==2.33.2
 pydantic-settings>=2.1.0
 pyproject_hooks==1.2.0
@@ -53,7 +53,7 @@ pyunormalize==16.0.0
 PyYAML==6.0.2
 questionary>=2.0.0
 redo==3.0.0
-regex==2025.9.1
+regex==2025.9.18
 requests==2.32.5
 rich>=13.7.0
 rlp==4.1.0
@@ -63,7 +63,7 @@ six==1.17.0
 SQLAlchemy==2.0.43
 toolz==1.0.0
 Twisted==25.5.0
-types-requests==2.32.4.20250809
+types-requests==2.32.4.20250913
 typing==3.7.4.3
 typing-inspection==0.4.1
 typing_extensions==4.15.0
@@ -72,4 +72,4 @@ urllib3==2.5.0
 web3==7.13.0
 websockets==15.0.1
 yarl==1.20.1
-zope.interface==7.2
+zope.interface==8.0
