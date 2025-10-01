@@ -70,7 +70,7 @@ dependencies = [
     "idna==3.10",
     "incremental==24.7.2",
     "Jinja2==3.1.6",
-    "MarkupSafe==3.0.2",
+    "MarkupSafe==3.0.3",
     "multidict==6.6.4",
     "numpy==2.3.0",
     "orderedmultidict==1.0.1",
@@ -87,8 +87,8 @@ dependencies = [
     "pyproject_hooks==1.2.0",
     "python-dateutil==2.9.0.post0",
     "python-dotenv>=1.0.0",
-    "pyunormalize==16.0.0",
-    "PyYAML==6.0.2",
+    "pyunormalize==17.0.0",
+    "PyYAML==6.0.3",
     "questionary>=2.0.0",
     "redo==3.0.0",
     "regex==2025.9.18",
@@ -96,7 +96,7 @@ dependencies = [
     "rich>=13.7.0",
     "rlp==4.1.0",
     "setuptools==80.9.0",
-    "simplejson==3.20.1",
+    "simplejson==3.20.2",
     "six==1.17.0",
     "SQLAlchemy==2.0.43",
     "toolz==1.0.0",
@@ -110,7 +110,7 @@ dependencies = [
     "web3==7.13.0",
     "websockets==15.0.1",
     "yarl==1.20.1",
-    "zope.interface==8.0"
+    "zope.interface==8.0.1"
 ]
 
 [project.optional-dependencies]
