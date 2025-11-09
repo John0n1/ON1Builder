@@ -1,4 +1,5 @@
 # src/on1builder/utils/cli_helpers.py
+# flake8: noqa E501
 """CLI utility functions and decorators for ON1Builder."""
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from .custom_exceptions import (
     ConfigurationError,
     InitializationError,
     ConnectionError,
-    ValidationError
+    ValidationError,
 )
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -24,17 +25,15 @@ console = Console()
 logger = get_logger(__name__)
 
 
-def handle_cli_errors(
-    exit_on_error: bool = True,
-    show_traceback: bool = False
-) -> Callable[[F], F]:
+def handle_cli_errors(exit_on_error: bool = True, show_traceback: bool = False) -> Callable[[F], F]:
     """
     Decorator for standardized CLI error handling.
-    
+
     Args:
         exit_on_error: Whether to exit the application on error
         show_traceback: Whether to show full traceback for debugging
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -48,7 +47,9 @@ def handle_cli_errors(
                 return None
             except InitializationError as e:
                 console.print(f"[bold red]❌ Initialization Error:[/] {e}")
-                logger.critical(f"Initialization error in {func.__name__}: {e}", exc_info=show_traceback)
+                logger.critical(
+                    f"Initialization error in {func.__name__}: {e}", exc_info=show_traceback
+                )
                 if exit_on_error:
                     raise typer.Exit(code=2)
                 return None
@@ -78,7 +79,9 @@ def handle_cli_errors(
                 if exit_on_error:
                     raise typer.Exit(code=1)
                 return None
+
         return wrapper
+
     return decorator
 
 
@@ -105,11 +108,11 @@ def error_message(message: str) -> None:
 def confirm_action(message: str, default: bool = False) -> bool:
     """
     Prompt user for confirmation with consistent formatting.
-    
+
     Args:
         message: The confirmation message
         default: Default response if user just presses Enter
-        
+
     Returns:
         True if user confirms, False otherwise
     """

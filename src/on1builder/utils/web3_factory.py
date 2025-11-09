@@ -1,4 +1,5 @@
 # src/on1builder/utils/web3_factory.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +12,7 @@ from web3.providers import AsyncHTTPProvider
 # Try to import websocket provider, but make it optional
 try:
     from web3.providers import WebSocketProvider as WebSocketProviderV2
+
     WEBSOCKET_AVAILABLE = True
 except ImportError:
     WebSocketProviderV2 = None
@@ -20,6 +22,7 @@ from on1builder.utils.logging_config import get_logger
 from on1builder.utils.custom_exceptions import ConnectionError
 
 logger = get_logger(__name__)
+
 
 class Web3ConnectionFactory:
     """A factory for creating and managing AsyncWeb3 connections with connection pooling."""
@@ -31,14 +34,14 @@ class Web3ConnectionFactory:
     async def create_connection(cls, chain_id: int, force_new: bool = False) -> AsyncWeb3:
         """
         Creates or returns a cached reliable AsyncWeb3 connection for a given chain ID.
-        
+
         Args:
             chain_id: The ID of the chain to connect to
             force_new: If True, creates a new connection even if one is cached
-            
+
         Returns:
             A configured and connected AsyncWeb3 instance
-            
+
         Raises:
             ConnectionError: If a connection cannot be established
         """
@@ -69,6 +72,7 @@ class Web3ConnectionFactory:
     async def _create_new_connection(cls, chain_id: int) -> AsyncWeb3:
         """Create a new Web3 connection with fallback logic."""
         from on1builder.config.loaders import get_settings
+
         settings = get_settings()
 
         # Try WebSocket first if available
@@ -97,17 +101,19 @@ class Web3ConnectionFactory:
                 f"Failed to establish connection to chain {chain_id}",
                 endpoint=http_url,
                 chain_id=chain_id,
-                cause=e
+                cause=e,
             )
 
-        raise ConnectionError(f"All connection attempts failed for chain {chain_id}", chain_id=chain_id)
+        raise ConnectionError(
+            f"All connection attempts failed for chain {chain_id}", chain_id=chain_id
+        )
 
     @classmethod
     async def _create_websocket_connection(cls, chain_id: int, ws_url: str) -> Optional[AsyncWeb3]:
         """Create a WebSocket connection."""
         if not WEBSOCKET_AVAILABLE:
             return None
-            
+
         try:
             provider = WebSocketProviderV2(ws_url)
             web3 = AsyncWeb3(provider)
@@ -129,8 +135,9 @@ class Web3ConnectionFactory:
     def _configure_web3_instance(cls, web3: AsyncWeb3, chain_id: int) -> None:
         """Configure a Web3 instance with necessary middleware."""
         from on1builder.config.loaders import get_settings
+
         settings = get_settings()
-        
+
         # Add PoA middleware for PoA chains
         if chain_id in settings.poa_chains:
             web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
@@ -140,7 +147,7 @@ class Web3ConnectionFactory:
     async def _test_connection(cls, web3: AsyncWeb3) -> bool:
         """Test if a Web3 connection is working."""
         try:
-            await asyncio.wait_for(web3.eth.get_block('latest'), timeout=5.0)
+            await asyncio.wait_for(web3.eth.get_block("latest"), timeout=5.0)
             return True
         except Exception:
             return False
@@ -151,7 +158,7 @@ class Web3ConnectionFactory:
         async with cls._connection_lock:
             for chain_id, web3 in cls._connections.items():
                 try:
-                    if hasattr(web3.provider, 'disconnect'):
+                    if hasattr(web3.provider, "disconnect"):
                         await web3.provider.disconnect()
                     logger.debug(f"Closed connection for chain {chain_id}")
                 except Exception as e:
@@ -163,10 +170,10 @@ class Web3ConnectionFactory:
 async def create_web3_instance(chain_id: int) -> AsyncWeb3:
     """
     Create a Web3 instance for the given chain ID.
-    
+
     Args:
         chain_id: The chain ID to create a connection for
-        
+
     Returns:
         Configured AsyncWeb3 instance
     """

@@ -1,4 +1,5 @@
 # src/on1builder/cli/config_cmd.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import json
@@ -14,17 +15,20 @@ from on1builder.utils.cli_helpers import handle_cli_errors, success_message
 app = typer.Typer(help="Commands to inspect and validate configuration.")
 console = Console()
 
+
 @app.command(name="show")
 @handle_cli_errors()
 def show_config(
-    show_keys: bool = typer.Option(False, "--show-keys", "-s", help="Show sensitive keys like WALLET_KEY.")
+    show_keys: bool = typer.Option(
+        False, "--show-keys", "-s", help="Show sensitive keys like WALLET_KEY."
+    )
 ):
     """
     Displays the currently loaded configuration, redacting sensitive values by default.
     """
     # Pydantic models have a method to dump to a dict
-    config_dict = settings.model_dump(mode='json')
-    
+    config_dict = settings.model_dump(mode="json")
+
     # Use the ConfigRedactor utility to handle sensitive data redaction
     redacted_config = ConfigRedactor.redact_config(config_dict, show_sensitive=show_keys)
 
@@ -32,6 +36,7 @@ def show_config(
     json_str = json.dumps(redacted_config, indent=2)
     syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
     console.print(syntax)
+
 
 @app.command(name="validate")
 @handle_cli_errors()

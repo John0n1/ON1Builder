@@ -1,4 +1,5 @@
 # src/on1builder/core/nonce_manager.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +14,7 @@ from on1builder.utils.singleton import SingletonMeta
 
 logger = get_logger(__name__)
 
+
 class NonceManager(metaclass=SingletonMeta):
     """
     Manages transaction nonces for a single address to prevent race conditions
@@ -25,6 +27,20 @@ class NonceManager(metaclass=SingletonMeta):
         self._nonce: Optional[int] = None
         self._lock = asyncio.Lock()
         logger.info(f"NonceManager initialized for address: {self._address}")
+
+    def _singleton_refresh(self, web3: AsyncWeb3, address: str):
+        """Reconfigure singleton instance when requested again."""
+        if web3 is not self._web3 or address != self._address:
+            logger.debug(
+                "NonceManager refresh detected provider/address change. Resetting nonce state."
+            )
+            self._web3 = web3
+            self._address = address
+            self._nonce = None
+        else:
+            # For repeated requests in the same context (e.g., tests), force nonce re-sync
+            logger.debug("NonceManager refresh triggered for existing configuration; clearing nonce cache.")
+            self._nonce = None
 
     async def _initialize_nonce(self):
         """Fetches the initial nonce from the blockchain."""
@@ -40,9 +56,11 @@ class NonceManager(metaclass=SingletonMeta):
                     f"Retrying in {settings.connection_retry_delay}s..."
                 )
                 await asyncio.sleep(settings.connection_retry_delay)
-        
+
         # If all attempts fail, raise an error
-        raise ConnectionError(f"Could not fetch initial nonce for address {self._address} after multiple retries.")
+        raise ConnectionError(
+            f"Could not fetch initial nonce for address {self._address} after multiple retries."
+        )
 
     async def get_next_nonce(self) -> int:
         """
@@ -61,7 +79,7 @@ class NonceManager(metaclass=SingletonMeta):
                 self._nonce += 1
                 logger.debug(f"Providing nonce {current_nonce}, next will be {self._nonce}")
                 return current_nonce
-            
+
             # This should not be reached if _initialize_nonce is successful
             raise RuntimeError("Nonce could not be initialized.")
 

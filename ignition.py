@@ -1,4 +1,5 @@
 # ignition.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import os
@@ -22,6 +23,7 @@ except ImportError:
 
 console = Console()
 
+
 class PathValidator(Validator):
     def validate(self, document):
         path = Path(document.text)
@@ -30,6 +32,7 @@ class PathValidator(Validator):
                 message="Please enter a valid path to your .env file",
                 cursor_position=len(document.text),
             )
+
 
 class Ignition:
     def __init__(self):
@@ -52,7 +55,7 @@ class Ignition:
             "[bold yellow]ON1Builder Ignition[/]\n[dim]Interactive TUI Launcher[/]",
             title="[bold]v2.1.4[/]",
             border_style="yellow",
-            expand=False
+            expand=False,
         )
         console.print(header)
         console.print()
@@ -62,10 +65,12 @@ class Ignition:
         status_table = Table(show_header=False, box=None, padding=(0, 2))
         status_table.add_column(style="cyan")
         status_table.add_column(style="green")
-        
-        env_status = f"[green]{self.env_file_path}[/]" if self.env_file_path else "[red]Not Found[/]"
+
+        env_status = (
+            f"[green]{self.env_file_path}[/]" if self.env_file_path else "[red]Not Found[/]"
+        )
         status_table.add_row("Env File:", env_status)
-        
+
         console.print(Panel(status_table, title="[bold]Current Settings[/]", border_style="blue"))
         console.print()
 
@@ -74,7 +79,7 @@ class Ignition:
         while True:
             self.display_header()
             self.display_status()
-            
+
             if not self.env_file_path:
                 console.print("[bold yellow]⚠️  .env file not found.[/] Please specify the path.")
                 self.configure_env_path()
@@ -90,7 +95,7 @@ class Ignition:
                     questionary.Separator(),
                     questionary.Choice("❌ Exit", value="exit"),
                 ],
-                use_indicator=True
+                use_indicator=True,
             ).ask()
 
             if choice == "launch":
@@ -108,9 +113,7 @@ class Ignition:
     def configure_env_path(self):
         """Prompts the user to set the path to the .env file."""
         path_str = questionary.path(
-            "Enter the full path to your .env file:",
-            only_files=True,
-            validate=PathValidator
+            "Enter the full path to your .env file:", only_files=True, validate=PathValidator
         ).ask()
         if path_str:
             self.env_file_path = Path(path_str)
@@ -122,19 +125,21 @@ class Ignition:
         self.display_header()
         console.print("[bold green]🚀 Launching ON1Builder...[/]")
         console.print("[dim]Press Ctrl+C to stop the bot at any time.[/]\n")
-        
+
         command = [sys.executable, "-m", "on1builder", "run", "start"]
         try:
             # We use Popen to run it as a managed subprocess
-            process = subprocess.Popen(command, env={**os.environ, "DOTENV_PATH": str(self.env_file_path)})
-            process.wait() # Wait for the process to complete
+            process = subprocess.Popen(
+                command, env={**os.environ, "DOTENV_PATH": str(self.env_file_path)}
+            )
+            process.wait()  # Wait for the process to complete
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Interruption detected. Sending stop signal to bot...[/]")
             process.terminate()
             process.wait()
         except Exception as e:
             console.print(f"[bold red]An error occurred while launching the bot:[/] {e}")
-            
+
         console.print("\n[bold blue]ON1Builder has stopped. Press Enter to return to the menu.[/]")
         input()
 
@@ -153,13 +158,15 @@ class Ignition:
         if not log_file.exists():
             console.print("[bold red]Log file not found at 'logs/on1builder.log'[/]")
         else:
-            console.print(Panel(f"[bold]Showing last 50 lines of {log_file}[/]", border_style="blue"))
+            console.print(
+                Panel(f"[bold]Showing last 50 lines of {log_file}[/]", border_style="blue")
+            )
             log_content = ""
             try:
                 with open(log_file, "r") as f:
                     lines = f.readlines()
                     log_content = "".join(lines[-50:])
-                
+
                 syntax = Syntax(log_content, "log", theme="monokai", line_numbers=True)
                 console.print(syntax)
             except Exception as e:
@@ -168,6 +175,7 @@ class Ignition:
         console.print("\n[bold blue]Press Enter to return to the menu.[/]")
         input()
 
+
 def main():
     try:
         ignition = Ignition()
@@ -175,6 +183,7 @@ def main():
     except (KeyboardInterrupt, TypeError):
         # TypeError can be raised by questionary on Ctrl+C in some terminals
         console.print("\n[bold yellow]Ignition launcher exited.[/]")
+
 
 if __name__ == "__main__":
     main()

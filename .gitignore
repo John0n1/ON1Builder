@@ -8,7 +8,7 @@ venv/
 
 # Python bytecode/caches
 __pycache__/
-
+*pytest*
 
 # Logs and data
 logs/

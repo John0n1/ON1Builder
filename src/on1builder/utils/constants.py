@@ -12,25 +12,25 @@ from decimal import Decimal
 CHAIN_NAMES = {
     1: "Ethereum Mainnet",
     137: "Polygon",
-    42161: "Arbitrum One", 
+    42161: "Arbitrum One",
     10: "Optimism",
     56: "BSC",
     43114: "Avalanche",
     250: "Fantom",
     5: "Goerli",
     80001: "Mumbai",
-    421613: "Arbitrum Goerli"
+    421613: "Arbitrum Goerli",
 }
 
 # Network block times (in seconds)
 BLOCK_TIMES = {
-    1: 12,      # Ethereum
-    137: 2,     # Polygon
-    42161: 1,   # Arbitrum
-    10: 2,      # Optimism
-    56: 3,      # BSC
-    43114: 2,   # Avalanche
-    250: 1      # Fantom
+    1: 12,  # Ethereum
+    137: 2,  # Polygon
+    42161: 1,  # Arbitrum
+    10: 2,  # Optimism
+    56: 3,  # BSC
+    43114: 2,  # Avalanche
+    250: 1,  # Fantom
 }
 
 # =============================================================================
@@ -69,10 +69,10 @@ SANDWICH_ATTACK_DELAY = 2  # seconds between front-run and back-run
 # Balance management tiers (in ETH)
 BALANCE_TIER_THRESHOLDS = {
     "dust": Decimal("0.01"),
-    "small": Decimal("0.1"), 
-    "medium": Decimal("0.5"),
-    "large": Decimal("2.0"),
-    "whale": Decimal("10.0")
+    "small": Decimal("0.05"),
+    "medium": Decimal("0.3"),
+    "large": Decimal("5.0"),
+    "whale": Decimal("50.0"),
 }
 
 # Risk management
@@ -149,14 +149,14 @@ DEX_ROUTER_IDENTIFIERS = {
     "uniswap_v3": "0xe592427a0aece92de3edee1f18e0157c05861564",
     "sushiswap": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
     "1inch": "0x1111111254fb6c44bac0bed2854e76f90643097d",
-    "pancakeswap": "0x10ed43c718714eb63d5aa57b78b54704e256024e"
+    "pancakeswap": "0x10ed43c718714eb63d5aa57b78b54704e256024e",
 }
 
 # Flash loan providers
 FLASHLOAN_PROVIDERS = {
     "aave_v3": "aave_flashloan",
     "uniswap_v3": "uniswap_flashloan",
-    "dydx": "dydx_flashloan"
+    "dydx": "dydx_flashloan",
 }
 
 # Slippage tolerance (in basis points)
@@ -191,9 +191,9 @@ SESSION_TIMEOUT_MINUTES = 30
 API_KEY_LENGTH = 32
 
 # Validation patterns (as strings to avoid import issues)
-ETHEREUM_ADDRESS_PATTERN = r'^0x[a-fA-F0-9]{40}$'
-TRANSACTION_HASH_PATTERN = r'^0x[a-fA-F0-9]{64}$'
-PRIVATE_KEY_PATTERN = r'^0x[a-fA-F0-9]{64}$'
+ETHEREUM_ADDRESS_PATTERN = r"^0x[a-fA-F0-9]{40}$"
+TRANSACTION_HASH_PATTERN = r"^0x[a-fA-F0-9]{64}$"
+PRIVATE_KEY_PATTERN = r"^0x[a-fA-F0-9]{64}$"
 
 # =============================================================================
 # MARKET DATA CONSTANTS
@@ -224,7 +224,7 @@ DEFAULT_DB_FILE = "on1builder.db"
 
 # Resource directories
 ABI_DIR = "abi"
-TOKENS_DIR = "tokens" 
+TOKENS_DIR = "tokens"
 CONTRACTS_DIR = "contracts"
 ML_MODELS_DIR = "ml_models"
 

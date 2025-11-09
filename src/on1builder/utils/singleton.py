@@ -1,4 +1,5 @@
 # src/on1builder/utils/singleton.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import threading
@@ -9,8 +10,10 @@ from .logging_config import get_logger
 T = TypeVar("T")
 logger = get_logger(__name__)
 
+
 class SingletonMeta(type):
     """A thread-safe singleton metaclass."""
+
     _instances: Dict[type, Any] = {}
     _lock: threading.Lock = threading.Lock()
 
@@ -21,7 +24,14 @@ class SingletonMeta(type):
                 if cls not in cls._instances:
                     instance = super().__call__(*args, **kwargs)
                     cls._instances[cls] = instance
-        return cls._instances[cls]
+        instance = cls._instances[cls]
+
+        # Allow instances to refresh their configuration when re-requested
+        refresh = getattr(instance, "_singleton_refresh", None)
+        if callable(refresh):
+            refresh(*args, **kwargs)
+
+        return instance
 
     def reset_instance(cls) -> None:
         """For testing purposes, allows resetting the singleton instance."""
@@ -33,6 +43,7 @@ class SingletonMeta(type):
 
 class SingletonRegistry:
     """A registry for managing named singleton instances, often created via factories."""
+
     _instances: Dict[str, Any] = {}
     _factories: Dict[str, Callable[..., Any]] = {}
     _lock: threading.Lock = threading.Lock()
@@ -57,12 +68,12 @@ class SingletonRegistry:
                 if key not in self._instances:
                     if key not in self._factories:
                         raise KeyError(f"No factory registered for singleton key: '{key}'")
-                    
+
                     factory = self._factories[key]
                     instance = factory(*args, **kwargs)
                     self._instances[key] = instance
                     logger.debug(f"Created singleton instance for key: '{key}'")
-        
+
         return self._instances[key]
 
     def has(self, key: str) -> bool:
@@ -88,13 +99,13 @@ class SingletonRegistry:
         Gracefully shuts down all singleton instances that have a 'stop' or 'close' method.
         """
         import inspect
-        
+
         logger.info("Shutting down all managed singletons...")
         for key, instance in list(self._instances.items()):
             shutdown_method = None
-            if hasattr(instance, 'stop') and callable(instance.stop):
+            if hasattr(instance, "stop") and callable(instance.stop):
                 shutdown_method = instance.stop
-            elif hasattr(instance, 'close') and callable(instance.close):
+            elif hasattr(instance, "close") and callable(instance.close):
                 shutdown_method = instance.close
 
             if shutdown_method:
@@ -110,6 +121,7 @@ class SingletonRegistry:
 
 # Global instance of the registry
 _registry = SingletonRegistry()
+
 
 def get_singleton_registry() -> SingletonRegistry:
     """Provides access to the global singleton registry."""

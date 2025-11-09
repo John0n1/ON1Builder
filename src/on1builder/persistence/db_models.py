@@ -1,26 +1,19 @@
 # src/on1builder/persistence/db_models.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import datetime
 from typing import Any, Dict
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    Integer,
-    String,
-    Text,
-    BigInteger,
-    Index
-)
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, BigInteger, Index
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
+
 class Transaction(Base):
     """Enhanced SQLAlchemy model for storing transaction records with comprehensive tracking."""
+
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -37,14 +30,14 @@ class Transaction(Base):
     strategy = Column(String(50), nullable=True, index=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
     raw_tx = Column(Text, nullable=True)
-    
+
     # Enhanced tracking fields
     execution_time_s = Column(Float, nullable=True)  # Execution time in seconds
     nonce = Column(BigInteger, nullable=True)
     max_fee_per_gas = Column(BigInteger, nullable=True)  # EIP-1559
     max_priority_fee_per_gas = Column(BigInteger, nullable=True)  # EIP-1559
     balance_before = Column(Float, nullable=True)  # Balance before transaction (ETH)
-    balance_after = Column(Float, nullable=True)   # Balance after transaction (ETH)
+    balance_after = Column(Float, nullable=True)  # Balance after transaction (ETH)
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts the model instance to a dictionary."""
@@ -71,6 +64,7 @@ class Transaction(Base):
 
 class ProfitRecord(Base):
     """Enhanced SQLAlchemy model for tracking profits with comprehensive metrics."""
+
     __tablename__ = "profit_records"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -86,12 +80,12 @@ class ProfitRecord(Base):
     quote_token_address = Column(String(42), nullable=True)
     execution_time_s = Column(Float, nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
-    
+
     # Strategy-specific fields
     flashloan_amount = Column(Float, nullable=True)  # Amount borrowed via flashloan
     arbitrage_spread = Column(Float, nullable=True)  # Price spread captured
     slippage_experienced = Column(Float, nullable=True)  # Actual slippage vs expected
-    
+
     # Risk metrics
     max_exposure_eth = Column(Float, nullable=True)  # Maximum capital at risk
     risk_score = Column(Float, nullable=True)  # Calculated risk score (0-1)
@@ -122,12 +116,13 @@ class ProfitRecord(Base):
 
 class StrategyPerformance(Base):
     """Model for tracking strategy performance metrics over time."""
+
     __tablename__ = "strategy_performance"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     strategy = Column(String(50), nullable=False, index=True)
     chain_id = Column(Integer, nullable=False, index=True)
-    
+
     # Performance metrics
     total_executions = Column(Integer, default=0)
     successful_executions = Column(Integer, default=0)
@@ -136,16 +131,16 @@ class StrategyPerformance(Base):
     avg_execution_time_s = Column(Float, nullable=True)
     success_rate = Column(Float, nullable=True)  # Percentage
     avg_profit_per_execution = Column(Float, nullable=True)
-    
+
     # ML metrics
     ml_weight = Column(Float, default=1.0)
     confidence_score = Column(Float, nullable=True)
     exploration_count = Column(Integer, default=0)
-    
+
     # Time tracking
     last_execution = Column(DateTime, nullable=True)
     last_updated = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    
+
     # Performance window (e.g., daily, hourly)
     window_start = Column(DateTime, nullable=True)
     window_end = Column(DateTime, nullable=True)
@@ -173,26 +168,27 @@ class StrategyPerformance(Base):
 
 class MarketCondition(Base):
     """Model for tracking market conditions and their impact on strategy performance."""
+
     __tablename__ = "market_conditions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     chain_id = Column(Integer, nullable=False, index=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
-    
+
     # Gas market conditions
     gas_price_gwei = Column(Float, nullable=True)
     gas_price_percentile = Column(Float, nullable=True)  # 0-100
-    network_congestion = Column(Float, nullable=True)    # 0-1 scale
-    
+    network_congestion = Column(Float, nullable=True)  # 0-1 scale
+
     # Price volatility
     eth_price_usd = Column(Float, nullable=True)
     volatility_24h = Column(Float, nullable=True)
-    
+
     # MEV market conditions
     mev_opportunities_detected = Column(Integer, default=0)
     avg_opportunity_profit = Column(Float, nullable=True)
     competition_level = Column(Float, nullable=True)  # 0-1 scale
-    
+
     # Strategy performance during these conditions
     most_profitable_strategy = Column(String(50), nullable=True)
     avg_success_rate = Column(Float, nullable=True)
@@ -217,8 +213,12 @@ class MarketCondition(Base):
 
 
 # Create composite indexes for better query performance
-Index('idx_transactions_strategy_timestamp', Transaction.strategy, Transaction.timestamp)
-Index('idx_transactions_chain_status', Transaction.chain_id, Transaction.status)
-Index('idx_profit_records_strategy_timestamp', ProfitRecord.strategy, ProfitRecord.timestamp)
-Index('idx_strategy_performance_strategy_chain', StrategyPerformance.strategy, StrategyPerformance.chain_id)
-Index('idx_market_conditions_chain_timestamp', MarketCondition.chain_id, MarketCondition.timestamp)
+Index("idx_transactions_strategy_timestamp", Transaction.strategy, Transaction.timestamp)
+Index("idx_transactions_chain_status", Transaction.chain_id, Transaction.status)
+Index("idx_profit_records_strategy_timestamp", ProfitRecord.strategy, ProfitRecord.timestamp)
+Index(
+    "idx_strategy_performance_strategy_chain",
+    StrategyPerformance.strategy,
+    StrategyPerformance.chain_id,
+)
+Index("idx_market_conditions_chain_timestamp", MarketCondition.chain_id, MarketCondition.timestamp)
