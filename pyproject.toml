@@ -165,8 +165,7 @@ python_functions = ["test_*"]
 source = ["src/on1builder"]
 omit = [
     "*/tests/*",
-    "*/test_*.py",
-    "*/__pycache__/*",
+    "*/test_*.py"
 ]
 
 [tool.coverage.report]

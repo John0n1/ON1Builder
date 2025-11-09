@@ -1,4 +1,5 @@
 # src/on1builder/core/chain_worker.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import asyncio
@@ -22,6 +23,7 @@ from on1builder.utils.web3_factory import Web3ConnectionFactory
 
 logger = get_logger(__name__)
 
+
 class ChainWorker:
     """
     Enhanced chain worker with balance management and comprehensive monitoring.
@@ -37,7 +39,7 @@ class ChainWorker:
         self.web3: Optional[AsyncWeb3] = None
         self.account: Optional[LocalAccount] = None
         self.balance_manager: Optional[BalanceManager] = None
-        
+
         # Managers
         self.market_feed: Optional[MarketDataFeed] = None
         self.tx_scanner: Optional[TxPoolScanner] = None
@@ -45,7 +47,7 @@ class ChainWorker:
         self.strategy_executor: Optional[StrategyExecutor] = None
         self.safety_guard: Optional[SafetyGuard] = None
         self.nonce_manager: Optional[NonceManager] = None
-        
+
         # Performance tracking with enhanced metrics
         self._performance_stats = {
             "opportunities_detected": 0,
@@ -55,11 +57,11 @@ class ChainWorker:
             "memory_cleanups": 0,
             "balance_updates": 0,
             "error_count": 0,
-            "last_heartbeat": 0
+            "last_heartbeat": 0,
         }
         self._start_time = 0
         self._memory_optimizer = get_memory_optimizer()
-        
+
         logger.info(f"Enhanced ChainWorker created for chain ID: {self.chain_id}")
 
     async def initialize(self):
@@ -71,58 +73,60 @@ class ChainWorker:
 
             # Initialize Web3 connection
             self.web3 = await Web3ConnectionFactory.create_connection(self.chain_id)
-            
+
             # Initialize account
             from eth_account import Account
+
             self.account = Account.from_key(settings.wallet_key)
 
             if self.account.address.lower() != settings.wallet_address.lower():
                 raise InitializationError(
-                    "WALLET_KEY does not correspond to WALLET_ADDRESS.",
-                    component="ChainWorker"
+                    "WALLET_KEY does not correspond to WALLET_ADDRESS.", component="ChainWorker"
                 )
 
             # Initialize balance manager first (other components depend on it)
             self.balance_manager = BalanceManager(self.web3, self.account.address)
             await self.balance_manager.update_balance()
-            
+
             # Check initial balance requirements
             balance_summary = await self.balance_manager.get_balance_summary()
             if balance_summary["balance"] < settings.emergency_balance_threshold:
-                logger.warning(f"[Chain {self.chain_id}] Very low balance detected: {balance_summary['balance']:.6f} ETH")
-            
+                logger.warning(
+                    f"[Chain {self.chain_id}] Very low balance detected: {balance_summary['balance']:.6f} ETH"
+                )
+
             # Initialize other components
             self.market_feed = MarketDataFeed(self.web3)
             self.safety_guard = SafetyGuard(self.web3)
             self.nonce_manager = NonceManager(self.web3, self.account.address)
-            
+
             # Initialize transaction manager with balance manager
             self.tx_manager = TransactionManager(
                 web3=self.web3,
                 account=self.account,
                 chain_id=self.chain_id,
-                balance_manager=self.balance_manager
+                balance_manager=self.balance_manager,
             )
             await self.tx_manager.initialize()  # Initialize gas optimizer and other components
-            
+
             # Initialize strategy executor with balance manager
             self.strategy_executor = StrategyExecutor(
-                transaction_manager=self.tx_manager,
-                balance_manager=self.balance_manager
+                transaction_manager=self.tx_manager, balance_manager=self.balance_manager
             )
-            
+
             # Initialize transaction pool scanner
             self.tx_scanner = TxPoolScanner(
-                web3=self.web3,
-                strategy_executor=self.strategy_executor
+                web3=self.web3, strategy_executor=self.strategy_executor
             )
-            
+
             # Register memory cleanup callbacks
             self._memory_optimizer.register_cleanup_callback(self._cleanup_worker_caches)
-            
+
             logger.info(f"[Chain {self.chain_id}] Enhanced worker initialized successfully.")
-            logger.info(f"[Chain {self.chain_id}] Balance tier: {balance_summary['balance_tier']}, "
-                       f"Max investment: {balance_summary['max_investment']:.6f} ETH")
+            logger.info(
+                f"[Chain {self.chain_id}] Balance tier: {balance_summary['balance_tier']}, "
+                f"Max investment: {balance_summary['max_investment']:.6f} ETH"
+            )
 
         except Exception as e:
             logger.critical(f"[Chain {self.chain_id}] Failed to initialize: {e}", exc_info=True)
@@ -134,13 +138,15 @@ class ChainWorker:
             logger.warning(f"[Chain {self.chain_id}] Worker is already running.")
             return
 
-        if not all([self.web3, self.account, self.market_feed, self.tx_scanner, self.balance_manager]):
+        if not all(
+            [self.web3, self.account, self.market_feed, self.tx_scanner, self.balance_manager]
+        ):
             logger.error(f"[Chain {self.chain_id}] Cannot start, worker not initialized.")
             return
-            
+
         self.is_running = True
         self._start_time = asyncio.get_event_loop().time()
-        
+
         logger.info(f"[Chain {self.chain_id}] Starting enhanced background tasks...")
 
         # Start core monitoring tasks
@@ -163,7 +169,7 @@ class ChainWorker:
         # Cancel all tasks
         for task in self._tasks:
             task.cancel()
-        
+
         # Wait for tasks to complete
         await asyncio.gather(*[t for t in self._tasks if not t.done()], return_exceptions=True)
         self._tasks.clear()
@@ -178,33 +184,33 @@ class ChainWorker:
         await self._generate_final_report()
 
         logger.info(f"[Chain {self.chain_id}] Enhanced worker stopped.")
-        
+
     def _cleanup_worker_caches(self) -> None:
         """Memory cleanup callback for worker-specific caches."""
         try:
             cleanup_count = 0
-            
+
             # Clean transaction scanner caches
             if self.tx_scanner:
                 cache_stats = self.tx_scanner.get_cache_stats()
-                if cache_stats['tx_analysis_cache_size'] > 500:
+                if cache_stats["tx_analysis_cache_size"] > 500:
                     # Force cache cleanup in scanner
                     self.tx_scanner._manage_cache_size()
                     cleanup_count += 1
-            
+
             # Clean transaction manager caches
             if self.tx_manager:
                 # Transaction manager specific cleanup can be added here
                 pass
-            
+
             # Clean strategy executor memory
             if self.strategy_executor:
                 # Strategy executor specific cleanup can be added here
                 pass
-            
+
             self._performance_stats["memory_cleanups"] += cleanup_count
             logger.debug(f"[Chain {self.chain_id}] Worker cache cleanup completed")
-            
+
         except Exception as e:
             logger.error(f"[Chain {self.chain_id}] Error in worker cache cleanup: {e}")
 
@@ -216,15 +222,15 @@ class ChainWorker:
                 current_time = asyncio.get_event_loop().time()
                 self._performance_stats["uptime_seconds"] = int(current_time - self._start_time)
                 self._performance_stats["last_heartbeat"] = current_time
-                
+
                 # Get comprehensive status
                 balance_summary = await self.balance_manager.get_balance_summary()
                 tx_manager_stats = await self.tx_manager.get_performance_stats()
                 strategy_report = await self.strategy_executor.get_strategy_report()
-                
+
                 # Get memory metrics
                 memory_metrics = self._memory_optimizer.get_current_metrics()
-                
+
                 logger.info(
                     f"[Chain {self.chain_id} Enhanced Heartbeat] "
                     f"Status: Running | "
@@ -235,13 +241,13 @@ class ChainWorker:
                     f"Opportunities: {self._performance_stats['opportunities_detected']} | "
                     f"Memory: {memory_metrics.process_memory_mb:.1f}MB"
                 )
-                
+
                 # Emergency balance warning
                 if balance_summary["emergency_mode"]:
                     logger.warning(f"[Chain {self.chain_id}] EMERGENCY MODE: Very low balance!")
-                
+
                 await asyncio.sleep(settings.heartbeat_interval)
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -257,21 +263,25 @@ class ChainWorker:
                 old_summary = await self.balance_manager.get_balance_summary()
                 await self.balance_manager.update_balance(force=True)
                 new_summary = await self.balance_manager.get_balance_summary()
-                
+
                 # Log significant balance changes
                 balance_change = new_summary["balance"] - old_summary["balance"]
                 if abs(balance_change) > 0.001:  # More than 0.001 ETH change
-                    logger.info(f"[Chain {self.chain_id}] Balance change: {balance_change:+.6f} ETH")
+                    logger.info(
+                        f"[Chain {self.chain_id}] Balance change: {balance_change:+.6f} ETH"
+                    )
                     self._performance_stats["balance_updates"] += 1
-                
+
                 # Emergency stop if balance too low
                 if new_summary["emergency_mode"] and old_summary["balance_tier"] != "emergency":
-                    logger.critical(f"[Chain {self.chain_id}] Emergency balance threshold reached! "
-                                  f"Current balance: {new_summary['balance']:.6f} ETH")
+                    logger.critical(
+                        f"[Chain {self.chain_id}] Emergency balance threshold reached! "
+                        f"Current balance: {new_summary['balance']:.6f} ETH"
+                    )
                     # Could implement emergency stop here if needed
-                
+
                 await asyncio.sleep(30)  # Check balance every 30 seconds
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -284,20 +294,20 @@ class ChainWorker:
             try:
                 # Generate performance report every 10 minutes
                 await asyncio.sleep(600)
-                
+
                 if not self.is_running:
                     break
-                
+
                 # Get comprehensive performance data
                 balance_summary = await self.balance_manager.get_balance_summary()
                 tx_stats = await self.tx_manager.get_performance_stats()
                 strategy_report = await self.strategy_executor.get_strategy_report()
-                
+
                 # Calculate profitability metrics
                 roi = 0.0
                 if tx_stats["total_gas_spent_eth"] > 0:
                     roi = (tx_stats["net_profit_eth"] / tx_stats["total_gas_spent_eth"]) * 100
-                
+
                 performance_report = {
                     "chain_id": self.chain_id,
                     "uptime_hours": self._performance_stats["uptime_seconds"] / 3600,
@@ -306,16 +316,18 @@ class ChainWorker:
                     "strategy_performance": strategy_report["strategy_performance"],
                     "roi_percentage": roi,
                     "opportunities_per_hour": (
-                        self._performance_stats["opportunities_detected"] / 
-                        max(1, self._performance_stats["uptime_seconds"] / 3600)
-                    )
+                        self._performance_stats["opportunities_detected"]
+                        / max(1, self._performance_stats["uptime_seconds"] / 3600)
+                    ),
                 }
-                
-                logger.info(f"[Chain {self.chain_id}] Performance Report: "
-                           f"ROI: {roi:.2f}%, "
-                           f"Opportunities/hr: {performance_report['opportunities_per_hour']:.1f}, "
-                           f"Success Rate: {tx_stats['success_rate_percentage']:.1f}%")
-                
+
+                logger.info(
+                    f"[Chain {self.chain_id}] Performance Report: "
+                    f"ROI: {roi:.2f}%, "
+                    f"Opportunities/hr: {performance_report['opportunities_per_hour']:.1f}, "
+                    f"Success Rate: {tx_stats['success_rate_percentage']:.1f}%"
+                )
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -328,9 +340,9 @@ class ChainWorker:
             balance_summary = await self.balance_manager.get_balance_summary()
             tx_stats = await self.tx_manager.get_performance_stats()
             strategy_report = await self.strategy_executor.get_strategy_report()
-            
+
             total_time_hours = self._performance_stats["uptime_seconds"] / 3600
-            
+
             final_report = {
                 "chain_id": self.chain_id,
                 "total_runtime_hours": total_time_hours,
@@ -341,14 +353,16 @@ class ChainWorker:
                 "total_gas_spent_eth": tx_stats["total_gas_spent_eth"],
                 "net_profit_eth": tx_stats["net_profit_eth"],
                 "opportunities_detected": self._performance_stats["opportunities_detected"],
-                "opportunities_executed": self._performance_stats["opportunities_executed"]
+                "opportunities_executed": self._performance_stats["opportunities_executed"],
             }
-            
-            logger.info(f"[Chain {self.chain_id}] FINAL REPORT: "
-                       f"Runtime: {total_time_hours:.2f}h, "
-                       f"Net Profit: {final_report['net_profit_eth']:.6f} ETH, "
-                       f"Transactions: {final_report['successful_transactions']}/{final_report['total_transactions']}")
-            
+
+            logger.info(
+                f"[Chain {self.chain_id}] FINAL REPORT: "
+                f"Runtime: {total_time_hours:.2f}h, "
+                f"Net Profit: {final_report['net_profit_eth']:.6f} ETH, "
+                f"Transactions: {final_report['successful_transactions']}/{final_report['total_transactions']}"
+            )
+
         except Exception as e:
             logger.error(f"[Chain {self.chain_id}] Failed to generate final report: {e}")
 
@@ -356,12 +370,12 @@ class ChainWorker:
         """Get comprehensive worker status."""
         if not self.is_running:
             return {"status": "stopped", "chain_id": self.chain_id}
-        
+
         try:
             balance_summary = await self.balance_manager.get_balance_summary()
             tx_stats = await self.tx_manager.get_performance_stats()
             strategy_report = await self.strategy_executor.get_strategy_report()
-            
+
             return {
                 "status": "running",
                 "chain_id": self.chain_id,
@@ -371,10 +385,10 @@ class ChainWorker:
                 "strategy_summary": {
                     "execution_count": strategy_report["execution_count"],
                     "recent_performance": strategy_report["recent_performance"],
-                    "ml_parameters": strategy_report["ml_parameters"]
+                    "ml_parameters": strategy_report["ml_parameters"],
                 },
                 "performance_stats": self._performance_stats,
-                "pending_transactions": self.tx_scanner.get_pending_tx_count()
+                "pending_transactions": self.tx_scanner.get_pending_tx_count(),
             }
         except Exception as e:
             logger.error(f"[Chain {self.chain_id}] Failed to get status: {e}")

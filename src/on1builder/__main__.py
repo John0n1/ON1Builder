@@ -1,4 +1,6 @@
 # src/on1builder/__main__.py
+# noqa E302
+# flake8: noqa E501
 from __future__ import annotations
 
 import typer
@@ -17,8 +19,12 @@ app = typer.Typer(
 )
 
 app.add_typer(run_app, name="run")
+
 app.add_typer(config_app, name="config")
+
 app.add_typer(status_app, name="status")
+
+
 
 @app.command(name="version")
 def show_version():

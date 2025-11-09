@@ -1,4 +1,5 @@
 # src/on1builder/persistence/db_interface.py
+# flake8: noqa E501
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -7,11 +8,13 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from on1builder.config.loaders import settings
+from on1builder.config.settings import DatabaseSettings
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.singleton import SingletonMeta
 from .db_models import Base, Transaction, ProfitRecord
 
 logger = get_logger(__name__)
+
 
 class DatabaseInterface(metaclass=SingletonMeta):
     """
@@ -20,8 +23,17 @@ class DatabaseInterface(metaclass=SingletonMeta):
     """
 
     def __init__(self):
-        self._db_url = settings.database.url
-        self._engine = create_async_engine(self._db_url, echo=settings.debug)
+        raw_db_settings = getattr(settings, "database", None)
+        if isinstance(raw_db_settings, DatabaseSettings):
+            db_settings = raw_db_settings
+        elif isinstance(raw_db_settings, dict):
+            db_settings = DatabaseSettings(**raw_db_settings)
+        else:
+            db_settings = DatabaseSettings()
+
+        self._db_settings = db_settings
+        self._db_url = db_settings.url
+        self._engine = create_async_engine(self._db_url, echo=getattr(settings, "debug", False))
         self._session_factory = async_sessionmaker(
             bind=self._engine,
             class_=AsyncSession,
@@ -29,6 +41,19 @@ class DatabaseInterface(metaclass=SingletonMeta):
         )
         self._initialized = False
         logger.info(f"DatabaseInterface initialized for URL: {self._db_url}")
+
+    # ------------------------------------------------------------------
+    # Compatibility accessors
+    # ------------------------------------------------------------------
+    @property
+    def config(self) -> DatabaseSettings:
+        """Return resolved database settings for legacy callers."""
+        return self._db_settings
+
+    @property
+    def settings(self) -> DatabaseSettings:
+        """Alias maintained for callers expecting ``settings`` attribute."""
+        return self._db_settings
 
     async def initialize_db(self) -> None:
         """Creates all database tables based on the ORM models if they don't exist."""
@@ -45,7 +70,7 @@ class DatabaseInterface(metaclass=SingletonMeta):
 
         Args:
             tx_data: A dictionary containing transaction data.
-        
+
         Returns:
             The saved Transaction object or None on failure.
         """
@@ -66,7 +91,7 @@ class DatabaseInterface(metaclass=SingletonMeta):
 
         Args:
             profit_data: A dictionary containing profit data.
-        
+
         Returns:
             The saved ProfitRecord object or None on failure.
         """
@@ -78,7 +103,10 @@ class DatabaseInterface(metaclass=SingletonMeta):
                 await session.refresh(profit_record)
                 return profit_record
         except Exception as e:
-            logger.error(f"Failed to save profit record for tx {profit_data.get('tx_hash')}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to save profit record for tx {profit_data.get('tx_hash')}: {e}",
+                exc_info=True,
+            )
             return None
 
     async def get_transaction_by_hash(self, tx_hash: str) -> Optional[Transaction]:
@@ -87,7 +115,7 @@ class DatabaseInterface(metaclass=SingletonMeta):
 
         Args:
             tx_hash: The transaction hash to search for.
-            
+
         Returns:
             The Transaction object or None if not found.
         """
@@ -103,7 +131,7 @@ class DatabaseInterface(metaclass=SingletonMeta):
         Args:
             chain_id: The chain ID to filter by.
             limit: The maximum number of transactions to return.
-            
+
         Returns:
             A list of Transaction objects.
         """
@@ -123,7 +151,7 @@ class DatabaseInterface(metaclass=SingletonMeta):
 
         Args:
             chain_id: Optional chain ID to filter the summary.
-            
+
         Returns:
             A dictionary containing the profit summary.
         """
@@ -131,11 +159,11 @@ class DatabaseInterface(metaclass=SingletonMeta):
             query = select(
                 func.sum(ProfitRecord.profit_amount_eth).label("total_profit_eth"),
                 func.sum(ProfitRecord.profit_amount_usd).label("total_profit_usd"),
-                func.count(ProfitRecord.id).label("trade_count")
+                func.count(ProfitRecord.id).label("trade_count"),
             )
             if chain_id:
                 query = query.where(ProfitRecord.chain_id == chain_id)
-            
+
             result = await session.execute(query)
             summary = result.one_or_none()
 
@@ -145,7 +173,7 @@ class DatabaseInterface(metaclass=SingletonMeta):
             return {
                 "total_profit_eth": summary.total_profit_eth or 0.0,
                 "total_profit_usd": summary.total_profit_usd or 0.0,
-                "trade_count": summary.trade_count
+                "trade_count": summary.trade_count,
             }
 
     async def close(self) -> None:

@@ -1,4 +1,5 @@
 # src/on1builder/cli/run_cmd.py
+# flake8: noqa E501
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +15,7 @@ from on1builder.utils.cli_helpers import handle_cli_errors, info_message
 logger = get_logger(__name__)
 app = typer.Typer(help="Commands to run the ON1Builder bot.")
 
+
 @app.command(name="start")
 @handle_cli_errors(show_traceback=True)
 def start_bot():
@@ -22,9 +24,9 @@ def start_bot():
     This command boots the orchestrator and runs until interrupted.
     """
     logger.info("CLI: 'start' command invoked.")
-    
+
     orchestrator = MainOrchestrator()
     asyncio.run(orchestrator.run())
-    
+
     logger.info("ON1Builder has shut down.")
     info_message("Goodbye!")
