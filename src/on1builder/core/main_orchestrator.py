@@ -306,7 +306,7 @@ class MainOrchestrator:
 
                     chain_performances[worker.chain_id] = {
                         "profit_usd": float(chain_profit),
-                        "balance_eth": float(balance_manager.get_balance("ETH")),
+                        "balance_eth": float(await balance_manager.get_balance("ETH")),
                         "successful_trades": getattr(worker.tx_manager, "successful_trades", 0),
                         "failed_trades": getattr(worker.tx_manager, "failed_trades", 0),
                     }

@@ -277,98 +277,95 @@ class ConfigValidator:
                                 cause=e,
                             )
 
+    def validate_complete_config(self, config_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Perform complete validation of configuration dictionary.
 
-def validate_complete_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Perform complete validation of configuration dictionary.
+        Args:
+            config_dict: Raw configuration dictionary
 
-    Args:
-        config_dict: Raw configuration dictionary
+        Returns:
+            Validated and normalized configuration dictionary
 
-    Returns:
-        Validated and normalized configuration dictionary
+        Raises:
+            ValidationError: If any validation fails
+            ConfigurationError: If configuration is invalid
+        """
+        logger.info("Performing complete configuration validation")
 
-    Raises:
-        ValidationError: If any validation fails
-        ConfigurationError: If configuration is invalid
-    """
-    logger.info("Performing complete configuration validation")
+        try:
+            # Validate wallet settings
+            if "wallet_address" in config_dict:
+                config_dict["wallet_address"] = self.validate_wallet_address(
+                    config_dict["wallet_address"]
+                )
 
-    validator = ConfigValidator()
+            if "wallet_key" in config_dict:
+                config_dict["wallet_key"] = self.validate_private_key(config_dict["wallet_key"])
 
-    try:
-        # Validate wallet settings
-        if "wallet_address" in config_dict:
-            config_dict["wallet_address"] = validator.validate_wallet_address(
-                config_dict["wallet_address"]
-            )
+            # Validate chain settings
+            if "chains" in config_dict:
+                config_dict["chains"] = self.validate_chain_ids(config_dict["chains"])
 
-        if "wallet_key" in config_dict:
-            config_dict["wallet_key"] = validator.validate_private_key(config_dict["wallet_key"])
+            # Validate RPC URLs
+            if "rpc_urls" in config_dict and "chains" in config_dict:
+                config_dict["rpc_urls"] = self.validate_rpc_urls(
+                    config_dict["rpc_urls"], config_dict["chains"]
+                )
 
-        # Validate chain settings
-        if "chains" in config_dict:
-            config_dict["chains"] = validator.validate_chain_ids(config_dict["chains"])
+            # Validate balance thresholds
+            if all(
+                k in config_dict
+                for k in [
+                    "emergency_balance_threshold",
+                    "low_balance_threshold",
+                    "high_balance_threshold",
+                ]
+            ):
+                self.validate_balance_thresholds(
+                    config_dict["emergency_balance_threshold"],
+                    config_dict["low_balance_threshold"],
+                    config_dict["high_balance_threshold"],
+                )
 
-        # Validate RPC URLs
-        if "rpc_urls" in config_dict and "chains" in config_dict:
-            config_dict["rpc_urls"] = validator.validate_rpc_urls(
-                config_dict["rpc_urls"], config_dict["chains"]
-            )
+            # Validate gas settings
+            if all(
+                k in config_dict
+                for k in ["max_gas_price_gwei", "gas_price_multiplier", "default_gas_limit"]
+            ):
+                self.validate_gas_settings(
+                    config_dict["max_gas_price_gwei"],
+                    config_dict["gas_price_multiplier"],
+                    config_dict["default_gas_limit"],
+                )
 
-        # Validate balance thresholds
-        if all(
-            k in config_dict
-            for k in [
-                "emergency_balance_threshold",
-                "low_balance_threshold",
-                "high_balance_threshold",
-            ]
-        ):
-            validator.validate_balance_thresholds(
-                config_dict["emergency_balance_threshold"],
-                config_dict["low_balance_threshold"],
-                config_dict["high_balance_threshold"],
-            )
+            # Validate profit settings
+            if all(
+                k in config_dict
+                for k in ["min_profit_eth", "min_profit_percentage", "slippage_tolerance"]
+            ):
+                self.validate_profit_settings(
+                    config_dict["min_profit_eth"],
+                    config_dict["min_profit_percentage"],
+                    config_dict["slippage_tolerance"],
+                )
 
-        # Validate gas settings
-        if all(
-            k in config_dict
-            for k in ["max_gas_price_gwei", "gas_price_multiplier", "default_gas_limit"]
-        ):
-            validator.validate_gas_settings(
-                config_dict["max_gas_price_gwei"],
-                config_dict["gas_price_multiplier"],
-                config_dict["default_gas_limit"],
-            )
+            # Validate ML settings
+            if all(
+                k in config_dict for k in ["ml_learning_rate", "ml_exploration_rate", "ml_decay_rate"]
+            ):
+                self.validate_ml_settings(
+                    config_dict["ml_learning_rate"],
+                    config_dict["ml_exploration_rate"],
+                    config_dict["ml_decay_rate"],
+                )
 
-        # Validate profit settings
-        if all(
-            k in config_dict
-            for k in ["min_profit_eth", "min_profit_percentage", "slippage_tolerance"]
-        ):
-            validator.validate_profit_settings(
-                config_dict["min_profit_eth"],
-                config_dict["min_profit_percentage"],
-                config_dict["slippage_tolerance"],
-            )
+            logger.info("Configuration validation completed successfully")
+            return config_dict
 
-        # Validate ML settings
-        if all(
-            k in config_dict for k in ["ml_learning_rate", "ml_exploration_rate", "ml_decay_rate"]
-        ):
-            validator.validate_ml_settings(
-                config_dict["ml_learning_rate"],
-                config_dict["ml_exploration_rate"],
-                config_dict["ml_decay_rate"],
-            )
-
-        logger.info("Configuration validation completed successfully")
-        return config_dict
-
-    except (ValidationError, ConfigurationError) as e:
-        logger.error(f"Configuration validation failed: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error during configuration validation: {e}")
-        raise ConfigurationError("Configuration validation failed due to unexpected error", cause=e)
+        except (ValidationError, ConfigurationError) as e:
+            logger.error(f"Configuration validation failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during configuration validation: {e}")
+            raise ConfigurationError("Configuration validation failed due to unexpected error", cause=e)

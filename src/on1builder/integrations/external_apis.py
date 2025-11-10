@@ -174,7 +174,7 @@ class ExternalAPIManager(metaclass=SingletonMeta):
         await self._load_token_mappings_async()
         self._start_background_tasks()
         self._initialized = True
-        logger.info(
+        logger.debug(
             f"ExternalAPIManager initialized with {len(self._providers)} providers and {len(self._token_mappings)} token mappings."
         )
 

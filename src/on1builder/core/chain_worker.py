@@ -116,7 +116,7 @@ class ChainWorker:
 
             # Initialize transaction pool scanner
             self.tx_scanner = TxPoolScanner(
-                web3=self.web3, strategy_executor=self.strategy_executor
+                web3=self.web3, strategy_executor=self.strategy_executor, chain_id=self.chain_id
             )
 
             # Register memory cleanup callbacks

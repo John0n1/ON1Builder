@@ -75,7 +75,7 @@ A sophisticated, Maximum Extractable Value (MEV) bot designed for multi-chain ar
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/ON1Builder.git
+git clone https://github.com/John0n1/ON1Builder.git
 cd ON1Builder
 ```
 
@@ -203,6 +203,7 @@ DRY_RUN=true python -m on1builder
 ```bash
 # Check configuration
 python -m on1builder config check
+*
 
 # Monitor current status
 python -m on1builder status

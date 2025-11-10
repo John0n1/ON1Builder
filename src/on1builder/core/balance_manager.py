@@ -48,7 +48,7 @@ class BalanceManager:
 
     def __init__(self, web3: AsyncWeb3, wallet_address: str):
         self.web3 = web3
-        self.wallet_address = wallet_address
+        self.wallet_address = web3.to_checksum_address(wallet_address)
         self.current_balance: Optional[Decimal] = None
         self.balance_tier: str = "unknown"
         self.notification_service = NotificationService()
@@ -411,10 +411,14 @@ class BalanceManager:
     async def _get_chain_id(self) -> int:
         """Get chain ID with proper async handling."""
         try:
-            return await self.web3.eth.chain_id
-        except TypeError:
-            # Fallback for sync chain_id property
-            return self.web3.eth.chain_id
+            chain_id = self.web3.eth.chain_id
+            # Check if it's a coroutine that needs to be awaited
+            if hasattr(chain_id, '__await__'):
+                return await chain_id
+            return chain_id
+        except Exception as e:
+            logger.warning(f"Could not get chain ID: {e}, using default chain 1")
+            return 1
 
     def _cache_token_balance(self, identifier: str, balance: Decimal) -> None:
         """Cache token balance with timestamp."""
@@ -724,3 +728,23 @@ class BalanceManager:
         gas_reserve = Decimal("0.005") * max(5, int(self.current_balance))  # Scale with balance
 
         return max(Decimal("0"), adjusted_amount - gas_reserve)
+
+    async def get_balance_summary(self) -> Dict[str, Any]:
+        """
+        Get comprehensive balance summary including current balance and tier.
+
+        Returns:
+            Dictionary with balance information including:
+            - balance: Current ETH balance as float
+            - balance_tier: Current balance tier
+            - wallet_address: Wallet address
+            - max_investment: Maximum safe investment amount
+        """
+        await self.update_balance()
+
+        return {
+            "balance": float(self.current_balance or Decimal("0")),
+            "balance_tier": self.balance_tier,
+            "wallet_address": self.wallet_address,
+            "max_investment": float(await self.get_max_investment_amount()),
+        }
