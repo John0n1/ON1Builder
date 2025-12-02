@@ -1,14 +1,9 @@
-# ON1Builder MEV Bot
+# ON1Builder
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?logo=github)](https://opensource.org/licenses/MIT)
-[![PyPI Version](https://img.shields.io/pypi/v/on1builder?logo=pypi&logoColor=white)](https://pypi.org/project/on1builder/)
 
-[![Warning](https://img.shields.io/badge/⚠️-Development%20Build-red.svg)](https://github.com/john0n1/ON1Builder)
-
-
-
-A sophisticated, Maximum Extractable Value (MEV) bot designed for multi-chain arbitrage, front-running, advanced DeFi strategies - utilizing Flashloans via Aave V3. Built with enterprise-grade architecture, comprehensive safety mechanisms, and real-time market analysis.
+Maximum Extractable Value (MEV) bot designed for multi-chain arbitrage, front-running, advanced DeFi strategies, utilizing Flashloans via Aave V3. Built in safety mechanisms, and real-time market analysis.
 
 ##  Features
 
@@ -319,57 +314,11 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - Include docstrings for public methods
 - Maintain test coverage above 80%
 
-## Disclaimer
-
-**Important Legal and Financial Disclaimers:**
-
-- **High Risk**: MEV bot trading involves substantial financial risk. You may lose some or all of your capital.
-- **No Financial Advice**: This software is provided for educational and research purposes only. It does not constitute financial advice.
-- **Regulatory Compliance**: Ensure compliance with local laws and regulations in your jurisdiction.
-- **Use at Your Own Risk**: The developers are not responsible for any financial losses incurred through the use of this software.
-- **Testnet First**: Always test thoroughly on testnets before deploying to mainnet.
-
 ##  License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
-
-### Documentation
-- **Wiki**: Comprehensive guides and tutorials
-- **API Reference**: Detailed API documentation
-- **Examples**: Sample configurations and use cases
-
-### Community
-- **Discord**: [Join our Discord server](https://discord.gg/yourdiscord)
-- **Telegram**: [Official Telegram group](https://t.me/yourgroup)
-- **GitHub Issues**: Bug reports and feature requests
-
-### Professional Support
-For enterprise deployments and custom development:
-- **Email**: support@on1builder.com
-- **Consulting**: Available for custom strategy development
-
-## Acknowledgments
-
-- **Web3.py**: For blockchain interaction capabilities
-- **Aave Protocol**: For flash loan infrastructure
-- **Uniswap**: For decentralized exchange protocols
-- **OpenZeppelin**: For smart contract security standards
-- **The Ethereum Community**: For continuous innovation in DeFi
-
 ## Disclaimer
+
 ![Warning](https://img.shields.io/badge/⚠️-red.svg)
-
-**IN NO EVENT SHALL THE
-AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.**
-
 *You should always do your own research and understand the risks involved in trading and using MEV bots. This software is provided "as is" without any warranties or guarantees of any kind.*
-
----
-
-**Built with ❤️ by the ON1Builder team**
-
