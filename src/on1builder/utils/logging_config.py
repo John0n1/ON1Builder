@@ -6,8 +6,7 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 from on1builder.utils.path_helpers import get_base_dir
 

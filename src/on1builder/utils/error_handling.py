@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import traceback
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 from .logging_config import get_logger
 

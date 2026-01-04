@@ -23,6 +23,7 @@ class ABIRegistry(metaclass=SingletonMeta):
         self._tokens: List[Dict[str, Any]] = []
         self._token_map_by_symbol: Dict[int, Dict[str, str]] = {}  # chain_id -> {SYMBOL: address}
         self._token_map_by_address: Dict[int, Dict[str, str]] = {}  # chain_id -> {address: SYMBOL}
+        self._token_info_by_address: Dict[int, Dict[str, Dict[str, Any]]] = {}  # chain_id -> {address: info}
         self._loaded = False
         self._load_all_resources()
 
@@ -89,6 +90,18 @@ class ABIRegistry(metaclass=SingletonMeta):
                     if chain_id not in self._token_map_by_address:
                         self._token_map_by_address[chain_id] = {}
                     self._token_map_by_address[chain_id][address.lower()] = symbol.upper()
+
+                    # Store token info for quick lookup (including decimals/name where available)
+                    if chain_id not in self._token_info_by_address:
+                        self._token_info_by_address[chain_id] = {}
+                    self._token_info_by_address[chain_id][address.lower()] = {
+                        "symbol": symbol.upper(),
+                        "address": address.lower(),
+                        "chain_id": chain_id,
+                        "name": token_data.get("name"),
+                        "decimals": token_data.get("decimals", 18),
+                        "api_ids": token_data.get("api_ids", {}),
+                    }
                 except ValueError:
                     logger.warning(f"Invalid chain ID '{chain_id_str}' for token {symbol}")
 
@@ -141,3 +154,30 @@ class ABIRegistry(metaclass=SingletonMeta):
             A dictionary mapping uppercase token symbols to lowercase addresses.
         """
         return self._token_map_by_symbol.get(chain_id, {})
+
+    # ------------------------------------------------------------------
+    # Additional helpers for token metadata
+    # ------------------------------------------------------------------
+    def get_token_symbol_by_address(self, address: str, chain_id: Optional[int] = None) -> Optional[str]:
+        """Public-friendly alias that optionally searches across chains when chain_id is unknown."""
+        address = address.lower()
+        if chain_id is not None:
+            return self._token_map_by_address.get(chain_id, {}).get(address)
+
+        for chain_map in self._token_map_by_address.values():
+            symbol = chain_map.get(address)
+            if symbol:
+                return symbol
+        return None
+
+    def get_token_info_by_address(self, address: str, chain_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Return stored token metadata (symbol, name, decimals) for an address."""
+        address = address.lower()
+        if chain_id is not None:
+            return self._token_info_by_address.get(chain_id, {}).get(address)
+
+        for chain_map in self._token_info_by_address.values():
+            info = chain_map.get(address)
+            if info:
+                return info
+        return None

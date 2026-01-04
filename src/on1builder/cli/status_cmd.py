@@ -43,20 +43,21 @@ async def check_comprehensive_status():
 
             # Get some basic stats
             try:
-                recent_transactions = await db.get_recent_transactions(limit=10)
+                default_chain = settings.chains[0] if settings.chains else 1
+                recent_transactions = await db.get_recent_transactions(chain_id=default_chain, limit=10)
                 tx_count = len(recent_transactions)
             except:
                 tx_count = "N/A"
 
             table.add_row(
                 "Database",
-                "✅ Connected",
+                "Connected",
                 f"URL: {settings.database.url}",
                 f"Recent TXs: {tx_count}",
             )
             await db.close()
         except Exception as e:
-            table.add_row("Database", "❌ Failed", f"Error: {str(e)}", "N/A")
+            table.add_row("Database", "Failed", f"Error: {str(e)}", "N/A")
 
         # Check RPC and WebSocket Connections for each chain
         for chain_id in settings.chains:
@@ -73,7 +74,7 @@ async def check_comprehensive_status():
 
                 table.add_row(
                     f"Chain {chain_id} RPC",
-                    "✅ Connected",
+                    "Connected",
                     f"Block: {latest_block}",
                     f"Balance: {balance_summary['balance']:.6f} ETH",
                 )
@@ -83,30 +84,30 @@ async def check_comprehensive_status():
                 if ws_url:
                     table.add_row(
                         f"Chain {chain_id} WS",
-                        "🔗 Available",
+                        "Available",
                         f"URL: {ws_url}",
                         f"Tier: {balance_summary['balance_tier']}",
                     )
 
             except Exception as e:
-                table.add_row(f"Chain {chain_id}", "❌ Failed", f"Error: {str(e)[:50]}...", "N/A")
+                table.add_row(f"Chain {chain_id}", "Failed", f"Error: {str(e)[:50]}...", "N/A")
 
         # Check API integrations
         progress.update(task, description="Checking API integrations...")
         api_statuses = []
 
         if settings.api.etherscan_api_key:
-            api_statuses.append("Etherscan ✅")
+            api_statuses.append("Etherscan  ")
         if settings.api.coingecko_api_key:
-            api_statuses.append("CoinGecko ✅")
+            api_statuses.append("CoinGecko  ")
         if settings.api.coinmarketcap_api_key:
-            api_statuses.append("CoinMarketCap ✅")
+            api_statuses.append("CoinMarketCap  ")
         if settings.api.infura_project_id:
-            api_statuses.append("Infura ✅")
+            api_statuses.append("Infura  ")
 
         table.add_row(
             "API Services",
-            "🔧 Configured" if api_statuses else "⚠️ Limited",
+            "Configured" if api_statuses else "Limited",
             ", ".join(api_statuses) if api_statuses else "No APIs configured",
             f"{len(api_statuses)} active",
         )
@@ -117,29 +118,29 @@ async def check_comprehensive_status():
         if notification_channels:
             table.add_row(
                 "Notifications",
-                "📢 Enabled",
+                "Enabled",
                 f"Channels: {', '.join(notification_channels)}",
                 f"Level: {settings.notifications.min_level}",
             )
         else:
-            table.add_row("Notifications", "⚠️ Disabled", "No channels configured", "Silent mode")
+            table.add_row("Notifications", "Disabled", "No channels configured", "Silent mode")
 
         # Configuration summary
         progress.update(task, description="Analyzing configuration...")
         config_summary = []
 
         if settings.flashloan_enabled:
-            config_summary.append("Flashloan ✅")
+            config_summary.append("Flashloan  ")
         if settings.ml_enabled:
-            config_summary.append("ML ✅")
+            config_summary.append("ML  ")
         if settings.dynamic_profit_scaling:
-            config_summary.append("Dynamic Profit ✅")
+            config_summary.append("Dynamic Profit  ")
         if settings.dynamic_gas_pricing:
-            config_summary.append("Dynamic Gas ✅")
+            config_summary.append("Dynamic Gas  ")
 
         table.add_row(
             "Configuration",
-            "⚙️ Active",
+            "Active",
             ", ".join(config_summary),
             f"Debug: {'ON' if settings.debug else 'OFF'}",
         )
@@ -174,7 +175,7 @@ async def _show_balance_analysis():
 
         balance_panel = Panel(
             "\n".join(balance_info) + f"\n\nTotal Portfolio: {total_balance:.6f} ETH",
-            title="💰 Balance Analysis",
+            title="  Balance Analysis",
             style="cyan",
         )
         console.print(balance_panel)
@@ -192,24 +193,24 @@ async def _show_strategy_configuration():
             f"Slippage Tolerance: {settings.slippage_tolerance:.2f}%",
             f"Gas Price Limit: {settings.max_gas_price_gwei} Gwei",
             "",
-            "🤖 ML Configuration:",
+            "  ML Configuration:",
             f"Learning Rate: {settings.ml_learning_rate:.4f}",
             f"Exploration Rate: {settings.ml_exploration_rate:.2%}",
             f"Update Frequency: Every {settings.ml_update_frequency} transactions",
             "",
-            "🎯 Balance Thresholds:",
+            "  Balance Thresholds:",
             f"Emergency: {settings.emergency_balance_threshold:.4f} ETH",
             f"Low Balance: {settings.low_balance_threshold:.4f} ETH",
             f"High Balance: {settings.high_balance_threshold:.2f} ETH",
             "",
-            "⚡ Flashloan Settings:",
-            f"Enabled: {'✅' if settings.flashloan_enabled else '❌'}",
+            "  Flashloan Settings:",
+            f"Enabled: {' ' if settings.flashloan_enabled else ' '}",
             f"Max Amount: {settings.flashloan_max_amount_eth:.0f} ETH",
             f"Min Profit Multiplier: {settings.flashloan_min_profit_multiplier:.1f}x",
         ]
 
         strategy_panel = Panel(
-            "\n".join(strategy_config), title="🎯 Strategy & Configuration", style="green"
+            "\n".join(strategy_config), title="  Strategy & Configuration", style="green"
         )
         console.print(strategy_panel)
 
@@ -222,7 +223,7 @@ def status_command():
     """
     Comprehensive system status check with enhanced reporting.
     """
-    console.print("[bold blue]🔍 Running comprehensive system diagnostics...[/bold blue]")
+    console.print("[bold blue]Running comprehensive system diagnostics...[/bold blue]")
     try:
         asyncio.run(check_comprehensive_status())
     except Exception as e:
@@ -255,9 +256,9 @@ def balance_command():
                 balance_table.add_row("Max Investment", f"{summary['max_investment']:.6f} ETH")
                 balance_table.add_row("Profit Threshold", f"{summary['profit_threshold']:.6f} ETH")
                 balance_table.add_row(
-                    "Flashloan Recommended", "✅" if summary["flashloan_recommended"] else "❌"
+                    "Flashloan Recommended", "Yes" if summary["flashloan_recommended"] else "No"
                 )
-                balance_table.add_row("Emergency Mode", "🚨" if summary["emergency_mode"] else "✅")
+                balance_table.add_row("Emergency Mode", "YES" if summary["emergency_mode"] else "NO")
 
                 console.print(balance_table)
 
@@ -279,7 +280,7 @@ def performance_command():
 
     async def show_performance():
         try:
-            console.print("[bold blue]📊 Performance Analysis[/bold blue]")
+            console.print("[bold blue]Performance Analysis[/bold blue]")
 
             # This would integrate with the actual running system
             # For now, show configuration-based analysis
@@ -291,45 +292,45 @@ def performance_command():
 
             # Analyze gas settings
             if settings.dynamic_gas_pricing:
-                perf_table.add_row("Gas Pricing", "✅ Dynamic", "Optimized for market conditions")
+                perf_table.add_row("Gas Pricing", "Dynamic", "Optimized for market conditions")
             else:
-                perf_table.add_row("Gas Pricing", "⚠️ Static", "Consider enabling dynamic pricing")
+                perf_table.add_row("Gas Pricing", "Static", "Consider enabling dynamic pricing")
 
             # Analyze profit settings
             if settings.dynamic_profit_scaling:
-                perf_table.add_row("Profit Scaling", "✅ Dynamic", "Adapts to balance tier")
+                perf_table.add_row("Profit Scaling", "Dynamic", "Adapts to balance tier")
             else:
                 perf_table.add_row(
-                    "Profit Scaling", "⚠️ Static", "Enable dynamic scaling for better performance"
+                    "Profit Scaling", "Static", "Enable dynamic scaling for better performance"
                 )
 
             # Analyze ML settings
             if settings.ml_enabled:
                 if settings.ml_learning_rate > 0.05:
                     perf_table.add_row(
-                        "ML Learning", "⚠️ High LR", "Consider reducing learning rate"
+                        "ML Learning", "High LR", "Consider reducing learning rate"
                     )
                 else:
-                    perf_table.add_row("ML Learning", "✅ Optimal", "Learning rate well tuned")
+                    perf_table.add_row("ML Learning", "Optimal", "Learning rate well tuned")
             else:
                 perf_table.add_row(
-                    "ML Learning", "❌ Disabled", "Enable ML for better strategy selection"
+                    "ML Learning", "Disabled", "Enable ML for better strategy selection"
                 )
 
             # Analyze flashloan settings
             if settings.flashloan_enabled:
                 if settings.flashloan_min_profit_multiplier < 1.5:
                     perf_table.add_row(
-                        "Flashloan Risk", "⚠️ High", "Consider higher profit multiplier"
+                        "Flashloan Risk", "High", "Consider higher profit multiplier"
                     )
                 else:
-                    perf_table.add_row("Flashloan Risk", "✅ Conservative", "Good risk management")
+                    perf_table.add_row("Flashloan Risk", "Conservative", "Good risk management")
 
             console.print(perf_table)
 
             # Show optimization recommendations
             recommendations = [
-                "💡 Optimization Recommendations:",
+                "Optimization Recommendations:",
                 "",
                 "1. Enable all dynamic features for best performance",
                 "2. Monitor balance tiers and adjust strategies accordingly",
@@ -341,7 +342,7 @@ def performance_command():
 
             rec_panel = Panel(
                 "\n".join(recommendations),
-                title="🚀 Performance Optimization",
+                title="Performance Optimization",
                 style="bright_green",
             )
             console.print(rec_panel)

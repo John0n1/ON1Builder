@@ -45,7 +45,7 @@ def validate_config():
     Validates the current .env configuration by attempting to load it.
     Reports any validation errors found by Pydantic.
     """
-    console.print("🔍 Validating configuration from .env file...")
+    console.print("Validating configuration from .env file...")
     # The act of loading the settings performs the validation
     load_settings()
     success_message("Configuration is valid!")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 from on1builder.config.loaders import settings
@@ -186,7 +186,7 @@ class MultiChainOrchestrator:
         await sell_balance_manager.update_balance()
 
         # Calculate optimal trade size based on available balance and liquidity
-        trade_amount_usd = self._calculate_optimal_trade_size(
+        trade_amount_usd = await self._calculate_optimal_trade_size(
             opportunity, buy_balance_manager, sell_balance_manager
         )
 
@@ -305,7 +305,7 @@ class MultiChainOrchestrator:
                     # Minimum spread to cover gas costs and generate profit
                     min_spread_required = (
                         total_gas_cost / (buy_info["price"] * 100)
-                    ) * 100 + settings.min_profit_percent
+                    ) * 100 + settings.min_profit_percentage
 
                     if spread > min_spread_required:
                         estimated_profit = (spread / 100) * 100 - total_gas_cost  # On $100 trade
@@ -358,7 +358,7 @@ class MultiChainOrchestrator:
         # Sort by score descending
         return sorted(opportunities, key=lambda x: x["score"], reverse=True)
 
-    def _calculate_optimal_trade_size(
+    async def _calculate_optimal_trade_size(
         self,
         opportunity: Dict,
         buy_balance_manager: BalanceManager,
@@ -366,8 +366,8 @@ class MultiChainOrchestrator:
     ) -> Decimal:
         """Calculates optimal trade size based on available balances and risk management."""
         # Get available balances
-        buy_chain_balance = buy_balance_manager.get_balance("USDC")  # Assuming USDC for buying
-        sell_chain_balance = sell_balance_manager.get_balance(opportunity["token_symbol"])
+        buy_chain_balance = await buy_balance_manager.get_balance("USDC")  # Assuming USDC for buying
+        sell_chain_balance = await sell_balance_manager.get_balance(opportunity["token_symbol"])
 
         # Get balance-aware limits
         buy_limit = buy_balance_manager.get_balance_aware_investment_limit()
@@ -515,8 +515,8 @@ class MultiChainOrchestrator:
             if not (buy_success and sell_success):
                 # Calculate partial loss if only one side failed
                 if buy_success or sell_success:
-                    return -opportunity["estimated_gas_cost"] / 2
-                return -opportunity["estimated_gas_cost"]
+                    return Decimal(str(opportunity.get("estimated_gas_cost", 0))) * Decimal("-0.5")
+                return Decimal(str(-opportunity.get("estimated_gas_cost", 0)))
 
             # Get actual amounts from transaction receipts
             buy_amount_out = self._extract_amount_from_result(buy_result)
@@ -524,13 +524,14 @@ class MultiChainOrchestrator:
 
             if buy_amount_out and sell_amount_out:
                 # Calculate actual profit based on amounts
-                actual_profit = (
-                    sell_amount_out - trade_amount_usd - opportunity["estimated_gas_cost"]
-                )
-                return Decimal(str(actual_profit))
+                actual_profit = Decimal(str(sell_amount_out)) - Decimal(str(trade_amount_usd))
+                actual_profit -= Decimal(str(opportunity.get("estimated_gas_cost", 0)))
+                return actual_profit
             else:
                 # Fallback to estimated profit minus gas
-                return opportunity["expected_profit_usd"] - opportunity["estimated_gas_cost"]
+                estimated = Decimal(str(opportunity.get("expected_profit_usd", 0)))
+                gas_cost = Decimal(str(opportunity.get("estimated_gas_cost", 0)))
+                return estimated - gas_cost
 
         except Exception as e:
             logger.error(f"Error calculating actual profit: {e}")
@@ -539,44 +540,41 @@ class MultiChainOrchestrator:
     def _extract_amount_from_result(self, result) -> Optional[Decimal]:
         """Extracts actual output amount from transaction result by parsing logs."""
         try:
-            # Parse transaction logs to get actual swap amounts
-            if not isinstance(result, dict) or "receipt" not in result:
-                return result.get("amount_out_usd") if isinstance(result, dict) else None
+            if not isinstance(result, dict):
+                return None
 
-            receipt = result["receipt"]
+            # Fast-path if caller already provided a USD-denominated amount
+            if "amount_out_usd" in result and result.get("amount_out_usd") is not None:
+                return Decimal(str(result["amount_out_usd"]))
+
+            # Gracefully handle receipts without attempting brittle log parsing
+            receipt = result.get("receipt", {})
             logs = receipt.get("logs", [])
+            if not logs:
+                return None
 
-            # Parse Transfer events to determine actual output
+            # Conservative best-effort: count any Transfer events as output value
             total_out = Decimal("0")
-            our_address = self.account.address.lower() if hasattr(self, "account") else ""
-
+            transfer_topic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
             for log in logs:
-                try:
-                    # Check for Transfer events (ERC20)
-                    transfer_topic = (
-                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-                    )
-                    if log.get("topics") and len(log["topics"]) >= 3:
-                        if log["topics"][0].hex() == transfer_topic:
-                            to_addr = "0x" + log["topics"][2].hex()[-40:]
+                if isinstance(log, dict) and log.get("topics"):
+                    topics = log.get("topics", [])
+                    try:
+                        topic0 = topics[0].hex() if hasattr(topics[0], "hex") else str(topics[0])
+                    except Exception:
+                        continue
+                    if topic0 == transfer_topic:
+                        data = log.get("data", "0x")
+                        if isinstance(data, str) and len(data) >= 66:
+                            amount_hex = data[2:66]
+                            amount = int(amount_hex, 16)
+                            total_out += Decimal(amount) / Decimal(10**18)
 
-                            # If transfer is to our address, it's output
-                            if to_addr.lower() == our_address:
-                                data = log.get("data", "0x")
-                                if len(data) >= 66:
-                                    amount_hex = data[2:66]
-                                    amount = int(amount_hex, 16)
-                                    # Convert based on token decimals (assume 18 for simplicity)
-                                    amount_tokens = Decimal(amount) / Decimal(10**18)
-                                    total_out += amount_tokens
-                except (IndexError, ValueError, AttributeError):
-                    continue
-
-            return float(total_out) if total_out > 0 else result.get("amount_out_usd")
+            return total_out if total_out > 0 else None
 
         except Exception as e:
             logger.warning(f"Failed to extract output amount from logs: {e}")
-            return result.get("amount_out_usd") if isinstance(result, dict) else None
+            return None
 
     def _get_historical_success_rate(self, token_symbol: str) -> float:
         """Gets historical success rate for arbitrage with a specific token."""

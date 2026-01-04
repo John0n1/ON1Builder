@@ -5,8 +5,7 @@
 from __future__ import annotations
 import asyncio
 import functools
-from typing import Any, Callable, Dict, Optional, TypeVar, Union, List
-from decimal import Decimal
+from typing import Any, Callable, Dict, Optional, TypeVar, List
 from datetime import datetime, timedelta
 
 from .logging_config import get_logger

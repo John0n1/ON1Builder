@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Any
 from decimal import Decimal
 
 from ..utils.logging_config import get_logger
-from ..utils.custom_exceptions import ValidationError
 
 logger = get_logger(__name__)
 
@@ -362,7 +361,7 @@ class PerformanceMonitor:
         if "chains" in summary:
             report_lines.append("Chain Status:")
             for chain_id, chain_data in summary["chains"].items():
-                status = "✓" if chain_data["healthy"] else "✗"
+                status = "[OK]" if chain_data["healthy"] else "[X]"
                 report_lines.append(
                     f"  {status} Chain {chain_id}: {chain_data['status']} "
                     f"(Block: {chain_data['last_block']}, "

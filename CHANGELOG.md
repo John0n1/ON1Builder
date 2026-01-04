@@ -54,7 +54,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Safe configuration loading
 - No hardcoded secrets or keys
 
-## [Unreleased]
+## [Unreleased 2.2.0] - 2026-02-04
+
+### Added
+- Intent-focused tests across orchestrators, transaction manager profit/safety, market data, MEV scanner resilience, nonce manager, and optional live API probes.
+- Missing provider helpers in `integrations/external_apis.py` (Binance volume, CoinMarketCap market cap) to stabilize comprehensive market data calls.
+
+### Changed
+- README updated (Python 3.10+, clean architecture tree, clarified test commands and public RPC usage).
+- `.env.example` refreshed with public Ethereum RPC defaults and clearer API key/feature toggles (including `RUN_LIVE_API_TESTS`).
+- Ignition launcher displays v2.2.0; pyproject dev/test extras modernized for current toolchain.
 
 ### Planned
 - Enhanced strategy algorithms

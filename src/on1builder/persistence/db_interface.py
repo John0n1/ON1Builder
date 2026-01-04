@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from on1builder.config.loaders import settings
@@ -40,6 +40,8 @@ class DatabaseInterface(metaclass=SingletonMeta):
             expire_on_commit=False,
         )
         self._initialized = False
+        # Detect stub engine by presence of _store attribute
+        self._is_stub = hasattr(self._engine, "_store")
         logger.info(f"DatabaseInterface initialized for URL: {self._db_url}")
 
     # ------------------------------------------------------------------
@@ -59,8 +61,13 @@ class DatabaseInterface(metaclass=SingletonMeta):
         """Creates all database tables based on the ORM models if they don't exist."""
         if self._initialized:
             return
-        async with self._engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        if self._is_stub:
+            # Nothing to initialize for in-memory stub
+            self._engine._store.setdefault("transactions", [])
+            self._engine._store.setdefault("profit_records", [])
+        else:
+            async with self._engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
         self._initialized = True
         logger.info("Database schema checked and initialized.")
 
@@ -75,6 +82,11 @@ class DatabaseInterface(metaclass=SingletonMeta):
             The saved Transaction object or None on failure.
         """
         try:
+            if self._is_stub:
+                transaction = Transaction(**tx_data)
+                self._engine._store["transactions"].append(transaction)
+                return transaction
+
             async with self._session_factory() as session:
                 async with session.begin():
                     transaction = Transaction(**tx_data)
@@ -96,6 +108,11 @@ class DatabaseInterface(metaclass=SingletonMeta):
             The saved ProfitRecord object or None on failure.
         """
         try:
+            if self._is_stub:
+                profit_record = ProfitRecord(**profit_data)
+                self._engine._store["profit_records"].append(profit_record)
+                return profit_record
+
             async with self._session_factory() as session:
                 async with session.begin():
                     profit_record = ProfitRecord(**profit_data)
@@ -119,6 +136,12 @@ class DatabaseInterface(metaclass=SingletonMeta):
         Returns:
             The Transaction object or None if not found.
         """
+        if self._is_stub:
+            for tx in reversed(self._engine._store.get("transactions", [])):
+                if getattr(tx, "tx_hash", None) == tx_hash:
+                    return tx
+            return None
+
         async with self._session_factory() as session:
             stmt = select(Transaction).where(Transaction.tx_hash == tx_hash)
             result = await session.execute(stmt)
@@ -135,6 +158,10 @@ class DatabaseInterface(metaclass=SingletonMeta):
         Returns:
             A list of Transaction objects.
         """
+        if self._is_stub:
+            txs = [tx for tx in self._engine._store.get("transactions", []) if getattr(tx, "chain_id", None) == chain_id]
+            return list(reversed(txs))[:limit]
+
         async with self._session_factory() as session:
             stmt = (
                 select(Transaction)
@@ -155,6 +182,21 @@ class DatabaseInterface(metaclass=SingletonMeta):
         Returns:
             A dictionary containing the profit summary.
         """
+        if self._is_stub:
+            records = self._engine._store.get("profit_records", [])
+            if chain_id is not None:
+                records = [r for r in records if getattr(r, "chain_id", None) == chain_id]
+            trade_count = len(records)
+            total_profit_eth = sum(getattr(r, "profit_amount_eth", 0.0) or 0.0 for r in records)
+            total_profit_usd = sum(getattr(r, "profit_amount_usd", 0.0) or 0.0 for r in records)
+            if trade_count == 0:
+                return {"total_profit_eth": 0.0, "total_profit_usd": 0.0, "trade_count": 0}
+            return {
+                "total_profit_eth": total_profit_eth,
+                "total_profit_usd": total_profit_usd,
+                "trade_count": trade_count,
+            }
+
         async with self._session_factory() as session:
             query = select(
                 func.sum(ProfitRecord.profit_amount_eth).label("total_profit_eth"),
@@ -178,6 +220,6 @@ class DatabaseInterface(metaclass=SingletonMeta):
 
     async def close(self) -> None:
         """Disposes of the database engine connection pool."""
-        if self._engine:
+        if self._engine and hasattr(self._engine, "dispose"):
             await self._engine.dispose()
             logger.info("Database engine disposed.")

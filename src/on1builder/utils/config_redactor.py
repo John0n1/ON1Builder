@@ -2,7 +2,7 @@
 """Configuration redaction utilities for ON1Builder."""
 # flake8: noqa E501
 from __future__ import annotations
-from typing import Any, Dict, List, Union
+from typing import Any, Dict
 
 
 class ConfigRedactor:

@@ -210,7 +210,7 @@ class TransactionManager:
 
             # Post-execution balance and profit calculation
             post_balance = await self._balance_manager.update_balance(force=True)
-            actual_profit_eth = float(post_balance - pre_balance) + gas_cost_eth
+            actual_profit_eth = float(post_balance - pre_balance) - gas_cost_eth
 
             # Update stats
             self._execution_stats["total_transactions"] += 1

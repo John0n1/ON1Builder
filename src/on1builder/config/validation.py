@@ -249,6 +249,14 @@ class ConfigValidator:
                 continue
 
             path = Path(path_value)
+            # Windows-specific guard: POSIX-style absolute paths without a drive
+            # (e.g. "/invalid/path") are typically unintended and should be rejected early.
+            if (path.is_absolute() or str(path).startswith(("/", "\\"))) and path.drive == "" and path.anchor in ("/", "\\"):
+                raise ValidationError(
+                    f"Cannot create directory: {path}",
+                    field=path_name,
+                    value=str(path),
+                )
 
             if path_name.endswith("_dir") or path_name.endswith("_directory"):
                 # Directory should exist or be creatable
@@ -369,3 +377,16 @@ class ConfigValidator:
         except Exception as e:
             logger.error(f"Unexpected error during configuration validation: {e}")
             raise ConfigurationError("Configuration validation failed due to unexpected error", cause=e)
+
+
+# Provide a module-level wrapper to keep the public API simple
+def validate_complete_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convenience helper that mirrors :meth:`ConfigValidator.validate_complete_config`.
+
+    The test suite and the settings model expect this symbol to exist at module scope,
+    but the original implementation only lived on the ``ConfigValidator`` class which
+    caused ``ImportError`` when importing ``validate_complete_config`` directly.
+    """
+    validator = ConfigValidator()
+    return validator.validate_complete_config(config_dict)

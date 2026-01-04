@@ -1,6 +1,6 @@
 # ON1Builder
 
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?logo=github)](https://opensource.org/licenses/MIT)
 
 Maximum Extractable Value (MEV) bot designed for multi-chain arbitrage, front-running, advanced DeFi strategies, utilizing Flashloans via Aave V3. Built in safety mechanisms, and real-time market analysis.
@@ -29,34 +29,34 @@ Maximum Extractable Value (MEV) bot designed for multi-chain arbitrage, front-ru
 ##  Architecture
 
 ```
-├── src/on1builder/
-│   ├── core/                 # Core orchestration and chain management
-│   │   ├── main_orchestrator.py      # Main application controller
-│   │   ├── multi_chain_orchestrator.py # Cross-chain coordination
-│   │   ├── chain_worker.py           # Per-chain operation handler
-│   │   ├── transaction_manager.py    # Transaction execution
-│   │   └── balance_manager.py        # Portfolio management
-│   ├── engines/              # Strategy execution engines
-│   │   ├── strategy_executor.py      # MEV strategy implementation
-│   │   └── safety_guard.py          # Risk management
-│   ├── monitoring/           # Market data and transaction monitoring
-│   │   ├── market_data_feed.py      # Price feeds and market analysis
-│   │   └── txpool_scanner.py        # Mempool monitoring
-│   ├── integrations/         # External service integrations
-│   │   ├── external_apis.py         # API managers (CoinGecko, etc.)
-│   │   └── abi_registry.py          # Smart contract interfaces
-│   ├── utils/               # Utilities and helpers
-│   │   ├── gas_optimizer.py        # Gas price optimization
-│   │   ├── profit_calculator.py    # P&L calculation
-│   │   └── notification_service.py  # Alert system
-│   ├── config/              # Configuration management
-│   └── persistence/         # Data storage layer
+├─ src/on1builder/
+│  ├─ core/                   # Core orchestration and chain management
+│  │  ├─ main_orchestrator.py       # Main application controller
+│  │  ├─ multi_chain_orchestrator.py # Cross-chain coordination
+│  │  ├─ chain_worker.py            # Per-chain operation handler
+│  │  ├─ transaction_manager.py     # Transaction execution
+│  │  └─ balance_manager.py         # Portfolio management
+│  ├─ engines/                # Strategy execution engines
+│  │  ├─ strategy_executor.py       # MEV strategy implementation
+│  │  └─ safety_guard.py            # Risk management
+│  ├─ monitoring/             # Market data and transaction monitoring
+│  │  ├─ market_data_feed.py        # Price feeds and market analysis
+│  │  └─ txpool_scanner.py          # Mempool monitoring
+│  ├─ integrations/           # External service integrations
+│  │  ├─ external_apis.py           # API managers (CoinGecko, etc.)
+│  │  └─ abi_registry.py            # Smart contract interfaces
+│  ├─ utils/                  # Utilities and helpers
+│  │  ├─ gas_optimizer.py           # Gas price optimization
+│  │  ├─ profit_calculator.py       # P&L calculation
+│  │  └─ notification_service.py    # Alert system
+│  ├─ config/                 # Configuration management
+│  └─ persistence/            # Data storage layer
 ```
 
 ##  Prerequisites
 
-- **Synced Geth/Nethermind Node**: For blockchain RPC access
-- **Python 3.11+**
+- **Synced Geth/Nethermind Node**: For blockchain RPC access (or a reliable public RPC)
+- **Python 3.10+**
 - **Node.js 16+** (for some utilities)
 - **Git**
 - **Virtual Environment** (recommended)
@@ -243,14 +243,14 @@ python -m on1builder status --detailed
 
 ### Running Tests
 ```bash
-# Run all tests
-python -m pytest tests/
+# Run all fast/offline tests
+python -m pytest
+
+# Opt-in live API probes (set RPC_URL_* and API keys first)
+RUN_LIVE_API_TESTS=1 python -m pytest tests/test_external_api_integration.py
 
 # Run with coverage
-python -m pytest tests/ --cov=on1builder
-
-# Run specific test categories
-python -m pytest tests/test_core/ -v
+python -m pytest --cov=on1builder
 ```
 
 ### Code Quality

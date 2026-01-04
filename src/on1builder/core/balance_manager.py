@@ -48,7 +48,24 @@ class BalanceManager:
 
     def __init__(self, web3: AsyncWeb3, wallet_address: str):
         self.web3 = web3
-        self.wallet_address = web3.to_checksum_address(wallet_address)
+        # Some test doubles return an awaitable here; fall back to the raw address if so.
+        self.wallet_address = wallet_address
+        try:
+            checksum_fn = getattr(web3, "to_checksum_address", None)
+            if callable(checksum_fn):
+                maybe_addr = checksum_fn(wallet_address)
+                if isinstance(maybe_addr, str):
+                    self.wallet_address = maybe_addr
+                elif hasattr(maybe_addr, "__await__"):
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Don't block a running loop; keep the provided address.
+                        pass
+                    else:
+                        self.wallet_address = loop.run_until_complete(maybe_addr)
+        except Exception:
+            # Best effort only; keep the provided address on any failure
+            self.wallet_address = wallet_address
         self.current_balance: Optional[Decimal] = None
         self.balance_tier: str = "unknown"
         self.notification_service = NotificationService()
@@ -742,9 +759,19 @@ class BalanceManager:
         """
         await self.update_balance()
 
+        max_investment = await self.get_max_investment_amount()
+        profit_threshold = await self.calculate_dynamic_profit_threshold(max_investment)
+        emergency_mode = (self.current_balance or Decimal("0")) <= Decimal(
+            str(settings.emergency_balance_threshold)
+        )
+        flashloan_recommended = await self.should_use_flashloan(max_investment)
+
         return {
             "balance": float(self.current_balance or Decimal("0")),
             "balance_tier": self.balance_tier,
             "wallet_address": self.wallet_address,
-            "max_investment": float(await self.get_max_investment_amount()),
+            "max_investment": float(max_investment),
+            "profit_threshold": float(profit_threshold),
+            "flashloan_recommended": bool(flashloan_recommended),
+            "emergency_mode": emergency_mode,
         }

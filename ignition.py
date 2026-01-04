@@ -53,7 +53,7 @@ class Ignition:
         console.clear()
         header = Panel(
             "[bold yellow]ON1Builder Ignition[/]\n[dim]Interactive TUI Launcher[/]",
-            title="[bold]v2.1.4[/]",
+            title="[bold]v2.2.0[/]",
             border_style="yellow",
             expand=False,
         )
@@ -81,19 +81,19 @@ class Ignition:
             self.display_status()
 
             if not self.env_file_path:
-                console.print("[bold yellow]⚠️  .env file not found.[/] Please specify the path.")
+                console.print("[bold yellow]    .env file not found.[/] Please specify the path.")
                 self.configure_env_path()
                 continue
 
             choice = questionary.select(
                 "Select an action:",
                 choices=[
-                    questionary.Choice("🚀 Launch ON1Builder", value="launch"),
-                    questionary.Choice("🔎 Check System Status", value="status"),
-                    questionary.Choice("⚙️  Configure .env Path", value="config"),
-                    questionary.Choice("📄 View Logs", value="logs"),
+                    questionary.Choice("  Launch ON1Builder", value="launch"),
+                    questionary.Choice("  Check System Status", value="status"),
+                    questionary.Choice("    Configure .env Path", value="config"),
+                    questionary.Choice("  View Logs", value="logs"),
                     questionary.Separator(),
-                    questionary.Choice("❌ Exit", value="exit"),
+                    questionary.Choice("  Exit", value="exit"),
                 ],
                 use_indicator=True,
             ).ask()
@@ -117,13 +117,13 @@ class Ignition:
         ).ask()
         if path_str:
             self.env_file_path = Path(path_str)
-            console.print(f"[green]✅ .env path set to: {self.env_file_path}[/]")
+            console.print(f"[green]  .env path set to: {self.env_file_path}[/]")
         time.sleep(1.5)
 
     def launch_bot(self):
         """Constructs and runs the 'run start' command."""
         self.display_header()
-        console.print("[bold green]🚀 Launching ON1Builder...[/]")
+        console.print("[bold green]  Launching ON1Builder...[/]")
         console.print("[dim]Press Ctrl+C to stop the bot at any time.[/]\n")
 
         command = [sys.executable, "-m", "on1builder", "run", "start"]

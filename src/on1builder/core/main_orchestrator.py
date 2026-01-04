@@ -16,7 +16,7 @@ from on1builder.utils.custom_exceptions import InitializationError
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.notification_service import NotificationService
 from on1builder.utils.web3_factory import create_web3_instance
-from on1builder.utils.error_recovery import get_error_recovery_manager, with_error_recovery
+from on1builder.utils.error_recovery import get_error_recovery_manager
 from on1builder.utils.constants import PERFORMANCE_MONITORING_INTERVAL
 from on1builder.persistence.db_interface import DatabaseInterface
 
@@ -353,7 +353,7 @@ class MainOrchestrator:
                 # Check balance manager health
                 balance_manager = self._balance_managers.get(worker.chain_id)
                 if balance_manager:
-                    eth_balance = balance_manager.get_balance("ETH")
+                    eth_balance = await balance_manager.get_balance("ETH")
                     if eth_balance < Decimal("0.01"):  # Low ETH balance warning
                         await self._send_alert(
                             title=f"Low ETH Balance Warning - Chain {worker.chain_id}",

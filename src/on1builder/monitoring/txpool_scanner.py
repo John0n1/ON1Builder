@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set
 from datetime import datetime, timedelta
 import re
@@ -15,7 +14,7 @@ from on1builder.config.loaders import settings
 from on1builder.engines.strategy_executor import StrategyExecutor
 from on1builder.integrations.abi_registry import ABIRegistry
 from on1builder.utils.logging_config import get_logger
-from on1builder.utils.constants import DEX_ROUTER_IDENTIFIERS, TXPOOL_SCAN_INTERVAL
+from on1builder.utils.constants import DEX_ROUTER_IDENTIFIERS
 
 logger = get_logger(__name__)
 

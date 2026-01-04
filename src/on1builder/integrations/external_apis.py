@@ -959,6 +959,54 @@ class ExternalAPIManager(metaclass=SingletonMeta):
             "timestamp": datetime.now().isoformat(),
         }
 
+    async def _get_binance_volume(self, token_symbol: str) -> Optional[float]:
+        """Fetch 24h volume from Binance if available."""
+        try:
+            provider = self._providers.get("binance")
+            if not provider or not provider.is_healthy:
+                return None
+
+            symbol = f"{token_symbol.upper()}USDT"
+            params = {"symbol": symbol}
+            url = f"{provider.base_url}/ticker/24hr"
+            async with provider.limiter:
+                data = await self._make_request(url, provider.name, params=params)
+                provider.rate_tracker.record_request(data is not None)
+                if data and "quoteVolume" in data:
+                    provider.consecutive_failures = 0
+                    return float(data.get("quoteVolume", 0))
+                provider.consecutive_failures += 1
+            return None
+        except Exception as e:
+            logger.debug(f"Binance volume fetch failed for {token_symbol}: {e}")
+            return None
+
+    async def _get_coinmarketcap_market_cap(self, token_symbol: str) -> Optional[float]:
+        """Fetch market cap from CoinMarketCap if configured."""
+        try:
+            provider = self._providers.get("coinmarketcap")
+            if not provider or not provider.api_key or not provider.is_healthy:
+                return None
+
+            url = f"{provider.base_url}/cryptocurrency/quotes/latest"
+            params = {"symbol": token_symbol.upper()}
+            headers = {"X-CMC_PRO_API_KEY": provider.api_key}
+            async with provider.limiter:
+                data = await self._make_request(url, provider.name, params=params, headers=headers)
+                provider.rate_tracker.record_request(data is not None)
+                if data and "data" in data:
+                    entry = data["data"].get(token_symbol.upper(), [{}])[0] if isinstance(data["data"].get(token_symbol.upper(), {}), list) else data["data"].get(token_symbol.upper(), {})
+                    quote = entry.get("quote", {}).get("USD", {})
+                    market_cap = quote.get("market_cap")
+                    if market_cap:
+                        provider.consecutive_failures = 0
+                        return float(market_cap)
+                provider.consecutive_failures += 1
+            return None
+        except Exception as e:
+            logger.debug(f"CoinMarketCap market cap fetch failed for {token_symbol}: {e}")
+            return None
+
     async def _get_coingecko_sentiment(self, token_symbol: str) -> Optional[float]:
         """Get sentiment from CoinGecko API."""
         try:

@@ -2,11 +2,10 @@
 # flake8: noqa E501
 from __future__ import annotations
 
-import asyncio
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from datetime import datetime
-import json
+
 
 from web3 import AsyncWeb3
 from web3.types import TxReceipt
@@ -381,8 +380,14 @@ class ProfitCalculator:
             return self._token_decimals_cache[token_address]
 
         try:
+            chain_id = None
+            try:
+                chain_id = await self._web3.eth.chain_id
+            except Exception:
+                chain_id = None
+
             # Try to get from ABI registry first
-            token_info = self._abi_registry.get_token_info_by_address(token_address)
+            token_info = self._abi_registry.get_token_info_by_address(token_address, chain_id)
             if token_info and "decimals" in token_info:
                 decimals = token_info["decimals"]
             else:

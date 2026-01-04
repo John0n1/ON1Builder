@@ -39,6 +39,10 @@ class Transaction(Base):
     balance_before = Column(Float, nullable=True)  # Balance before transaction (ETH)
     balance_after = Column(Float, nullable=True)  # Balance after transaction (ETH)
 
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
     def to_dict(self) -> Dict[str, Any]:
         """Converts the model instance to a dictionary."""
         return {
@@ -89,6 +93,10 @@ class ProfitRecord(Base):
     # Risk metrics
     max_exposure_eth = Column(Float, nullable=True)  # Maximum capital at risk
     risk_score = Column(Float, nullable=True)  # Calculated risk score (0-1)
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts the model instance to a dictionary."""

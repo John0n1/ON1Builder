@@ -8,8 +8,6 @@ import time
 from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import numpy as np
-
 from on1builder.config.loaders import settings
 from on1builder.core.balance_manager import BalanceManager
 from on1builder.utils.custom_exceptions import StrategyExecutionError
@@ -70,7 +68,7 @@ class StrategyExecutor:
         }
 
         # ML state
-        self._weights: Dict[str, np.ndarray] = {}
+        self._weights: Dict[str, List[float]] = {}
         self._strategy_history: List[Dict[str, Any]] = []
         self._execution_count = 0
         self._last_weight_update = 0
@@ -87,6 +85,10 @@ class StrategyExecutor:
         self._initialize_performance_tracking()
         logger.info("Enhanced StrategyExecutor initialized with ML and balance awareness.")
 
+    @staticmethod
+    def _mean(values: List[float]) -> float:
+        return sum(values) / len(values) if values else 0.0
+
     def _load_weights(self):
         """Enhanced weight loading with validation and migration."""
         try:
@@ -102,12 +104,12 @@ class StrategyExecutor:
                             weights = strategy_data.get("weight", [1.0])
                             if isinstance(weights, (int, float)):
                                 weights = [weights]
-                            self._weights[strategy_name] = np.array(weights, dtype=float)
+                            self._weights[strategy_name] = [float(w) for w in weights]
                 else:
                     # Old format - direct weights
                     for strategy_name, weights_list in data.items():
                         if strategy_name in self._strategies:
-                            self._weights[strategy_name] = np.array(weights_list, dtype=float)
+                            self._weights[strategy_name] = [float(w) for w in weights_list]
 
                 logger.info("Loaded strategy weights from file.")
         except (IOError, json.JSONDecodeError) as e:
@@ -117,7 +119,7 @@ class StrategyExecutor:
         for strategy_name, strategy_info in self._strategies.items():
             if strategy_name not in self._weights:
                 num_functions = len(strategy_info["functions"])
-                self._weights[strategy_name] = np.ones(num_functions, dtype=float)
+                self._weights[strategy_name] = [1.0 for _ in range(num_functions)]
 
     def _save_weights(self):
         """Enhanced weight saving with metadata."""
@@ -131,7 +133,7 @@ class StrategyExecutor:
         for strategy_name, weights in self._weights.items():
             performance = self._strategy_performance.get(strategy_name, {})
             data["strategies"][strategy_name] = {
-                "weight": weights.tolist(),
+                "weight": list(weights),
                 "performance_metrics": performance,
                 "risk_level": self._strategies[strategy_name]["risk_level"],
                 "profit_potential": self._strategies[strategy_name]["profit_potential"],
@@ -170,12 +172,24 @@ class StrategyExecutor:
 
         eligible = []
 
+        tier_rank = {
+            "emergency": 0,
+            "dust": 1,
+            "low": 2,
+            "small": 2,
+            "medium": 3,
+            "large": 4,
+            "high": 4,
+            "whale": 5,
+        }
+        current_rank = tier_rank.get(balance_tier, tier_rank["low"])
+
         for strategy_name, strategy_info in self._strategies.items():
             # Check balance tier requirement
             min_tier = strategy_info["min_balance_tier"]
-            tier_order = ["emergency", "low", "medium", "high"]
+            min_rank = tier_rank.get(min_tier, 0)
 
-            if tier_order.index(balance_tier) < tier_order.index(min_tier):
+            if current_rank < min_rank:
                 continue
 
             # Check if strategy matches opportunity type
@@ -197,7 +211,7 @@ class StrategyExecutor:
         weights = self._weights[strategy_name]
 
         # Base score from ML weights
-        base_score = np.mean(weights)
+        base_score = self._mean(weights)
 
         # Performance adjustments
         success_rate_bonus = performance["success_rate"] * 0.3
@@ -416,16 +430,14 @@ class StrategyExecutor:
         current_weights = self._weights[strategy_name]
 
         # Use contextual bandits approach
-        context_vector = np.array(
-            [
-                opportunity.get("expected_profit_eth", 0) * 100,
-                1.0 if opportunity.get("flashloan_recommended", False) else 0.0,
-                {"emergency": 0, "low": 1, "medium": 2, "high": 3}.get(
-                    opportunity.get("balance_tier", "medium"), 2
-                )
-                / 3.0,
-            ]
-        )
+        context_vector = [
+            opportunity.get("expected_profit_eth", 0) * 100,
+            1.0 if opportunity.get("flashloan_recommended", False) else 0.0,
+            {"emergency": 0, "low": 1, "medium": 2, "high": 3}.get(
+                opportunity.get("balance_tier", "medium"), 2
+            )
+            / 3.0,
+        ]
 
         # Simple linear update (can be enhanced with more sophisticated ML)
         for i in range(len(current_weights)):
@@ -474,7 +486,7 @@ class StrategyExecutor:
                 "decay_rate": self._decay_rate,
             },
             "strategy_performance": self._strategy_performance,
-            "weights": {k: v.tolist() for k, v in self._weights.items()},
+            "weights": {k: list(v) for k, v in self._weights.items()},
             "recent_performance": self._calculate_recent_performance(),
             "balance_summary": await self._balance_manager.get_balance_summary(),
         }
