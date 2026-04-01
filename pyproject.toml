@@ -26,7 +26,7 @@ authors = [
 
 dependencies = [
   "aiohappyeyeballs==2.6.1",
-  "aiohttp==3.13.3",
+  "aiohttp==3.13.4",
   "aiosignal==1.4.0",
   "annotated-types==0.7.0",
   "attrs==26.1.0",
@@ -66,7 +66,7 @@ dependencies = [
   "pyunormalize==17.0.0",
   "questionary==2.1.1",
   "regex==2026.2.28",
-  "requests==2.33.0",
+  "requests==2.33.1",
   "rich==14.3.3",
   "rlp==4.1.0",
   "shellingham==1.5.4",
