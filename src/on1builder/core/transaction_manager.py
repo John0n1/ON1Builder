@@ -184,7 +184,7 @@ class TransactionManager:
             try:
                 estimated_gas = await self._web3.eth.estimate_gas(tx_params)
                 # Add 20% buffer for safety
-                tx_params["gas"] = int(estimated_gas * 1.2)
+                tx_params["gas"] = min(int(estimated_gas * 1.2), 30_000_000)
             except Exception as e:
                 logger.warning(f"Gas estimation failed: {e}. Using default limit.")
                 tx_params["gas"] = settings.default_gas_limit

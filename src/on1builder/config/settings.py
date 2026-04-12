@@ -213,7 +213,10 @@ class GlobalSettings(BaseModel):
                     if isinstance(current, BaseModel) and isinstance(value, dict):
                         try:
                             value = current.__class__(**value)
-                        except Exception:
+                        except Exception as e:
+                            logger.debug(
+                                "Could not coerce validated value for %s: %s", key, e
+                            )
                             continue
                     setattr(self, key, value)
 
