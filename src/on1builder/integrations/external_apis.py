@@ -212,6 +212,7 @@ class ExternalAPIManager(metaclass=SingletonMeta):
                 ),
             )
             await self._load_token_mappings_async()
+            self._load_configured_oracle_feeds()
             self._start_background_tasks()
             self._initialized = True
             self._closed = False

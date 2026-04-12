@@ -72,8 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bare `except:` clauses in `cli/status_cmd.py` and `core/multi_chain_orchestrator.py` (2 instances) replaced with `except Exception as e:` with proper logging.
 - Duplicate "ON1Builder" in system status table title.
 - Silent exception swallowing in `settings.py` `validate_complete_settings` now logs coercion failures.
-- Gas estimation overflow: added cap at 30M (Ethereum block gas limit) in `transaction_manager.py`.
+- Gas estimation overflow: capped with `MAX_GAS_LIMIT` constant (via `utils.constants`) in `transaction_manager.py`.
 - RPC connection check in `config/manager.py` using `str(chain_id)` when `rpc_urls` is keyed by `int`.
+- Dependency resolution: removed 40+ hard-pinned transitive dependencies from `pyproject.toml` and `requirements.txt`; only direct project dependencies listed with ranges; pip resolves the transitive tree (fixes CI/CD dependency conflicts).
+- `_load_configured_oracle_feeds()` now called during `ExternalAPIManager._initialize()` so user-supplied oracle feeds take effect at runtime.
 - Test `test_txpool_scanner_identifies_mev_relevance_and_opportunities` now provides valid ABI-encoded swap calldata.
 - Test `test_get_price_skips_unhealthy_providers` now mocks oracle fallback to avoid false positive.
 - Vague assertions in `test_balance_manager.py` (always-true `in` checks) replaced with exact tier assertions.
@@ -84,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `twine` removed from dev dependencies (PyPI publishing not part of CI).
 - `test_mangle.py` removed (425 lines of tests duplicated across 8 other dedicated test files).
 - `test_basic_smoke.py` consolidated into `test_smoke.py`.
+- 40+ hard-pinned transitive dependencies removed from `pyproject.toml` and `requirements.txt` (web3/eth-* stack, aiohttp/pydantic/rich/sqlalchemy internals); `aiosqlite` added as explicit dependency for async SQLite support.
 
 ### Documentation
 - SECURITY.md: Added 2.3.x to supported versions table.
