@@ -74,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Silent exception swallowing in `settings.py` `validate_complete_settings` now logs coercion failures.
 - Gas estimation overflow: capped with `MAX_GAS_LIMIT` constant (via `utils.constants`) in `transaction_manager.py`.
 - RPC connection check in `config/manager.py` using `str(chain_id)` when `rpc_urls` is keyed by `int`.
-- Dependency resolution: removed 40+ hard-pinned transitive dependencies from `pyproject.toml` and `requirements.txt`; only direct project dependencies listed with ranges; pip resolves the transitive tree (fixes CI/CD dependency conflicts).
+- CI/CD dependency conflicts: hard-pinned transitive dependencies replaced with ranged direct-only deps in `pyproject.toml` and `requirements.txt`.
 - `_load_configured_oracle_feeds()` now called during `ExternalAPIManager._initialize()` so user-supplied oracle feeds take effect at runtime.
 - Test `test_txpool_scanner_identifies_mev_relevance_and_opportunities` now provides valid ABI-encoded swap calldata.
 - Test `test_get_price_skips_unhealthy_providers` now mocks oracle fallback to avoid false positive.
