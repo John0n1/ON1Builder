@@ -136,16 +136,15 @@ class TestBalanceTiers:
 
     def test_small_tier(self, manager):
         """Test small tier."""
-        assert manager._determine_balance_tier(Decimal("0.01")) in ["dust", "small"]
-        assert manager._determine_balance_tier(Decimal("0.05")) in ["small", "medium"]
+        assert manager._determine_balance_tier(Decimal("0.01")) == "dust"
+        assert manager._determine_balance_tier(Decimal("0.05")) == "small"
 
     def test_medium_tier(self, manager):
         """Test medium tier."""
-        # Check tier for various balances - actual threshold values vary
         tier_0_2 = manager._determine_balance_tier(Decimal("0.2"))
         tier_0_5 = manager._determine_balance_tier(Decimal("0.5"))
-        assert tier_0_2 in ["small", "medium"]
-        assert tier_0_5 in ["medium", "large"]
+        assert tier_0_2 == "small"
+        assert tier_0_5 == "medium"
 
     def test_large_tier(self, manager):
         """Test large tier."""

@@ -256,7 +256,9 @@ class ConfigurationManager:
         """Check if RPC connections are properly configured."""
         try:
             for chain_id in self._config.chains:
-                rpc_url = self._config.rpc_urls.get(chain_id) or self._config.rpc_urls.get(str(chain_id))
+                rpc_url = self._config.rpc_urls.get(
+                    chain_id
+                ) or self._config.rpc_urls.get(str(chain_id))
                 if not rpc_url:
                     return False
                 # Additional connectivity check could be added here

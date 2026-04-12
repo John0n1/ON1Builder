@@ -24,9 +24,10 @@ class TestMainCLI:
     def test_no_args_shows_help(self):
         """Test that running with no args shows help."""
         result = runner.invoke(app, [])
-        # Exit code 2 means missing args with help shown (typer default)
+        # Typer shows help or usage when no subcommand provided
         assert result.exit_code in [0, 2]
-        assert "ON1Builder" in result.stdout or "Usage" in result.stdout
+        combined = result.stdout + (result.stderr or "")
+        assert "Usage" in combined or "ON1Builder" in combined
 
     def test_cli_exception_handling(self):
         """Test CLI exception handling in main function."""
