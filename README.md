@@ -2,12 +2,12 @@
 
 # Project has moved and been replaced with -> https://github.com/John0n1/oxidity-searcher
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/Tests-Manual%20%2F%20Local-inactive)
+[![CI](https://github.com/John0n1/ON1Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/John0n1/ON1Builder/actions/workflows/ci.yml)
 
 ```bash
-pip install on1builder
+pip install -e .
 ```
 
 Async, multi-chain MEV/arbitrage engine with safety rails, flashloan support, and live telemetry. Highly customizable via config.
@@ -80,9 +80,31 @@ python -m on1builder run start
 
 > With public RPC/WS, txpool scanning is disabled on purpose (unreliable pending tx support). Provide a private WS endpoint if you want pending tx monitoring.
 
-## Architecture Map
+## Architecture
 
 <img width="6265" height="4722" alt="Arch" src="https://github.com/user-attachments/assets/934d3aaa-fae0-49c2-b28d-e740bedf0e2f" />
+
+### Module Dependency Graph
+
+```
+cli/               → config/, core/
+core/              → config/, engines/, integrations/, monitoring/, persistence/, utils/
+engines/           → config/, integrations/, utils/
+integrations/      → config/, utils/
+monitoring/        → config/, integrations/, utils/
+persistence/       → config/, utils/
+utils/             → (standalone, no internal deps except config.loaders)
+```
+
+### Key Design Patterns
+
+| Pattern | Where | Purpose |
+| ------- | ----- | ------- |
+| Singleton | `ExternalAPIManager`, `NonceManager`, `DatabaseInterface`, `NotificationService` | Shared state, connection pooling |
+| Circuit Breaker | `error_recovery.py` | Protect against cascading failures |
+| Async Context Manager | `DatabaseInterface`, `NotificationService` | Guaranteed resource cleanup |
+| Strategy | `StrategyExecutor` | Pluggable MEV strategies |
+| Observer | `TxPoolScanner` → `StrategyExecutor` | Decouple mempool monitoring from execution |
 
 ## Configuration Cheat Sheet
 
@@ -127,17 +149,63 @@ Get-Content logs\\on1builder.log -Wait  # Windows
 
 Heartbeats report balance tier, pending tx count (0 if txpool scanner is disabled), and memory usage.
 
+## Testing
+
+```bash
+# Run all tests (fast, no external deps)
+python -m pytest tests/ -q
+
+# Run with verbose output
+python -m pytest tests/ -v --tb=short
+
+# Run with coverage report
+python -m pytest tests/ --cov=on1builder --cov-report=html
+
+# Run a specific test file
+python -m pytest tests/test_edge_cases.py -v
+
+# Run live API tests (requires network access)
+RUN_LIVE_API_TESTS=1 python -m pytest tests/test_external_api_integration.py
+```
+
+### Test Categories
+
+| Category | Files | Focus |
+| -------- | ----- | ----- |
+| Smoke | `test_smoke.py` | Package imports, version consistency, resource files |
+| Core Logic | `test_balance_manager.py`, `test_nonce_manager_logic.py`, `test_transaction_manager_logic.py` | Balance tiers, nonce management, TX building |
+| Engines | `test_safety_and_gas_guardrails.py`, `test_logic_behaviors.py` | Safety guards, strategy execution |
+| Monitoring | `test_txpool_end_to_end.py`, `test_market_data_feed_logic.py`, `test_websocket_*.py` | Mempool scanning, market data, WS resilience |
+| API | `test_external_api_logic.py`, `test_external_api_integration.py` | Price feeds, oracle integration |
+| Config | `test_config_manager.py`, `test_validation.py`, `test_cli_commands.py` | Settings loading, validation, CLI |
+| Utils | `test_utils.py`, `test_error_handling.py`, `test_path_helpers.py`, `test_logging_config.py` | Utilities, error handling, DI container |
+| Edge Cases | `test_edge_cases.py` | Boundary values, error paths, constants sanity |
+
 ## Development
 
 <img width="15082" height="7425" alt="flow" src="https://github.com/user-attachments/assets/c7838b3d-65f1-4856-ae90-34bb55d82e3e" />
 
 ```bash
-python -m pytest            # fast/local tests
-RUN_LIVE_API_TESTS=1 python -m pytest tests/test_external_api_logic.py
-black src tests && flake8 src tests && mypy src
+# Lint and format
+black --target-version py312 src tests
+python -m compileall -q src tests
+
+# Run full test suite
+python -m pytest tests/ -q
 ```
 
 Pre-commit hooks are configured in `.pre-commit-config.yaml`.
+
+## Troubleshooting
+
+| Problem | Cause | Solution |
+| ------- | ----- | -------- |
+| `parsimonious` version conflict | `eth-abi` requires `<0.11.0` | Use `parsimonious>=0.10.0,<0.11.0` (already pinned) |
+| txpool scanning silent | Public WS endpoint | Use a private node (Alchemy, Infura, self-hosted) |
+| `ConfigurationError` on start | Missing `.env` values | Run `python -m on1builder status check` to diagnose |
+| Gas estimation fails | Network congestion / bad RPC | Falls back to `default_gas_limit`; check RPC health |
+| Notifications not sending | Channels not configured | Set `NOTIFICATION_CHANNELS` in `.env` |
+| Tests fail with singleton state | Stale singleton between tests | Each test file resets singletons via fixtures |
 
 ## Optional Utilities
 
@@ -149,6 +217,9 @@ integrated in advanced deployments:
   optional recovery strategies, but most strategies are placeholders by default.
 - `src/on1builder/utils/container.py`: A lightweight DI container for advanced lifecycle
   management. The core runtime does not use it yet; opt in if you want centralized wiring.
+- `src/on1builder/utils/memory_optimizer.py`: Memory monitoring and GC management for
+  long-running deployments. Tracks process memory and triggers cleanup when thresholds
+  are exceeded.
 
 ## Flashloan setup
 You need to deploy your own flashloan provider contract or use an existing one. Make sure to configure the flashloan provider address in your strategy settings.
@@ -173,10 +244,7 @@ The bot is able to function without API keys, but some features are limited. It'
 
 - **Etherscan API Key**: For fetching contract ABIs and transaction metadata. Sign up at [Etherscan](https://etherscan.io/apis).
 - **Tenderly Account**: For advanced simulation backend. Sign up at [Tenderly](https://tenderly.co/).
-- **Binance API Key**: For fetching token prices. Sign up at [Binance](https://www.binance.com/en/support/faq/360002502072).
-- CoinGecko API Key: Optional, for additional price data. Sign up at [CoinGecko](https://www.coingecko.com/en/api).
-- Cryptocompare API Key: Optional, for additional price data. Sign up at [Cryptocompare](https://min-api.cryptocompare.com/).
-- CoinMarketCap API Key: Optional, for additional price data. Sign up at [CoinMarketCap](https://coinmarketcap.com/api/).
+- **CoinGecko API Key**: Optional, for additional price data. Sign up at [CoinGecko](https://www.coingecko.com/en/api).
 
 
 ## Safety Notes
@@ -184,6 +252,7 @@ The bot is able to function without API keys, but some features are limited. It'
 - Public WS endpoints are auto-skipped for txpool scanning to avoid noisy failures.
 - Price lookups are limited to a small, well-known token set; repeated failures are silenced after blacklisting.
 - Emergency balance tiers keep the bot idle when funds are low.
+- Gas estimation includes a 20% buffer with a hard cap at 30M (Ethereum block gas limit).
 
 ## License
 

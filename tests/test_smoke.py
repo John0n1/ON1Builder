@@ -89,5 +89,30 @@ def test_version_consistency():
                 break
 
 
+def test_container_utility():
+    """Test basic container functionality."""
+    from on1builder.utils.container import Container
+
+    container = Container()
+    assert container is not None
+
+
+def test_basic_module_structure():
+    """Test that basic module structure is intact."""
+    import on1builder.utils
+    import on1builder.core
+    import on1builder.config
+    import on1builder.engines
+    import on1builder.monitoring
+    import on1builder.persistence
+    import on1builder.integrations
+
+    assert hasattr(on1builder.utils, "__file__")
+    assert hasattr(on1builder.core, "__file__")
+    assert hasattr(on1builder.config, "__file__")
+    assert hasattr(on1builder.engines, "__file__")
+    assert hasattr(on1builder.monitoring, "__file__")
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

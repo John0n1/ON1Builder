@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ON1Builder! This document provide
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.12 or higher
 - Git
 - A virtual environment tool (venv, conda, etc.)
 
@@ -105,10 +105,19 @@ Thank you for your interest in contributing to ON1Builder! This document provide
 
 ### Python Code Style
 
-- **Black** for code formatting (line length: 100)
+- **Black** for code formatting with `--target-version py312`
 - **isort** for import sorting
 - **flake8** for linting
 - **mypy** for type checking
+
+### Coding Conventions
+
+- All new exceptions must inherit from `ON1BuilderError`
+- Singletons must implement `reset_instance()` for test isolation
+- Use `except Exception as e:` (never bare `except:`) and log the error
+- Async resources must implement `__aenter__`/`__aexit__` for context manager support
+- Gas estimation should include overflow protection (cap at block gas limit)
+- All configuration keys use `int` for chain IDs (not `str`)
 
 ### Documentation
 

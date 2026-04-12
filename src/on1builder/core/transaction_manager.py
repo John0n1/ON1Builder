@@ -23,6 +23,7 @@ import aiohttp
 
 from on1builder.config.loaders import settings
 from on1builder.core.balance_manager import BalanceManager
+from on1builder.utils.constants import MAX_GAS_LIMIT
 from on1builder.core.nonce_manager import NonceManager
 from on1builder.engines.safety_guard import SafetyGuard
 from on1builder.integrations.abi_registry import ABIRegistry
@@ -184,7 +185,7 @@ class TransactionManager:
             try:
                 estimated_gas = await self._web3.eth.estimate_gas(tx_params)
                 # Add 20% buffer for safety
-                tx_params["gas"] = int(estimated_gas * 1.2)
+                tx_params["gas"] = min(int(estimated_gas * 1.2), MAX_GAS_LIMIT)
             except Exception as e:
                 logger.warning(f"Gas estimation failed: {e}. Using default limit.")
                 tx_params["gas"] = settings.default_gas_limit

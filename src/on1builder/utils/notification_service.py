@@ -337,6 +337,12 @@ class NotificationService(metaclass=SingletonMeta):
             server.login(self._config.smtp_username, self._config.smtp_password)
             server.send_message(msg)
 
+    async def __aenter__(self) -> "NotificationService":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
     async def close(self) -> None:
         """Closes the aiohttp session."""
         if self._session and not self._session.closed:

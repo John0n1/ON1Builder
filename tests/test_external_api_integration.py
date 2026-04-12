@@ -5,7 +5,6 @@ import pytest
 
 from on1builder.integrations.external_apis import ExternalAPIManager
 
-
 requires_live = pytest.mark.skipif(
     os.getenv("RUN_LIVE_API_TESTS") != "1",
     reason="Set RUN_LIVE_API_TESTS=1 to run live API integration tests.",

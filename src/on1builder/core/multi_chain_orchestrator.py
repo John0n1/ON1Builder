@@ -151,7 +151,8 @@ class MultiChainOrchestrator:
                             estimated_gas_cost = (
                                 await self._estimate_arbitrage_gas_cost(gas_price)
                             )
-                        except:
+                        except Exception as e:
+                            logger.debug("Gas cost estimation failed: %s", e)
                             estimated_gas_cost = Decimal(
                                 "0.01"
                             )  # Conservative estimate
@@ -511,7 +512,8 @@ class MultiChainOrchestrator:
                 return 0.8  # Medium-high liquidity
             else:
                 return 0.5  # Default medium liquidity
-        except:
+        except Exception as e:
+            logger.debug("Liquidity estimation failed: %s", e)
             return 0.3  # Conservative estimate on error
 
     async def _estimate_arbitrage_gas_cost(self, gas_price: int) -> Decimal:
