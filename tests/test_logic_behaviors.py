@@ -285,6 +285,20 @@ async def test_txpool_scanner_identifies_mev_relevance_and_opportunities(monkeyp
     )
 
     scanner = TxPoolScanner(DummyWeb3(), DummyExecutor(), chain_id=1)
+    # Build a valid swapExactTokensForTokens calldata (selector + abi-encoded params)
+    import eth_abi
+
+    swap_params = eth_abi.encode(
+        ["uint256", "uint256", "address[]", "address", "uint256"],
+        [
+            6 * 10**18,
+            5 * 10**18,
+            ["0x" + "AA" * 20, "0x" + "BB" * 20],
+            "0x" + "CC" * 20,
+            999999999999,
+        ],
+    )
+    calldata = bytes.fromhex("38ed1739") + swap_params
     tx = {
         "hash": bytes.fromhex("11" * 32),
         "from": "0xdead",
@@ -292,7 +306,7 @@ async def test_txpool_scanner_identifies_mev_relevance_and_opportunities(monkeyp
         "value": 6 * 10**18,
         "gasPrice": 60 * 10**9,
         "gas": 21000,
-        "input": bytes.fromhex("38ed1739"),
+        "input": calldata,
     }
 
     analysis = scanner._analyze_transaction_comprehensive(tx)

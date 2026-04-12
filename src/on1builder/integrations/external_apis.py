@@ -181,6 +181,9 @@ class ExternalAPIManager(metaclass=SingletonMeta):
             "STETH": "0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8",
             "WBTC": "0xfdFD9C85aD200c506Cf9e21F1FD8dd01932FBB23",
         }
+        self._oracle_feeds_by_chain: Dict[int, Dict[str, str]] = {
+            self._primary_chain_id: dict(self._oracle_feeds)
+        }
         self._background_tasks: Set[asyncio.Task] = set()
         self._init_lock = asyncio.Lock()
         self._initialized = False
@@ -237,6 +240,25 @@ class ExternalAPIManager(metaclass=SingletonMeta):
                 api_key=settings.api.etherscan_api_key,
             )
         return providers
+
+    def _load_configured_oracle_feeds(self) -> None:
+        """Merge user-configured oracle feeds from settings into the per-chain mapping."""
+        configured = getattr(settings, "oracle_feeds", None) or {}
+        for chain_id_str, feeds in configured.items():
+            try:
+                chain_id = int(chain_id_str)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Ignoring oracle_feeds entry with non-integer chain ID: %s",
+                    chain_id_str,
+                )
+                continue
+            if chain_id not in self._oracle_feeds_by_chain:
+                self._oracle_feeds_by_chain[chain_id] = {}
+            self._oracle_feeds_by_chain[chain_id].update(feeds)
+        # Keep the primary-chain shortcut in sync
+        if self._primary_chain_id in self._oracle_feeds_by_chain:
+            self._oracle_feeds = self._oracle_feeds_by_chain[self._primary_chain_id]
 
     def _start_background_tasks(self):
         """Start non-blocking background tasks for data gathering and health monitoring."""

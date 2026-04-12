@@ -55,7 +55,7 @@ async def check_comprehensive_status():
     """async helper to perform comprehensive status checks."""
 
     # Create main status table
-    table = Table(title="ON1Builder ON1Builder System Status")
+    table = Table(title="ON1Builder System Status")
     table.add_column("Component", justify="right", style="cyan", no_wrap=True)
     table.add_column("Status", style="green")
     table.add_column("Details", justify="left", style="magenta")
@@ -83,7 +83,7 @@ async def check_comprehensive_status():
                     chain_id=default_chain, limit=10
                 )
                 tx_count = len(recent_transactions)
-            except:
+            except Exception:
                 tx_count = "N/A"
 
             table.add_row(

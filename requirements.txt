@@ -26,7 +26,7 @@ idna==3.11
 markdown-it-py==4.0.0
 mdurl==0.1.2
 multidict==6.7.1
-parsimonious==0.11.0
+parsimonious>=0.10.0,<0.11.0
 prompt_toolkit==3.0.52
 propcache==0.4.1
 psutil==7.2.2

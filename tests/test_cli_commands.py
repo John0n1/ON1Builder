@@ -9,7 +9,6 @@ import json
 from on1builder.__main__ import app, cli, show_version
 from on1builder.cli import config_cmd, run_cmd
 
-
 runner = CliRunner()
 
 

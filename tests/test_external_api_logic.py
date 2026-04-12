@@ -138,6 +138,7 @@ async def test_get_price_skips_unhealthy_providers(monkeypatch):
     manager.get_price = ExternalAPIManager.get_price.__get__(manager, ExternalAPIManager)  # type: ignore[attr-defined]
     manager._initialize = AsyncMock()
     manager._get_onchain_price = AsyncMock(return_value=None)
+    manager._get_oracle_price = AsyncMock(return_value=None)
     # Simulate only one provider and mark unhealthy
     manager._providers = {"coingecko": SimpleNamespace(is_healthy=False)}
     manager._failed_tokens = set()
