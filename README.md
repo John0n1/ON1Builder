@@ -1,7 +1,5 @@
 # ON1Builder
 
-# Project has moved and been replaced with -> https://github.com/John0n1/oxidity-searcher
-
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/John0n1/ON1Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/John0n1/ON1Builder/actions/workflows/ci.yml)
