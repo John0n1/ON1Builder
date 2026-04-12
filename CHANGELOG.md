@@ -69,19 +69,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Dependency conflict: `parsimonious` version constraint relaxed to `>=0.10.0,<0.11.0` to resolve conflict with `eth-abi`.
-- Bare `except:` clause in `cli/status_cmd.py` replaced with `except Exception:`.
+- Bare `except:` clauses in `cli/status_cmd.py` and `core/multi_chain_orchestrator.py` (2 instances) replaced with `except Exception as e:` with proper logging.
 - Duplicate "ON1Builder" in system status table title.
+- Silent exception swallowing in `settings.py` `validate_complete_settings` now logs coercion failures.
+- Gas estimation overflow: added cap at 30M (Ethereum block gas limit) in `transaction_manager.py`.
+- RPC connection check in `config/manager.py` using `str(chain_id)` when `rpc_urls` is keyed by `int`.
 - Test `test_txpool_scanner_identifies_mev_relevance_and_opportunities` now provides valid ABI-encoded swap calldata.
 - Test `test_get_price_skips_unhealthy_providers` now mocks oracle fallback to avoid false positive.
+- Vague assertions in `test_balance_manager.py` (always-true `in` checks) replaced with exact tier assertions.
+- Vague assertions in `test_cli_commands.py` strengthened.
 - Black formatting applied to all source and test files.
 
 ### Removed
 - `twine` removed from dev dependencies (PyPI publishing not part of CI).
+- `test_mangle.py` removed (425 lines of tests duplicated across 8 other dedicated test files).
+- `test_basic_smoke.py` consolidated into `test_smoke.py`.
 
 ### Documentation
 - SECURITY.md: Added 2.3.x to supported versions table.
-- CONTRIBUTING.md: Updated minimum Python version to 3.12.
-- README.md: Updated Python badge to 3.12+, changed install instruction from PyPI to editable install.
+- CONTRIBUTING.md: Updated minimum Python version to 3.12, added coding conventions (exception hierarchy, singleton patterns, async context managers).
+- README.md: Added CI badge, architecture module dependency graph, design patterns table, testing guide with categories, troubleshooting table, memory optimizer docs.
+- CHANGELOG.md: Comprehensive documentation of all fixes and changes.
+
+### Testing
+- Rewrote `test_utils.py` from 5 import-only tests to 15 behavioral tests (Container, ConfigRedactor, GasOptimizer, ProfitCalculator).
+- Added `test_edge_cases.py` with 36 edge case tests covering balance boundaries, validation, exception hierarchy, constants sanity, and error recovery.
+- Consolidated smoke tests into `test_smoke.py` with module structure and container checks.
+- Total: 297 tests pass (up from 275), 2 skipped (live API, env-specific logging).
 
 ### Planned
 - ON1Builder strategy algorithms
