@@ -61,7 +61,7 @@ class DatabaseInterface:
         logger.debug("DatabaseInterface initialized for URL: %s", self._db_url)
 
     async def __aenter__(self) -> "DatabaseInterface":
-        await self.initialize()
+        await self.initialize_db()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
