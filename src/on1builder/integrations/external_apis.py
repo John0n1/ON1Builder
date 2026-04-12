@@ -242,7 +242,17 @@ class ExternalAPIManager(metaclass=SingletonMeta):
         return providers
 
     def _load_configured_oracle_feeds(self) -> None:
-        """Merge user-configured oracle feeds from settings into the per-chain mapping."""
+        """Merge user-configured oracle feeds from settings into the per-chain mapping.
+
+        Reads ``settings.oracle_feeds`` (expected shape:
+        ``{chain_id_str: {symbol: feed_address, ...}, ...}``) and merges
+        each entry into ``_oracle_feeds_by_chain``.  Existing entries for a
+        chain are updated (not replaced), so hardcoded defaults are preserved
+        unless explicitly overridden.
+
+        Safe to call multiple times; later calls simply overwrite earlier
+        values for the same chain/symbol pair.
+        """
         configured = getattr(settings, "oracle_feeds", None) or {}
         for chain_id_str, feeds in configured.items():
             try:

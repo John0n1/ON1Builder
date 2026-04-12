@@ -4,6 +4,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import eth_abi
 import pytest
 
 from on1builder.engines.strategy_executor import StrategyExecutor
@@ -286,8 +287,6 @@ async def test_txpool_scanner_identifies_mev_relevance_and_opportunities(monkeyp
 
     scanner = TxPoolScanner(DummyWeb3(), DummyExecutor(), chain_id=1)
     # Build a valid swapExactTokensForTokens calldata (selector + abi-encoded params)
-    import eth_abi
-
     swap_params = eth_abi.encode(
         ["uint256", "uint256", "address[]", "address", "uint256"],
         [
