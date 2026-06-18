@@ -1,13 +1,11 @@
 """Tests for CLI commands: __main__, config_cmd, run_cmd."""
 
+from unittest.mock import Mock, patch
+
 import pytest
-import sys
-from unittest.mock import Mock, patch, MagicMock
 from typer.testing import CliRunner
-import json
 
 from on1builder.__main__ import app, cli, show_version
-from on1builder.cli import config_cmd, run_cmd
 
 runner = CliRunner()
 
@@ -80,7 +78,7 @@ class TestRunCommand:
         mock_orch_instance = Mock()
         mock_orchestrator.return_value = mock_orch_instance
 
-        result = runner.invoke(app, ["run", "start"])
+        runner.invoke(app, ["run", "start"])
 
         # Orchestrator should be instantiated
         mock_orchestrator.assert_called_once()

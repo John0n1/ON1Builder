@@ -6,9 +6,9 @@ Basic smoke tests for ON1Builder package.
 These tests verify that the package can be imported and basic functionality works.
 """
 
-import pytest
-import sys
 from pathlib import Path
+
+import pytest
 
 
 def test_package_import():
@@ -16,7 +16,7 @@ def test_package_import():
     try:
         import on1builder
 
-        assert on1builder.__version__ == "2.3.0"
+        assert on1builder.__version__ == "2.3.1"
         assert on1builder.__author__ == "john0n1"
     except ImportError as e:
         pytest.fail(f"Failed to import on1builder package: {e}")
@@ -35,7 +35,7 @@ def test_cli_import():
 def test_config_import():
     """Test that config modules can be imported."""
     try:
-        from on1builder.config.settings import GlobalSettings, APISettings
+        from on1builder.config.settings import APISettings, GlobalSettings
 
         assert GlobalSettings is not None
         assert APISettings is not None
@@ -46,8 +46,8 @@ def test_config_import():
 def test_utils_import():
     """Test that utility modules can be imported."""
     try:
-        from on1builder.utils.logging_config import get_logger
         from on1builder.utils.custom_exceptions import ConfigurationError
+        from on1builder.utils.logging_config import get_logger
 
         logger = get_logger("test")
         assert logger is not None
@@ -99,13 +99,13 @@ def test_container_utility():
 
 def test_basic_module_structure():
     """Test that basic module structure is intact."""
-    import on1builder.utils
-    import on1builder.core
     import on1builder.config
+    import on1builder.core
     import on1builder.engines
+    import on1builder.integrations
     import on1builder.monitoring
     import on1builder.persistence
-    import on1builder.integrations
+    import on1builder.utils
 
     assert hasattr(on1builder.utils, "__file__")
     assert hasattr(on1builder.core, "__file__")

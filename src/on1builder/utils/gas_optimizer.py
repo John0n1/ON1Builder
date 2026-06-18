@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
 import statistics
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any
 
 from web3 import AsyncWeb3
 
@@ -33,9 +33,9 @@ class GasOptimizer:
 
     def __init__(self, web3: AsyncWeb3):
         self._web3 = web3
-        self._gas_history: List[Tuple[datetime, int]] = []
-        self._base_fee_history: List[Tuple[datetime, int]] = []
-        self._priority_fee_history: List[Tuple[datetime, int]] = []
+        self._gas_history: list[tuple[datetime, int]] = []
+        self._base_fee_history: list[tuple[datetime, int]] = []
+        self._priority_fee_history: list[tuple[datetime, int]] = []
         self._is_eip1559_supported = None
         self._last_update = datetime.now()
         self._update_lock = asyncio.Lock()
@@ -62,7 +62,7 @@ class GasOptimizer:
 
     async def get_optimal_gas_params(
         self, priority_level: str = "normal", target_block_inclusion: int = 1
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Get optimal gas parameters for transaction inclusion.
 
@@ -85,11 +85,11 @@ class GasOptimizer:
 
     async def _get_eip1559_params(
         self, priority_level: str, target_blocks: int
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Calculate optimal EIP-1559 gas parameters."""
         try:
             latest_block = await self._web3.eth.get_block("latest")
-            base_fee = latest_block.get("baseFeePerGas", 0)
+            latest_block.get("baseFeePerGas", 0)
 
             # Get priority settings
             priority_config = self.PRIORITY_LEVELS.get(
@@ -130,7 +130,7 @@ class GasOptimizer:
 
     async def _get_legacy_gas_params(
         self, priority_level: str, target_blocks: int
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Calculate optimal legacy gas price."""
         try:
             current_gas_price = await self._web3.eth.gas_price
@@ -227,7 +227,7 @@ class GasOptimizer:
                     logger.error(f"Error updating gas metrics: {e}")
 
     async def _calculate_priority_fee_estimate(
-        self, latest_block: Dict, base_fee: int, current_gas_price: int
+        self, latest_block: dict, base_fee: int, current_gas_price: int
     ) -> int:
         """Calculate priority fee estimate from recent transactions."""
         try:
@@ -273,7 +273,7 @@ class GasOptimizer:
 
     async def should_delay_transaction(
         self, priority_level: str = "normal"
-    ) -> Tuple[bool, Optional[int]]:
+    ) -> tuple[bool, int | None]:
         """
         Determine if transaction should be delayed due to high gas prices.
         Returns (should_delay, estimated_wait_seconds)
@@ -354,7 +354,7 @@ class GasOptimizer:
             logger.error(f"Error determining transaction delay: {e}")
             return False, None
 
-    def get_gas_analytics(self) -> Dict[str, Any]:
+    def get_gas_analytics(self) -> dict[str, Any]:
         """
         Get comprehensive gas analytics for monitoring dashboard.
         Consolidates efficiency reporting and basic analytics.

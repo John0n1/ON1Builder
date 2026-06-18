@@ -7,26 +7,26 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ..utils.custom_exceptions import ConfigurationError
+from ..utils.logging_config import get_logger
 from .settings import (
-    GlobalSettings,
     APISettings,
     ContractAddressSettings,
-    NotificationSettings,
     DatabaseSettings,
+    GlobalSettings,
+    NotificationSettings,
 )
-from ..utils.logging_config import get_logger
-from ..utils.custom_exceptions import ConfigurationError
 
 logger = get_logger(__name__)
 
 
-def find_dotenv() -> Optional[Path]:
+def find_dotenv() -> Path | None:
     """Find the .env file by searching upwards from the current file."""
     current_dir = Path(__file__).resolve().parent
     for _ in range(5):  # Search up to 5 levels
@@ -63,7 +63,7 @@ class _EnvSettings(BaseSettings):
     # Core settings with defaults
     debug: bool = False
     base_path: Path = Field(default_factory=Path.cwd)
-    profit_receiver_address: Optional[str] = None
+    profit_receiver_address: str | None = None
     chains: str = "1"
     poa_chains: str = ""
 
@@ -78,14 +78,14 @@ class _EnvSettings(BaseSettings):
     submission_mode: str = "public"
     simulation_backend: str = "eth_call"
     simulation_concurrency: int = 5
-    private_rpc_url: Optional[str] = None
+    private_rpc_url: str | None = None
     tenderly_base_url: str = "https://api.tenderly.co/api/v1"
-    tenderly_account_slug: Optional[str] = None
-    tenderly_project_slug: Optional[str] = None
-    tenderly_access_token: Optional[str] = None
-    bundle_relay_url: Optional[str] = None
-    bundle_relay_auth_token: Optional[str] = None
-    bundle_signer_key: Optional[str] = Field(default=None, alias="BUNDLE_SIGNER_KEY")
+    tenderly_account_slug: str | None = None
+    tenderly_project_slug: str | None = None
+    tenderly_access_token: str | None = None
+    bundle_relay_url: str | None = None
+    bundle_relay_auth_token: str | None = None
+    bundle_signer_key: str | None = Field(default=None, alias="BUNDLE_SIGNER_KEY")
     bundle_signer_key_path: Path = Field(
         default_factory=lambda: Path.home() / ".on1builder" / "bundle_signer.key",
         alias="BUNDLE_SIGNER_KEY_PATH",
@@ -166,11 +166,11 @@ class _EnvSettings(BaseSettings):
     bridge_monitoring_enabled: bool = True
 
     # Nested Models as flat prefixes
-    etherscan_api_key: Optional[str] = Field(None, alias="ETHERSCAN_API_KEY")
-    coingecko_api_key: Optional[str] = Field(None, alias="COINGECKO_API_KEY")
-    coinmarketcap_api_key: Optional[str] = Field(None, alias="COINMARKETCAP_API_KEY")
-    cryptocompare_api_key: Optional[str] = Field(None, alias="CRYPTOCOMPARE_API_KEY")
-    infura_project_id: Optional[str] = Field(None, alias="INFURA_PROJECT_ID")
+    etherscan_api_key: str | None = Field(None, alias="ETHERSCAN_API_KEY")
+    coingecko_api_key: str | None = Field(None, alias="COINGECKO_API_KEY")
+    coinmarketcap_api_key: str | None = Field(None, alias="COINMARKETCAP_API_KEY")
+    cryptocompare_api_key: str | None = Field(None, alias="CRYPTOCOMPARE_API_KEY")
+    infura_project_id: str | None = Field(None, alias="INFURA_PROJECT_ID")
 
     uniswap_v2_router_addresses: str = Field("{}", alias="UNISWAP_V2_ROUTER_ADDRESSES")
     uniswap_v3_router_addresses: str = Field("{}", alias="UNISWAP_V3_ROUTER_ADDRESSES")
@@ -182,15 +182,15 @@ class _EnvSettings(BaseSettings):
 
     notification_channels: str = Field("", alias="NOTIFICATION_CHANNELS")
     min_notification_level: str = Field("INFO", alias="MIN_NOTIFICATION_LEVEL")
-    slack_webhook_url: Optional[str] = Field(None, alias="SLACK_WEBHOOK_URL")
-    telegram_bot_token: Optional[str] = Field(None, alias="TELEGRAM_BOT_TOKEN")
-    telegram_chat_id: Optional[str] = Field(None, alias="TELEGRAM_CHAT_ID")
-    discord_webhook_url: Optional[str] = Field(None, alias="DISCORD_WEBHOOK_URL")
-    smtp_server: Optional[str] = Field(None, alias="SMTP_SERVER")
+    slack_webhook_url: str | None = Field(None, alias="SLACK_WEBHOOK_URL")
+    telegram_bot_token: str | None = Field(None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_chat_id: str | None = Field(None, alias="TELEGRAM_CHAT_ID")
+    discord_webhook_url: str | None = Field(None, alias="DISCORD_WEBHOOK_URL")
+    smtp_server: str | None = Field(None, alias="SMTP_SERVER")
     smtp_port: int = Field(587, alias="SMTP_PORT")
-    smtp_username: Optional[str] = Field(None, alias="SMTP_USERNAME")
-    smtp_password: Optional[str] = Field(None, alias="SMTP_PASSWORD")
-    alert_email: Optional[str] = Field(None, alias="ALERT_EMAIL")
+    smtp_username: str | None = Field(None, alias="SMTP_USERNAME")
+    smtp_password: str | None = Field(None, alias="SMTP_PASSWORD")
+    alert_email: str | None = Field(None, alias="ALERT_EMAIL")
 
     database_url: str = Field(
         "sqlite+aiosqlite:///on1builder_data.db", alias="DATABASE_URL"
@@ -216,7 +216,7 @@ def _parse_json_env(value: Any, default: Any) -> Any:
     return default
 
 
-def _gather_dynamic_env_vars() -> Dict[str, Any]:
+def _gather_dynamic_env_vars() -> dict[str, Any]:
     """
     Gathers environment variables that have dynamic keys, like RPC URLs.
     """
@@ -255,7 +255,7 @@ def _gather_dynamic_env_vars() -> Dict[str, Any]:
     return dynamic_vars
 
 
-def load_settings(env_path: Optional[Path] = None) -> GlobalSettings:
+def load_settings(env_path: Path | None = None) -> GlobalSettings:
     """
     Loads, validates, and returns the application's configuration settings.
 
@@ -334,7 +334,7 @@ def load_settings(env_path: Optional[Path] = None) -> GlobalSettings:
 
 
 # Global instance of the settings - lazy loaded
-_settings: Optional[GlobalSettings] = None
+_settings: GlobalSettings | None = None
 
 
 def get_settings() -> GlobalSettings:

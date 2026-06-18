@@ -5,15 +5,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, Dict
 
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from web3 import AsyncWeb3
-from web3.middleware import ExtraDataToPOAMiddleware
-from web3.providers import AsyncHTTPProvider
-from web3._utils.http_session_manager import HTTPSessionManager, DEFAULT_HTTP_TIMEOUT
 from web3._utils.async_caching import async_lock
 from web3._utils.caching import generate_cache_key
-from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from web3._utils.http_session_manager import DEFAULT_HTTP_TIMEOUT, HTTPSessionManager
+from web3.middleware import ExtraDataToPOAMiddleware
+from web3.providers import AsyncHTTPProvider
 
 # Try to import websocket provider, but make it optional
 try:
@@ -24,8 +23,8 @@ except ImportError:
     WebSocketProviderV2 = None
     WEBSOCKET_AVAILABLE = False
 
-from on1builder.utils.logging_config import get_logger
 from on1builder.utils.custom_exceptions import ConnectionError
+from on1builder.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -33,7 +32,7 @@ logger = get_logger(__name__)
 class Web3ConnectionFactory:
     """A factory for creating and managing AsyncWeb3 connections with connection pooling."""
 
-    _connections: Dict[int, AsyncWeb3] = {}
+    _connections: dict[int, AsyncWeb3] = {}
     _connection_lock = asyncio.Lock()
 
     @classmethod
@@ -129,7 +128,7 @@ class Web3ConnectionFactory:
     @classmethod
     async def _create_websocket_connection(
         cls, chain_id: int, ws_url: str
-    ) -> Optional[AsyncWeb3]:
+    ) -> AsyncWeb3 | None:
         """Create a WebSocket connection."""
         if not WEBSOCKET_AVAILABLE:
             return None
@@ -208,7 +207,7 @@ class QuietHTTPSessionManager(HTTPSessionManager):
     async def async_cache_and_return_session(
         self,
         endpoint_uri,
-        session: Optional[ClientSession] = None,
+        session: ClientSession | None = None,
         request_timeout=None,
     ) -> ClientSession:
         cache_key = generate_cache_key(f"{id(asyncio.get_event_loop())}:{endpoint_uri}")

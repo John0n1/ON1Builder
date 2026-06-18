@@ -2,44 +2,41 @@
 Common utilities for ON1Builder.
 """
 
-#!/usr/bin/env python3
-# MIT License
-# Copyright (c) 2026 John Hauger Mitander
-from .custom_exceptions import (
-    ON1BuilderError,
-    ConnectionError,
-    ConfigurationError,
-    StrategyExecutionError,
-    TransactionError,
-    InitializationError,
-    InsufficientFundsError,
-    APICallError,
-    ValidationError,
-    SafetyCheckError,
-)
-from .container import Container
-from .logging_config import get_logger, setup_logging, reset_logging
-from .memory_optimizer import (
-    get_memory_optimizer,
-    initialize_memory_optimization,
-    cleanup_memory_optimization,
+from .cli_helpers import (
+    confirm_action,
+    error_message,
+    handle_cli_errors,
+    info_message,
+    success_message,
+    warning_message,
 )
 from .config_redactor import ConfigRedactor
-from .cli_helpers import (
-    handle_cli_errors,
-    success_message,
-    info_message,
-    warning_message,
-    error_message,
-    confirm_action,
+from .constants import *  # noqa: F401,F403
+from .container import Container
+from .custom_exceptions import (
+    APICallError,
+    ConfigurationError,
+    ConnectionError,
+    InitializationError,
+    InsufficientFundsError,
+    ON1BuilderError,
+    SafetyCheckError,
+    StrategyExecutionError,
+    TransactionError,
+    ValidationError,
 )
 from .error_recovery import (
     get_error_recovery_manager,
     with_circuit_breaker,
-    with_retry,
     with_error_recovery,
+    with_retry,
 )
-from .constants import *
+from .logging_config import get_logger, reset_logging, setup_logging
+from .memory_optimizer import (
+    cleanup_memory_optimization,
+    get_memory_optimizer,
+    initialize_memory_optimization,
+)
 
 # NotificationService import disabled due to aiohttp dependency
 # from .notification_service import NotificationService
@@ -69,6 +66,19 @@ __all__ = [
     "get_memory_optimizer",
     "initialize_memory_optimization",
     "cleanup_memory_optimization",
+    # CLI helpers
+    "handle_cli_errors",
+    "success_message",
+    "info_message",
+    "warning_message",
+    "error_message",
+    "confirm_action",
+    # Config and recovery helpers
+    "ConfigRedactor",
+    "get_error_recovery_manager",
+    "with_circuit_breaker",
+    "with_retry",
+    "with_error_recovery",
     # Exceptions
     "ON1BuilderError",
     "StrategyExecutionError",

@@ -3,16 +3,17 @@
 # Copyright (c) 2026 John Hauger Mitander
 
 from __future__ import annotations
-import os
-import sys
-import asyncio
-from decimal import Decimal
-from typing import Dict, List, Optional
-from datetime import datetime, timedelta
 
-from on1builder.config import settings
-from on1builder.core.chain_worker import ChainWorker
+import asyncio
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any
+
+import aiohttp
+
+from on1builder.config.loaders import settings
 from on1builder.core.balance_manager import BalanceManager
+from on1builder.core.chain_worker import ChainWorker
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.notification_service import NotificationService
 from on1builder.utils.web3_factory import create_web3_instance
@@ -23,22 +24,22 @@ logger = get_logger(__name__)
 class MultiChainOrchestrator:
     """multi-chain orchestrator with balance-aware arbitrage and advanced opportunity detection."""
 
-    def __init__(self, workers: List[ChainWorker]):
+    def __init__(self, workers: list[ChainWorker]):
         if len(workers) < 2:
             raise ValueError(
                 "MultiChainOrchestrator requires at least two ChainWorkers."
             )
 
-        self.workers: Dict[int, ChainWorker] = {
+        self.workers: dict[int, ChainWorker] = {
             worker.chain_id: worker for worker in workers
         }
-        self.balance_managers: Dict[int, BalanceManager] = {}
+        self.balance_managers: dict[int, BalanceManager] = {}
         self.is_running = False
-        self._tasks: List[asyncio.Task] = []
+        self._tasks: list[asyncio.Task] = []
         self._notification_service = NotificationService()
-        self._arbitrage_cooldowns: Dict[str, float] = {}
-        self._opportunity_history: List[Dict] = []
-        self._gas_tracker: Dict[int, List[Decimal]] = {
+        self._arbitrage_cooldowns: dict[str, float] = {}
+        self._opportunity_history: list[dict] = []
+        self._gas_tracker: dict[int, list[Decimal]] = {
             chain_id: [] for chain_id in self.workers.keys()
         }
 
@@ -130,7 +131,7 @@ class MultiChainOrchestrator:
     def _set_cooldown(self, token_symbol: str):
         self._arbitrage_cooldowns[token_symbol] = asyncio.get_running_loop().time()
 
-    async def _find_cross_chain_arbitrage(self) -> List[Dict]:
+    async def _find_cross_chain_arbitrage(self) -> list[dict]:
         """arbitrage detection with better filtering and analysis."""
         opportunities = []
         common_tokens = self._get_common_tokens()
@@ -142,7 +143,7 @@ class MultiChainOrchestrator:
             # Get prices and liquidity data from all chains
             price_data = {}
             for chain_id, worker in self.workers.items():
-                if worker.market_feed:
+                if worker.market_feed and worker.web3:
                     price = await worker.market_feed.get_price(token_symbol)
                     if price is not None:
                         # Get gas price for cost calculation
@@ -174,24 +175,26 @@ class MultiChainOrchestrator:
 
         return opportunities
 
-    def _get_common_tokens(self) -> set:
+    def _get_common_tokens(self) -> set[str]:
         from collections import Counter
 
-        all_symbols = []
+        all_symbols: list[str] = []
         for worker in self.workers.values():
             if worker.tx_scanner:
-                all_symbols.extend(
-                    [
-                        t.upper()
-                        for t in worker.tx_scanner.monitored_tokens
-                        if not t.startswith("0x")
-                    ]
-                )
+                if hasattr(worker.tx_scanner, "monitored_tokens"):
+                    monitored_tokens = worker.tx_scanner.monitored_tokens
+                else:
+                    monitored_tokens = (
+                        worker.tx_scanner._abi_registry.get_monitored_tokens(
+                            worker.chain_id
+                        )
+                    )
+                all_symbols.extend(token.upper() for token in monitored_tokens)
 
         counts = Counter(all_symbols)
         return {symbol for symbol, count in counts.items() if count >= 2}
 
-    async def execute_cross_chain_arbitrage(self, opportunity: Dict):
+    async def execute_cross_chain_arbitrage(self, opportunity: dict):
         """cross-chain arbitrage execution with balance awareness and profit tracking."""
         logger.info(
             f"Executing ON1Builder cross-chain arbitrage for {opportunity['token_symbol']}"
@@ -201,6 +204,10 @@ class MultiChainOrchestrator:
         sell_chain = opportunity["sell_on_chain"]
         buy_worker = self.workers[buy_chain]
         sell_worker = self.workers[sell_chain]
+        assert buy_worker.web3 is not None
+        assert sell_worker.web3 is not None
+        assert buy_worker.tx_manager is not None
+        assert sell_worker.tx_manager is not None
 
         # Get balance managers
         buy_balance_manager = self.balance_managers[buy_chain]
@@ -274,9 +281,9 @@ class MultiChainOrchestrator:
             sell_worker.tx_manager.execute_swap(sell_opp, "cross_chain_arbitrage_sell")
         )
 
-        buy_result, sell_result = await asyncio.gather(
-            buy_task, sell_task, return_exceptions=True
-        )
+        results = await asyncio.gather(buy_task, sell_task, return_exceptions=True)
+        buy_result: Any = results[0]
+        sell_result: Any = results[1]
 
         # Handle results and calculate actual profit
         execution_time = (datetime.now() - start_time).total_seconds()
@@ -323,7 +330,7 @@ class MultiChainOrchestrator:
             },
         )
 
-    def _analyze_price_spreads(self, token_symbol: str, price_data: Dict) -> List[Dict]:
+    def _analyze_price_spreads(self, token_symbol: str, price_data: dict) -> list[dict]:
         """Analyzes price spreads across chains and identifies profitable opportunities."""
         opportunities = []
 
@@ -379,7 +386,7 @@ class MultiChainOrchestrator:
 
         return opportunities
 
-    async def _score_opportunities(self, opportunities: List[Dict]) -> List[Dict]:
+    async def _score_opportunities(self, opportunities: list[dict]) -> list[dict]:
         """Scores opportunities based on profitability, liquidity, and risk factors."""
         for opp in opportunities:
             score = 0.0
@@ -408,7 +415,7 @@ class MultiChainOrchestrator:
 
     async def _calculate_optimal_trade_size(
         self,
-        opportunity: Dict,
+        opportunity: dict,
         buy_balance_manager: BalanceManager,
         sell_balance_manager: BalanceManager,
     ) -> Decimal:
@@ -417,9 +424,7 @@ class MultiChainOrchestrator:
         buy_chain_balance = await buy_balance_manager.get_balance(
             "USDC"
         )  # Assuming USDC for buying
-        sell_chain_balance = await sell_balance_manager.get_balance(
-            opportunity["token_symbol"]
-        )
+        await sell_balance_manager.get_balance(opportunity["token_symbol"])
 
         # Get balance-aware limits
         buy_limit = buy_balance_manager.get_balance_aware_investment_limit()
@@ -449,6 +454,8 @@ class MultiChainOrchestrator:
     ) -> float:
         """Estimates liquidity score for a token on a specific chain by querying DEX pools."""
         try:
+            assert worker.web3 is not None
+
             # Query actual liquidity from major DEXes
             total_liquidity = Decimal("0")
             liquidity_sources = 0
@@ -536,12 +543,13 @@ class MultiChainOrchestrator:
     async def _get_optimal_gas_price(self, worker: ChainWorker) -> int:
         """Gets optimal gas price for a chain considering network conditions."""
         try:
+            assert worker.web3 is not None
             current_gas = await worker.web3.eth.gas_price
 
             # Get recent gas price trend
             chain_gas_history = self._gas_tracker.get(worker.chain_id, [])
             if len(chain_gas_history) > 5:
-                avg_recent = sum(chain_gas_history[-5:]) / 5
+                avg_recent = sum(chain_gas_history[-5:], Decimal("0")) / Decimal("5")
                 # Use slightly above average for faster execution
                 optimal_gas = int(avg_recent * Decimal("1.1"))
             else:
@@ -557,10 +565,11 @@ class MultiChainOrchestrator:
 
         except Exception as e:
             logger.warning(f"Error getting optimal gas price: {e}")
+            assert worker.web3 is not None
             return await worker.web3.eth.gas_price
 
     async def _calculate_actual_profit(
-        self, buy_result, sell_result, trade_amount_usd: Decimal, opportunity: Dict
+        self, buy_result, sell_result, trade_amount_usd: Decimal, opportunity: dict
     ) -> Decimal:
         """Calculates actual profit from arbitrage execution."""
         try:
@@ -600,7 +609,7 @@ class MultiChainOrchestrator:
             logger.error(f"Error calculating actual profit: {e}")
             return Decimal("0")
 
-    def _extract_amount_from_result(self, result) -> Optional[Decimal]:
+    def _extract_amount_from_result(self, result) -> Decimal | None:
         """Extracts actual output amount from transaction result by parsing logs."""
         try:
             if not isinstance(result, dict):
@@ -831,6 +840,7 @@ class MultiChainOrchestrator:
         }
 
         try:
+            assert worker.web3 is not None
             chain_id = await worker.web3.eth.chain_id
             return token_addresses.get(chain_id, {}).get(symbol, "")
         except Exception:
@@ -866,12 +876,12 @@ class MultiChainOrchestrator:
                 "https://api.coinbase.com/v2/exchange-rates?currency=ETH",
             ]
 
-            import aiohttp
-
             async with aiohttp.ClientSession() as session:
                 for source in price_sources:
                     try:
-                        async with session.get(source, timeout=5) as resp:
+                        async with session.get(
+                            source, timeout=aiohttp.ClientTimeout(total=5)
+                        ) as resp:
                             if resp.status == 200:
                                 data = await resp.json()
                                 if "coingecko" in source:

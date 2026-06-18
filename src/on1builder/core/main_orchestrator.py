@@ -6,30 +6,30 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from decimal import Decimal
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
 import time
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any
 
 from on1builder.config.manager import get_config_manager, initialize_global_config
-from on1builder.core.chain_worker import ChainWorker
 from on1builder.core.balance_manager import BalanceManager
+from on1builder.core.chain_worker import ChainWorker
 from on1builder.core.multi_chain_orchestrator import MultiChainOrchestrator
-from on1builder.utils.custom_exceptions import InitializationError
-from on1builder.utils.logging_config import get_logger
-from on1builder.utils.notification_service import NotificationService
-from on1builder.utils.web3_factory import Web3ConnectionFactory
-from on1builder.utils.web3_factory import create_web3_instance
-from on1builder.utils.error_recovery import get_error_recovery_manager
-from on1builder.utils.constants import PERFORMANCE_MONITORING_INTERVAL
-from on1builder.utils.memory_optimizer import (
-    initialize_memory_optimization,
-    cleanup_memory_optimization,
-)
-from on1builder.persistence.db_interface import DatabaseInterface
 from on1builder.integrations.external_apis import ExternalAPIManager
+from on1builder.persistence.db_interface import DatabaseInterface
+from on1builder.utils.constants import PERFORMANCE_MONITORING_INTERVAL
+from on1builder.utils.custom_exceptions import InitializationError
+from on1builder.utils.error_recovery import get_error_recovery_manager
+from on1builder.utils.logging_config import get_logger
+from on1builder.utils.memory_optimizer import (
+    cleanup_memory_optimization,
+    initialize_memory_optimization,
+)
+from on1builder.utils.notification_service import NotificationService
+from on1builder.utils.web3_factory import Web3ConnectionFactory, create_web3_instance
 
 logger = get_logger(__name__)
+_blocking_sleep = time.sleep
 
 
 class MainOrchestrator:
@@ -44,15 +44,15 @@ class MainOrchestrator:
         self._config_manager = get_config_manager()
         self._config = None  # Will be set during initialization
 
-        self._workers: List[ChainWorker] = []
-        self._balance_managers: Dict[int, BalanceManager] = {}
-        self._multi_chain_orchestrator: Optional[MultiChainOrchestrator] = None
+        self._workers: list[ChainWorker] = []
+        self._balance_managers: dict[int, BalanceManager] = {}
+        self._multi_chain_orchestrator: MultiChainOrchestrator | None = None
         self._is_running = False
         self._shutdown_event = asyncio.Event()
-        self._notification_service: Optional[NotificationService] = None
-        self._db_interface: Optional[DatabaseInterface] = None
+        self._notification_service: NotificationService | None = None
+        self._db_interface: DatabaseInterface | None = None
         self._error_recovery_manager = get_error_recovery_manager()
-        self._performance_monitor_task: Optional[asyncio.Task] = None
+        self._performance_monitor_task: asyncio.Task | None = None
         self._last_profit_report = datetime.now()
         self._startup_time = datetime.now()
         self._error_count = 0
@@ -203,14 +203,14 @@ class MainOrchestrator:
         # Start memory monitoring
         await initialize_memory_optimization()
 
-    def _get_startup_details(self) -> Dict[str, Any]:
+    def _get_startup_details(self) -> dict[str, Any]:
         """Get startup details for notifications."""
         return {
             "active_chains": self._config.chains,
             "multi_chain_enabled": self._multi_chain_orchestrator is not None,
             "balance_managers": len(self._balance_managers),
             "startup_time": self._startup_time.isoformat(),
-            "version": "2.3.0",
+            "version": "2.3.1",
         }
 
     async def _handle_critical_error(self, error: Exception):
@@ -240,7 +240,7 @@ class MainOrchestrator:
         title: str,
         message: str,
         level: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Safely dispatch a notification if the service is ready."""
         if not self._notification_service:
@@ -259,7 +259,7 @@ class MainOrchestrator:
         except Exception as exc:
             logger.error("Failed to send alert '%s': %s", title, exc, exc_info=True)
 
-    async def stop(self, sig: Optional[signal.Signals] = None):
+    async def stop(self, sig: signal.Signals | None = None):
         """Initiates the graceful shutdown of the application."""
         if not self._shutdown_event.is_set():
             signal_name = f" received signal {sig.name}" if sig else ""

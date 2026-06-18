@@ -1,8 +1,9 @@
 """Comprehensive tests for config/validation module."""
 
+from unittest.mock import patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import patch, Mock
+
 from on1builder.config.validation import (
     ConfigValidator,
     validate_complete_config,

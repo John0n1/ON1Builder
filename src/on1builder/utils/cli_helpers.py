@@ -7,20 +7,20 @@ from __future__ import annotations
 import functools
 import os
 import shlex
-import sys
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import typer
 from rich.console import Console
 
-from .logging_config import get_logger
 from .custom_exceptions import (
-    ON1BuilderError,
     ConfigurationError,
-    InitializationError,
     ConnectionError,
+    InitializationError,
+    ON1BuilderError,
     ValidationError,
 )
+from .logging_config import get_logger
 
 F = TypeVar("F", bound=Callable[..., Any])
 

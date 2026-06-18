@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List
 
 import questionary
 import typer
@@ -26,8 +26,8 @@ from on1builder.utils.custom_exceptions import ConfigurationError
 console = Console()
 
 
-def _load_env_values(paths: Iterable[Path]) -> Dict[str, str]:
-    values: Dict[str, str] = {}
+def _load_env_values(paths: Iterable[Path]) -> dict[str, str]:
+    values: dict[str, str] = {}
     for path in paths:
         if not path.exists():
             continue
@@ -55,9 +55,9 @@ def _format_env_value(value: str, quoted: bool) -> str:
     return value
 
 
-def _apply_updates(lines: List[str], updates: Dict[str, str]) -> str:
+def _apply_updates(lines: list[str], updates: dict[str, str]) -> str:
     updated_keys = set()
-    rendered: List[str] = []
+    rendered: list[str] = []
     for line in lines:
         match = re.match(r"^([A-Z0-9_]+)=(.*)$", line)
         if not match:
@@ -117,7 +117,7 @@ def _ask_confirm(label: str, default: bool = True) -> bool:
     return bool(value)
 
 
-def _ask_select(label: str, choices: List[str], default: str | None = None) -> str:
+def _ask_select(label: str, choices: list[str], default: str | None = None) -> str:
     value = questionary.select(label, choices=choices, default=default).ask()
     if value is None:
         raise typer.Exit(code=130)
@@ -195,7 +195,7 @@ def _validate_ws_url(value: str) -> bool | str:
     return "WebSocket URL must start with ws:// or wss://"
 
 
-def _parse_chain_ids(value: str) -> List[int]:
+def _parse_chain_ids(value: str) -> list[int]:
     return [int(item.strip()) for item in value.split(",") if item.strip()]
 
 
@@ -209,8 +209,8 @@ def _bool_to_env(value: bool) -> str:
     return "1" if value else "0"
 
 
-def _redact_summary(values: Dict[str, str]) -> Dict[str, str]:
-    redacted: Dict[str, str] = {}
+def _redact_summary(values: dict[str, str]) -> dict[str, str]:
+    redacted: dict[str, str] = {}
     for key, value in values.items():
         if not value:
             redacted[key] = value
@@ -235,7 +235,7 @@ def _bool_from_env(value: str | None, default: bool) -> bool:
     return default
 
 
-def _normalize_choice(value: str | None, choices: List[str], fallback: str) -> str:
+def _normalize_choice(value: str | None, choices: list[str], fallback: str) -> str:
     if not value:
         return fallback
     candidate = value.strip()
@@ -271,7 +271,7 @@ def run_setup_wizard() -> None:
     console.print("Follow the prompts to generate a fresh .env file.\n")
 
     while True:
-        updates: Dict[str, str] = {}
+        updates: dict[str, str] = {}
 
         wallet_key = _ask_password(
             "Insert your private key", validate=_validate_private_key

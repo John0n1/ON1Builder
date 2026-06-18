@@ -4,9 +4,8 @@
 
 from __future__ import annotations
 
-
 import time
-from typing import Any, Dict, Tuple, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from web3 import AsyncWeb3
 from web3.types import TxParams
@@ -48,10 +47,10 @@ class SafetyGuard:
     def __init__(
         self,
         web3: AsyncWeb3,
-        balance_manager: Optional["BalanceManager"] = None,
+        balance_manager: BalanceManager | None = None,
         *,
-        chain_id: Optional[int] = None,
-        notification_service: Optional[NotificationService] = None,
+        chain_id: int | None = None,
+        notification_service: NotificationService | None = None,
     ):
         self._web3 = web3
         self._balance_manager = balance_manager
@@ -62,7 +61,7 @@ class SafetyGuard:
 
         # Transaction tracking with efficient storage
         self._recent_tx_signatures = set()
-        self._duplicate_attempts: Dict[str, int] = {}
+        self._duplicate_attempts: dict[str, int] = {}
         self._last_clear_time = time.time()
 
         # Circuit breaker state
@@ -107,7 +106,7 @@ class SafetyGuard:
 
         return self._circuit_broken
 
-    async def check_transaction(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def check_transaction(self, tx_params: TxParams) -> tuple[bool, str]:
         """
         ON1Builder comprehensive safety checks with adaptive risk management.
         """
@@ -139,7 +138,7 @@ class SafetyGuard:
         self._safety_stats["passed_checks"] += 1
         return True, "All ON1Builder safety checks passed."
 
-    async def _check_balance(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_balance(self, tx_params: TxParams) -> tuple[bool, str]:
         """balance check with tier-aware requirements."""
         if getattr(self._settings, "allow_insufficient_funds_tests", False):
             return True, "Balance check bypassed for testing."
@@ -172,14 +171,17 @@ class SafetyGuard:
             if balance_eth < total_required_eth + min_reserve:
                 return (
                     False,
-                    f"Insufficient balance. Required: {total_required_eth + min_reserve:.6f} ETH, Available: {balance_eth:.6f} ETH",
+                    "Insufficient balance. Required: "
+                    f"{total_required_eth + min_reserve:.6f} ETH, "
+                    f"Available: {balance_eth:.6f} ETH",
                 )
 
             # Additional check for large transactions
             if total_required_eth > balance_eth * 0.8:  # More than 80% of balance
                 return (
                     False,
-                    f"Transaction too large relative to balance ({total_required_eth:.6f} ETH / {balance_eth:.6f} ETH)",
+                    "Transaction too large relative to balance "
+                    f"({total_required_eth:.6f} ETH / {balance_eth:.6f} ETH)",
                 )
 
             return True, "Sufficient balance with appropriate reserves."
@@ -197,7 +199,7 @@ class SafetyGuard:
         else:
             return self._settings.min_wallet_balance
 
-    async def _check_gas_price(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_gas_price(self, tx_params: TxParams) -> tuple[bool, str]:
         """gas price validation with market awareness."""
         gas_price_wei = tx_params.get("gasPrice")
         if gas_price_wei is None:
@@ -207,7 +209,7 @@ class SafetyGuard:
         max_gas_price_gwei = self._settings.max_gas_price_gwei
 
         # Dynamic gas price limits based on current market
-        current_market_gwei: Optional[float] = None
+        current_market_gwei: float | None = None
         try:
             current_market = await self._web3.eth.gas_price
             current_market_gwei = float(current_market) / 1e9
@@ -264,7 +266,7 @@ class SafetyGuard:
 
         return True, "Gas price is within accepted limits."
 
-    async def _check_gas_limit(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_gas_limit(self, tx_params: TxParams) -> tuple[bool, str]:
         """gas limit validation with transaction type awareness."""
         gas_limit = tx_params.get("gas")
         if gas_limit is None:
@@ -289,7 +291,7 @@ class SafetyGuard:
 
         return True, "Gas limit is reasonable for transaction type."
 
-    async def _check_duplicate_tx(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_duplicate_tx(self, tx_params: TxParams) -> tuple[bool, str]:
         """duplicate transaction detection."""
         self._clear_stale_signatures()
 
@@ -310,7 +312,7 @@ class SafetyGuard:
 
         return True, "Transaction uniqueness within safe threshold."
 
-    async def _check_rate_limits(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_rate_limits(self, tx_params: TxParams) -> tuple[bool, str]:
         """Check transaction rate limits and gas spending limits."""
 
         # Check hourly gas spending limit
@@ -323,7 +325,9 @@ class SafetyGuard:
         if self._gas_spent_last_hour > 0 and projected_spend > self._hourly_gas_limit:
             return (
                 False,
-                f"Hourly gas limit exceeded. Spent: {self._gas_spent_last_hour:.6f} ETH, Limit: {self._hourly_gas_limit:.6f} ETH",
+                "Hourly gas limit exceeded. Spent: "
+                f"{self._gas_spent_last_hour:.6f} ETH, "
+                f"Limit: {self._hourly_gas_limit:.6f} ETH",
             )
 
         # Check recent failure rate
@@ -335,7 +339,7 @@ class SafetyGuard:
 
         return True, "Rate limits OK."
 
-    async def _check_profit_viability(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_profit_viability(self, tx_params: TxParams) -> tuple[bool, str]:
         """Check if transaction is likely to be profitable."""
 
         # Calculate gas cost
@@ -352,12 +356,14 @@ class SafetyGuard:
             if expected_profit < min_required_profit:
                 return (
                     False,
-                    f"Expected profit ({expected_profit:.6f} ETH) too low relative to gas cost ({gas_cost_eth:.6f} ETH)",
+                    "Expected profit "
+                    f"({expected_profit:.6f} ETH) too low relative to gas cost "
+                    f"({gas_cost_eth:.6f} ETH)",
                 )
 
         return True, "Profit viability check passed."
 
-    async def _check_market_conditions(self, tx_params: TxParams) -> Tuple[bool, str]:
+    async def _check_market_conditions(self, tx_params: TxParams) -> tuple[bool, str]:
         """Check current market conditions for safe execution."""
 
         try:
@@ -478,7 +484,7 @@ class SafetyGuard:
             self._failed_tx_count = 0
             logger.info("Circuit breaker manually reset. Operations can resume.")
 
-    def get_safety_stats(self) -> Dict[str, Any]:
+    def get_safety_stats(self) -> dict[str, Any]:
         """Get comprehensive safety statistics."""
         success_rate = 0.0
         if self._safety_stats["total_checks"] > 0:
@@ -498,7 +504,7 @@ class SafetyGuard:
             "auto_reset_delay_minutes": self._auto_reset_delay / 60,
         }
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get comprehensive performance statistics for monitoring."""
         total_checks = max(self._safety_stats["total_checks"], 1)
 

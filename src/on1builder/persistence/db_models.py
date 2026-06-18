@@ -5,18 +5,18 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
-    BigInteger,
-    Index,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -25,7 +25,7 @@ Base = declarative_base()
 
 def utcnow() -> datetime.datetime:
     """Timezone-aware UTC timestamp for SQLAlchemy defaults."""
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class Transaction(Base):
@@ -62,7 +62,7 @@ class Transaction(Base):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Converts the model instance to a dictionary."""
         return {
             "id": self.id,
@@ -117,7 +117,7 @@ class ProfitRecord(Base):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Converts the model instance to a dictionary."""
         return {
             "id": self.id,
@@ -172,7 +172,7 @@ class StrategyPerformance(Base):
     window_start = Column(DateTime, nullable=True)
     window_end = Column(DateTime, nullable=True)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Converts the model instance to a dictionary."""
         return {
             "id": self.id,
@@ -224,7 +224,7 @@ class MarketCondition(Base):
     most_profitable_strategy = Column(String(50), nullable=True)
     avg_success_rate = Column(Float, nullable=True)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Converts the model instance to a dictionary."""
         return {
             "id": self.id,
@@ -258,7 +258,7 @@ class MarketPrice(Base):
     source = Column(String(32), nullable=True)
     timestamp = Column(DateTime, default=utcnow, nullable=False, index=True)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Converts the model instance to a dictionary."""
         return {
             "id": self.id,

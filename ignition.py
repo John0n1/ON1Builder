@@ -55,7 +55,7 @@ class Ignition:
         console.clear()
         header = Panel(
             "[bold yellow]ON1Builder Ignition[/]\n[dim]Interactive TUI Launcher[/]",
-            title="[bold]v2.3.0[/]",
+            title="[bold]v2.3.1[/]",
             border_style="yellow",
             expand=False,
         )

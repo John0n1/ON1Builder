@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional, Set, Tuple
-from datetime import datetime, timedelta
 import re
+from datetime import datetime, timedelta
+from typing import Any
 
 from web3 import AsyncWeb3
 from web3.exceptions import TransactionNotFound
@@ -16,8 +16,8 @@ from web3.types import TxData
 from on1builder.config.loaders import settings
 from on1builder.engines.strategy_executor import StrategyExecutor
 from on1builder.integrations.abi_registry import ABIRegistry
-from on1builder.utils.logging_config import get_logger
 from on1builder.utils.constants import DEX_ROUTER_IDENTIFIERS
+from on1builder.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,13 +51,13 @@ class TxPoolScanner:
         self._chain_id = chain_id
         self._abi_registry = ABIRegistry()
         self._is_running = False
-        self._scan_task: Optional[asyncio.Task] = None
+        self._scan_task: asyncio.Task | None = None
 
         # Build chain-specific DEX router mapping
         self._dex_routers = self._build_dex_router_mapping()
         # Initialize cached data
-        self._monitored_addresses: Set[str] = self._get_all_monitored_addresses()
-        self._large_trader_addresses: Set[str] = set()
+        self._monitored_addresses: set[str] = self._get_all_monitored_addresses()
+        self._large_trader_addresses: set[str] = set()
 
         # Performance tracking
         self._pending_tx_count = 0
@@ -67,16 +67,16 @@ class TxPoolScanner:
         self._not_found_counter = 0
 
         # - caching with size management
-        self._tx_analysis_cache: Dict[str, Dict] = {}
-        self._opportunity_cache: Dict[str, Dict] = {}
-        self._cache_access_times: Dict[str, datetime] = {}
+        self._tx_analysis_cache: dict[str, dict] = {}
+        self._opportunity_cache: dict[str, dict] = {}
+        self._cache_access_times: dict[str, datetime] = {}
 
         logger.debug(
             "ON1Builder TxPoolScanner initialized. Monitoring %s addresses.",
             len(self._monitored_addresses),
         )
 
-    def _build_dex_router_mapping(self) -> Dict[str, str]:
+    def _build_dex_router_mapping(self) -> dict[str, str]:
         """Build chain-specific DEX router address mapping."""
         dex_routers = {}
 
@@ -108,7 +108,7 @@ class TxPoolScanner:
         )
         return dex_routers
 
-    def _get_all_monitored_addresses(self) -> Set[str]:
+    def _get_all_monitored_addresses(self) -> set[str]:
         """Gathers all unique token addresses to monitor across all configured chains."""
         addresses = set()
         for chain_id in settings.chains:
@@ -326,7 +326,7 @@ class TxPoolScanner:
             return tx_hash if tx_hash.startswith("0x") else f"0x{tx_hash}"
         return str(tx_hash)
 
-    def _analyze_transaction_comprehensive(self, tx: TxData) -> Dict[str, Any]:
+    def _analyze_transaction_comprehensive(self, tx: TxData) -> dict[str, Any]:
         """Performs comprehensive analysis of a transaction for MEV opportunities."""
         raw_input = tx.get("input", "")
         if isinstance(raw_input, (bytes, bytearray)):
@@ -393,7 +393,7 @@ class TxPoolScanner:
 
         return analysis
 
-    def _is_relevant_for_mev(self, analysis: Dict[str, Any]) -> bool:
+    def _is_relevant_for_mev(self, analysis: dict[str, Any]) -> bool:
         """relevance check for MEV opportunities."""
         # Check if transaction targets monitored addresses
         to_address = analysis.get("to", "").lower() if analysis.get("to") else ""
@@ -419,7 +419,7 @@ class TxPoolScanner:
 
         return False
 
-    def _extract_swap_params(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_swap_params(self, analysis: dict[str, Any]) -> dict[str, Any]:
         """Extract swap parameters from common Uniswap V2-style calls."""
         input_data = analysis.get("input_data", "")
         if not input_data or len(input_data) < 10:
@@ -516,13 +516,13 @@ class TxPoolScanner:
             return {}
 
     @staticmethod
-    def _decode_uniswap_v3_path(path_bytes: bytes) -> Tuple[List[str], List[int]]:
+    def _decode_uniswap_v3_path(path_bytes: bytes) -> tuple[list[str], list[int]]:
         """Decode Uniswap V3 path bytes into token addresses and fee tiers."""
         if not path_bytes or len(path_bytes) < 43:
             return [], []
 
-        tokens: List[str] = []
-        fees: List[int] = []
+        tokens: list[str] = []
+        fees: list[int] = []
         offset = 0
         tokens.append("0x" + path_bytes[offset : offset + 20].hex())
         offset += 20
@@ -541,8 +541,8 @@ class TxPoolScanner:
         return tokens, fees
 
     async def _analyze_for_opportunities(
-        self, analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Analyzes transaction for specific MEV opportunities."""
         opportunities = []
         target_dex = analysis.get("target_dex")
@@ -617,8 +617,8 @@ class TxPoolScanner:
         return opportunities
 
     async def _analyze_front_running(
-        self, analysis: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, analysis: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Analyzes potential front-running opportunities."""
         if analysis["value_eth"] < 2.0:  # Not worth front-running small trades
             return None
@@ -646,8 +646,8 @@ class TxPoolScanner:
         }
 
     async def _analyze_back_running(
-        self, analysis: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, analysis: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Analyzes potential back-running opportunities."""
         if not analysis["target_dex"]:
             return None
@@ -672,8 +672,8 @@ class TxPoolScanner:
         }
 
     async def _analyze_arbitrage_opportunity(
-        self, analysis: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, analysis: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Analyzes arbitrage opportunities created by the transaction."""
         if not analysis["target_dex"] or analysis["value_eth"] < 1.0:
             return None
@@ -713,8 +713,7 @@ class TxPoolScanner:
                             bytes.fromhex(tx_input[10:]),
                         )
                         amount_in = decoded[0]
-                        amount_out_min = decoded[1]
-                        token_path = decoded[2]
+                        _ = decoded[1], decoded[2]
 
                         # Calculate price impact based on amounts
                         if amount_in > 0:
@@ -751,8 +750,8 @@ class TxPoolScanner:
         }
 
     async def _analyze_liquidation_opportunity(
-        self, analysis: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, analysis: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Analyzes liquidation opportunities."""
         if analysis["mev_type"] != "liquidation":
             return None
@@ -768,7 +767,7 @@ class TxPoolScanner:
             "high_priority": True,
         }
 
-    def _calculate_priority_score(self, analysis: Dict[str, Any]) -> float:
+    def _calculate_priority_score(self, analysis: dict[str, Any]) -> float:
         """Calculates priority score for the transaction."""
         score = 0.0
 
@@ -796,7 +795,7 @@ class TxPoolScanner:
 
         return min(score, 1.0)
 
-    def _estimate_profit_potential(self, analysis: Dict[str, Any]) -> float:
+    def _estimate_profit_potential(self, analysis: dict[str, Any]) -> float:
         """Estimates profit potential for the transaction."""
         base_profit = analysis["value_eth"] * 0.01  # 1% base estimate
 
@@ -813,7 +812,7 @@ class TxPoolScanner:
 
         return base_profit
 
-    def _calculate_risk_score(self, analysis: Dict[str, Any]) -> float:
+    def _calculate_risk_score(self, analysis: dict[str, Any]) -> float:
         """Calculates risk score for the opportunity."""
         risk = 0.5  # Base risk
 
@@ -840,7 +839,7 @@ class TxPoolScanner:
         """Returns the count of processed pending transactions."""
         return self._pending_tx_count
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """Returns cache statistics for monitoring."""
         return {
             "tx_analysis_cache_size": len(self._tx_analysis_cache),
@@ -852,7 +851,7 @@ class TxPoolScanner:
             "cache_access_entries": len(self._cache_access_times),
         }
 
-    def get_performance_metrics(self) -> Dict[str, Any]:
+    def get_performance_metrics(self) -> dict[str, Any]:
         """Get comprehensive performance metrics."""
         total_pending = max(self._pending_tx_count, 1)
 

@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..utils.logging_config import get_logger
 
@@ -18,24 +18,24 @@ logger = get_logger(__name__)
 class APISettings(BaseModel):
     """Configuration for external APIs."""
 
-    etherscan_api_key: Optional[str] = None
-    coingecko_api_key: Optional[str] = None
-    coinmarketcap_api_key: Optional[str] = None
-    cryptocompare_api_key: Optional[str] = None
-    infura_project_id: Optional[str] = None
+    etherscan_api_key: str | None = None
+    coingecko_api_key: str | None = None
+    coinmarketcap_api_key: str | None = None
+    cryptocompare_api_key: str | None = None
+    infura_project_id: str | None = None
 
 
 class ContractAddressSettings(BaseModel):
     """Manages chain-specific contract addresses, loaded from JSON strings in .env."""
 
-    uniswap_v2_router: Dict[str, str] = Field(default_factory=dict)
-    uniswap_v3_router: Dict[str, str] = Field(default_factory=dict)
-    sushiswap_router: Dict[str, str] = Field(default_factory=dict)
-    aave_v3_pool: Dict[str, str] = Field(default_factory=dict)
-    simple_flashloan_contract: Dict[str, str] = Field(default_factory=dict)
+    uniswap_v2_router: dict[str, str] = Field(default_factory=dict)
+    uniswap_v3_router: dict[str, str] = Field(default_factory=dict)
+    sushiswap_router: dict[str, str] = Field(default_factory=dict)
+    aave_v3_pool: dict[str, str] = Field(default_factory=dict)
+    simple_flashloan_contract: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="before")
-    def parse_json_strings(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    def parse_json_strings(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Parses fields that are expected to be JSON strings from the environment."""
         parsed_values = values.copy()
         for field, value in values.items():
@@ -52,19 +52,19 @@ class ContractAddressSettings(BaseModel):
 class NotificationSettings(BaseModel):
     """Configuration for the notification service."""
 
-    channels: List[str] = Field(default_factory=list)
+    channels: list[str] = Field(default_factory=list)
     min_level: str = Field(
         default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$"
     )
-    slack_webhook_url: Optional[str] = None
-    telegram_bot_token: Optional[str] = None
-    telegram_chat_id: Optional[str] = None
-    discord_webhook_url: Optional[str] = None
-    smtp_server: Optional[str] = None
+    slack_webhook_url: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    discord_webhook_url: str | None = None
+    smtp_server: str | None = None
     smtp_port: int = 587
-    smtp_username: Optional[str] = None
-    smtp_password: Optional[str] = None
-    alert_email: Optional[str] = None
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    alert_email: str | None = None
 
     @field_validator("min_level", mode="before")
     def normalize_level(cls, v):
@@ -99,13 +99,13 @@ class GlobalSettings(BaseModel):
     # Wallet
     wallet_key: str
     wallet_address: str
-    profit_receiver_address: Optional[str] = None
-    wallet_keys: Dict[int, str] = Field(default_factory=dict)
-    wallet_addresses: Dict[int, str] = Field(default_factory=dict)
+    profit_receiver_address: str | None = None
+    wallet_keys: dict[int, str] = Field(default_factory=dict)
+    wallet_addresses: dict[int, str] = Field(default_factory=dict)
 
     # Chains
-    chains: List[int] = Field(default=[1])
-    poa_chains: List[int] = Field(default_factory=list)
+    chains: list[int] = Field(default=[1])
+    poa_chains: list[int] = Field(default_factory=list)
 
     @field_validator("chains", "poa_chains", mode="before")
     @classmethod
@@ -229,8 +229,8 @@ class GlobalSettings(BaseModel):
         return self
 
     # RPC Endpoints (will be populated by the loader)
-    rpc_urls: Dict[int, str] = Field(default_factory=dict)
-    websocket_urls: Dict[int, str] = Field(default_factory=dict)
+    rpc_urls: dict[int, str] = Field(default_factory=dict)
+    websocket_urls: dict[int, str] = Field(default_factory=dict)
 
     # Transaction & Gas
     transaction_retry_count: int = Field(default=3, gt=0)
@@ -253,7 +253,7 @@ class GlobalSettings(BaseModel):
         default="public",
         description="Transaction submission mode: public, private, or bundle (MEV-Boost/Flashbots).",
     )
-    private_rpc_url: Optional[str] = Field(
+    private_rpc_url: str | None = Field(
         default=None,
         description="Optional private RPC endpoint (e.g., Flashbots Protect) used when submission_mode=private.",
     )
@@ -261,23 +261,23 @@ class GlobalSettings(BaseModel):
         default="https://api.tenderly.co/api/v1",
         description="Tenderly API base URL for simulation.",
     )
-    tenderly_account_slug: Optional[str] = Field(
+    tenderly_account_slug: str | None = Field(
         default=None, description="Tenderly account slug for simulation."
     )
-    tenderly_project_slug: Optional[str] = Field(
+    tenderly_project_slug: str | None = Field(
         default=None, description="Tenderly project slug for simulation."
     )
-    tenderly_access_token: Optional[str] = Field(
+    tenderly_access_token: str | None = Field(
         default=None, description="Tenderly access token for simulation."
     )
-    bundle_relay_url: Optional[str] = Field(
+    bundle_relay_url: str | None = Field(
         default=None,
         description="MEV-Boost/Flashbots bundle relay URL when submission_mode=bundle.",
     )
-    bundle_relay_auth_token: Optional[str] = Field(
+    bundle_relay_auth_token: str | None = Field(
         default=None, description="Auth token if required by the bundle relay."
     )
-    bundle_signer_key: Optional[str] = Field(
+    bundle_signer_key: str | None = Field(
         default=None,
         description="Private key used to sign bundle payloads for relays (auto-generated if missing).",
     )
@@ -402,7 +402,7 @@ class GlobalSettings(BaseModel):
     bridge_monitoring_enabled: bool = Field(default=True)
 
     # Oracle feeds (chain_id -> symbol -> feed address)
-    oracle_feeds: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+    oracle_feeds: dict[str, dict[str, str]] = Field(default_factory=dict)
     oracle_stale_seconds: int = Field(
         default=3600,
         gt=0,

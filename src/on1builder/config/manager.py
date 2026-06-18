@@ -3,16 +3,17 @@
 # Copyright (c) 2026 John Hauger Mitander
 
 from __future__ import annotations
-import os
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-from datetime import datetime
 
-from .loaders import load_settings, get_settings
-from .validation import ConfigValidator
-from ..utils.logging_config import get_logger
-from ..utils.custom_exceptions import ConfigurationError
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
 from ..utils.constants import DEFAULT_ENV_FILE
+from ..utils.custom_exceptions import ConfigurationError
+from ..utils.logging_config import get_logger
+from .loaders import load_settings
+from .validation import ConfigValidator
 
 logger = get_logger(__name__)
 
@@ -22,13 +23,13 @@ class ConfigurationManager:
 
     def __init__(self):
         self._config = None
-        self._last_loaded: Optional[datetime] = None
-        self._config_file_path: Optional[Path] = None
-        self._validation_errors: List[str] = []
+        self._last_loaded: datetime | None = None
+        self._config_file_path: Path | None = None
+        self._validation_errors: list[str] = []
         self._validator = ConfigValidator()
 
     def initialize(
-        self, config_path: Optional[str] = None, force_reload: bool = False
+        self, config_path: str | None = None, force_reload: bool = False
     ) -> None:
         """
         Initialize configuration with validation and error checking.
@@ -118,7 +119,7 @@ class ConfigurationManager:
             self._validation_errors.append(error_msg)
             raise ConfigurationError(error_msg, cause=e)
 
-    def _check_critical_requirements(self, config: Dict[str, Any]) -> None:
+    def _check_critical_requirements(self, config: dict[str, Any]) -> None:
         """Check for critical configuration requirements."""
         critical_fields = [
             ("wallet_key", "Wallet private key is required"),
@@ -143,7 +144,7 @@ class ConfigurationManager:
                 details={"errors": self._validation_errors},
             )
 
-    def _validate_chain_configurations(self, config: Dict[str, Any]) -> None:
+    def _validate_chain_configurations(self, config: dict[str, Any]) -> None:
         """Validate chain-specific configurations."""
         chains = config.get("chains", [])
         rpc_urls = config.get("rpc_urls", {})
@@ -179,7 +180,7 @@ class ConfigurationManager:
                 f"Missing WebSocket URLs for chains (txpool scanning disabled): {missing_ws}"
             )
 
-    def _validate_api_configurations(self, config: Dict[str, Any]) -> None:
+    def _validate_api_configurations(self, config: dict[str, Any]) -> None:
         """Validate API configurations."""
         api_config = config.get("api", {})
 
@@ -236,7 +237,7 @@ class ConfigurationManager:
         logger.info("Reloading configuration...")
         self.initialize(force_reload=True)
 
-    def validate_runtime_requirements(self) -> Dict[str, bool]:
+    def validate_runtime_requirements(self) -> dict[str, bool]:
         """Validate runtime requirements and return status."""
         if not self._config:
             return {"initialized": False}
@@ -290,7 +291,7 @@ class ConfigurationManager:
         except Exception:
             return False
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """Get comprehensive health status of configuration."""
         return {
             "status": "healthy" if not self._validation_errors else "unhealthy",
@@ -302,7 +303,7 @@ class ConfigurationManager:
             "runtime_checks": self.validate_runtime_requirements(),
         }
 
-    def export_safe_config(self) -> Dict[str, Any]:
+    def export_safe_config(self) -> dict[str, Any]:
         """Export configuration with sensitive data redacted."""
         if not self._config:
             return {}
@@ -314,7 +315,7 @@ class ConfigurationManager:
 
 
 # Global configuration manager instance
-_config_manager: Optional[ConfigurationManager] = None
+_config_manager: ConfigurationManager | None = None
 
 
 def get_config_manager() -> ConfigurationManager:
@@ -326,7 +327,7 @@ def get_config_manager() -> ConfigurationManager:
 
 
 def initialize_global_config(
-    config_path: Optional[str] = None, force_reload: bool = False
+    config_path: str | None = None, force_reload: bool = False
 ) -> None:
     """Initialize the global configuration."""
     manager = get_config_manager()

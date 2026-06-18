@@ -3,7 +3,8 @@
 # Copyright (c) 2026 John Hauger Mitander
 
 from __future__ import annotations
-from typing import Any, Dict
+
+from typing import Any
 
 
 class ConfigRedactor:
@@ -32,8 +33,8 @@ class ConfigRedactor:
 
     @classmethod
     def redact_config(
-        cls, config_dict: Dict[str, Any], show_sensitive: bool = False
-    ) -> Dict[str, Any]:
+        cls, config_dict: dict[str, Any], show_sensitive: bool = False
+    ) -> dict[str, Any]:
         """
         Recursively redact sensitive values in a configuration dictionary.
 

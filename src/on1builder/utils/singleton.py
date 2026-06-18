@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable, Dict, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from .logging_config import get_logger
 
@@ -16,7 +17,7 @@ logger = get_logger(__name__)
 class SingletonMeta(type):
     """A thread-safe singleton metaclass."""
 
-    _instances: Dict[type, Any] = {}
+    _instances: dict[type, Any] = {}
     _lock: threading.Lock = threading.Lock()
 
     def __call__(cls, *args, **kwargs) -> T:
@@ -46,8 +47,8 @@ class SingletonMeta(type):
 class SingletonRegistry:
     """A registry for managing named singleton instances, often created via factories."""
 
-    _instances: Dict[str, Any] = {}
-    _factories: Dict[str, Callable[..., Any]] = {}
+    _instances: dict[str, Any] = {}
+    _factories: dict[str, Callable[..., Any]] = {}
     _lock: threading.Lock = threading.Lock()
 
     def register_factory(self, key: str, factory: Callable[..., T]) -> None:
@@ -84,7 +85,7 @@ class SingletonRegistry:
         """Checks if a singleton (instance or factory) is registered for the key."""
         return key in self._instances or key in self._factories
 
-    def reset(self, key: Optional[str] = None) -> None:
+    def reset(self, key: str | None = None) -> None:
         """
         Resets one or all singleton instances. For testing purposes.
         If key is None, all instances are cleared.

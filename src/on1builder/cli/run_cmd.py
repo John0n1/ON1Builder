@@ -5,14 +5,12 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 
 import typer
 
 from on1builder.core.main_orchestrator import MainOrchestrator
-from on1builder.utils.custom_exceptions import InitializationError
-from on1builder.utils.logging_config import get_logger
 from on1builder.utils.cli_helpers import handle_cli_errors, info_message
+from on1builder.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 app = typer.Typer(help="Commands to run the ON1Builder bot.")

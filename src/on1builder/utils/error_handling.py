@@ -14,10 +14,11 @@ from __future__ import annotations
 import asyncio
 import functools
 import traceback
-from typing import Any, Callable, Dict, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
-from .logging_config import get_logger
 from .custom_exceptions import InitializationError
+from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,7 @@ def with_error_handling(
     critical: bool = False,
     retry_count: int = 0,
     retry_delay: float = 1.0,
-    fallback: Optional[Any] = None,
+    fallback: Any | None = None,
 ):
     """Decorator for standardized error handling."""
 
@@ -139,12 +140,12 @@ class ComponentHealthTracker:
     """Tracks component health and provides recovery suggestions."""
 
     def __init__(self):
-        self._health_status: Dict[str, Dict[str, Any]] = {}
-        self._failure_counts: Dict[str, int] = {}
-        self._recovery_strategies: Dict[str, Callable] = {}
+        self._health_status: dict[str, dict[str, Any]] = {}
+        self._failure_counts: dict[str, int] = {}
+        self._recovery_strategies: dict[str, Callable] = {}
 
     def register_component(
-        self, name: str, recovery_strategy: Optional[Callable] = None
+        self, name: str, recovery_strategy: Callable | None = None
     ) -> None:
         """Register a component for health tracking."""
         self._health_status[name] = {
@@ -158,9 +159,7 @@ class ComponentHealthTracker:
         if recovery_strategy:
             self._recovery_strategies[name] = recovery_strategy
 
-    def report_health(
-        self, name: str, healthy: bool, error: Optional[str] = None
-    ) -> None:
+    def report_health(self, name: str, healthy: bool, error: str | None = None) -> None:
         """Report component health status."""
         if name not in self._health_status:
             self.register_component(name)
@@ -177,7 +176,7 @@ class ComponentHealthTracker:
         else:
             self._failure_counts[name] = 0
 
-    def get_unhealthy_components(self) -> Dict[str, Dict[str, Any]]:
+    def get_unhealthy_components(self) -> dict[str, dict[str, Any]]:
         """Get list of unhealthy components."""
         return {
             name: status

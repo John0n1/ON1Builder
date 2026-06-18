@@ -5,17 +5,18 @@
 from __future__ import annotations
 
 import asyncio
+
 import typer
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from on1builder.config.loaders import settings
-from on1builder.utils.web3_factory import Web3ConnectionFactory
-from on1builder.persistence.db_interface import DatabaseInterface
 from on1builder.core.balance_manager import BalanceManager
 from on1builder.integrations.external_apis import ExternalAPIManager
+from on1builder.persistence.db_interface import DatabaseInterface
+from on1builder.utils.web3_factory import Web3ConnectionFactory
 
 app = typer.Typer(help="Commands to check comprehensive system status and performance.")
 console = Console(force_terminal=True, legacy_windows=True)

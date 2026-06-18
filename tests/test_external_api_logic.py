@@ -1,13 +1,11 @@
 """Focused logic tests for ExternalAPIManager without hitting real networks."""
 
-import asyncio
 import time
-from cachetools import TTLCache
-from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from cachetools import TTLCache
 
 from on1builder.integrations.external_apis import ExternalAPIManager, RateLimitTracker
 

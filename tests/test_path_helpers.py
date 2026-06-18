@@ -5,9 +5,9 @@
 Tests for path helper utilities.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+
+import pytest
 
 
 def test_get_base_dir():
@@ -96,8 +96,9 @@ def test_get_strategy_weights_path():
 
 def test_ensure_dir_exists():
     """Test ensure_dir_exists function."""
-    from on1builder.utils.path_helpers import ensure_dir_exists
     import tempfile
+
+    from on1builder.utils.path_helpers import ensure_dir_exists
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)

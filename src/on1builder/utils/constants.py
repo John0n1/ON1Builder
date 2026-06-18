@@ -3,6 +3,7 @@
 # Copyright (c) 2026 John Hauger Mitander
 
 from __future__ import annotations
+
 from decimal import Decimal
 
 # =============================================================================

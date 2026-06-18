@@ -5,10 +5,9 @@
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
 from datetime import datetime
-
+from decimal import Decimal
+from typing import Any
 
 from web3 import AsyncWeb3
 from web3.types import TxReceipt
@@ -23,13 +22,13 @@ logger = get_logger(__name__)
 class ProfitCalculator:
     """Advanced profit calculation with transaction log parsing and flash loan analysis."""
 
-    def __init__(self, web3: AsyncWeb3, settings: Optional[Any] = None):
+    def __init__(self, web3: AsyncWeb3, settings: Any | None = None):
         self._web3 = web3
         self._settings = settings
         self._abi_registry = ABIRegistry()
         self._api_manager = ExternalAPIManager()
-        self._token_decimals_cache: Dict[str, int] = {}
-        self._price_cache: Dict[str, Decimal] = {}
+        self._token_decimals_cache: dict[str, int] = {}
+        self._price_cache: dict[str, Decimal] = {}
 
         # Common DEX event signatures
         self._event_signatures = {
@@ -41,8 +40,8 @@ class ProfitCalculator:
         }
 
     async def calculate_transaction_profit(
-        self, tx_hash: str, strategy_type: str, expected_tokens: List[str] = None
-    ) -> Dict[str, Any]:
+        self, tx_hash: str, strategy_type: str, expected_tokens: list[str] = None
+    ) -> dict[str, Any]:
         """
         Calculate actual profit from a transaction by parsing logs.
 
@@ -96,7 +95,7 @@ class ProfitCalculator:
         gas_cost_wei = gas_used * gas_price
         return Decimal(gas_cost_wei) / Decimal(10**18)
 
-    async def _parse_token_movements(self, logs: List[Dict]) -> List[Dict[str, Any]]:
+    async def _parse_token_movements(self, logs: list[dict]) -> list[dict[str, Any]]:
         """Parse transaction logs to extract token movements."""
         movements = []
 
@@ -135,7 +134,7 @@ class ProfitCalculator:
 
         return movements
 
-    async def _parse_transfer_log(self, log: Dict) -> Optional[Dict[str, Any]]:
+    async def _parse_transfer_log(self, log: dict) -> dict[str, Any] | None:
         """Parse ERC20 Transfer event."""
         try:
             if len(log.topics) < 3:
@@ -172,7 +171,7 @@ class ProfitCalculator:
             logger.debug(f"Error parsing transfer log: {e}")
             return None
 
-    async def _parse_swap_log(self, log: Dict) -> Optional[Dict[str, Any]]:
+    async def _parse_swap_log(self, log: dict) -> dict[str, Any] | None:
         """Parse DEX swap event using proper ABI decoding."""
         try:
             # Known DEX swap event signatures
@@ -189,12 +188,7 @@ class ProfitCalculator:
                     "dex_type": "uniswap_v3",
                     "abi": ["int256", "int256", "uint160", "uint128", "int24"],
                 },
-                # SushiSwap (same as Uniswap V2)
-                "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822": {
-                    "name": "Swap",
-                    "dex_type": "sushiswap",
-                    "abi": ["uint256", "uint256", "uint256", "uint256", "address"],
-                },
+                # SushiSwap shares the Uniswap V2 Swap signature.
             }
 
             if not log.topics or len(log.topics) == 0:
@@ -263,7 +257,7 @@ class ProfitCalculator:
             logger.debug(f"Error parsing swap log: {e}")
             return None
 
-    async def _parse_flash_loan_log(self, log: Dict) -> Optional[Dict[str, Any]]:
+    async def _parse_flash_loan_log(self, log: dict) -> dict[str, Any] | None:
         """Parse flash loan event."""
         try:
             return {
@@ -279,11 +273,11 @@ class ProfitCalculator:
 
     async def _analyze_profit_by_strategy(
         self,
-        movements: List[Dict[str, Any]],
+        movements: list[dict[str, Any]],
         gas_cost: Decimal,
         strategy_type: str,
-        expected_tokens: List[str] = None,
-    ) -> Dict[str, Any]:
+        expected_tokens: list[str] = None,
+    ) -> dict[str, Any]:
         """Analyze profit based on strategy type and token movements."""
         try:
             if self._settings is None:
@@ -381,8 +375,8 @@ class ProfitCalculator:
             return {"error": str(e)}
 
     async def _get_strategy_specific_analysis(
-        self, strategy_type: str, movements: List[Dict], net_changes: Dict[str, Decimal]
-    ) -> Dict[str, Any]:
+        self, strategy_type: str, movements: list[dict], net_changes: dict[str, Decimal]
+    ) -> dict[str, Any]:
         """Provide strategy-specific profit analysis."""
         analysis = {"strategy_type": strategy_type}
 
@@ -478,7 +472,7 @@ class ProfitCalculator:
             return 18  # Default to 18 decimals
 
     async def _convert_token_to_usd(
-        self, amount: Decimal, token_symbol: Optional[str]
+        self, amount: Decimal, token_symbol: str | None
     ) -> Decimal:
         """Convert token amount to USD value using real-time price feeds."""
         if not token_symbol or amount == 0:
@@ -519,7 +513,7 @@ class ProfitCalculator:
             logger.warning(f"Error converting ETH to USD: {e}")
             return Decimal("0")
 
-    async def calculate_flash_loan_profit(self, tx_hash: str) -> Dict[str, Any]:
+    async def calculate_flash_loan_profit(self, tx_hash: str) -> dict[str, Any]:
         """Specialized flash loan profit calculation."""
         try:
             base_analysis = await self.calculate_transaction_profit(
@@ -549,7 +543,7 @@ class ProfitCalculator:
             logger.error(f"Error calculating flash loan profit: {e}")
             return {"error": str(e)}
 
-    async def get_profit_summary(self, tx_hashes: List[str]) -> Dict[str, Any]:
+    async def get_profit_summary(self, tx_hashes: list[str]) -> dict[str, Any]:
         """Generate profit summary for multiple transactions."""
         try:
             total_profit = Decimal("0")

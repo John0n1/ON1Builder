@@ -6,19 +6,19 @@ Edge case tests for critical paths: balance management, validation,
 transaction handling, and error recovery.
 """
 
-import pytest
 from decimal import Decimal
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, Mock
 
-from on1builder.core.balance_manager import BalanceManager
+import pytest
+
 from on1builder.config.validation import ConfigValidator
+from on1builder.core.balance_manager import BalanceManager
+from on1builder.utils.constants import BALANCE_TIER_THRESHOLDS
 from on1builder.utils.custom_exceptions import (
+    ConfigurationError,
     InsufficientFundsError,
     ValidationError,
-    ConfigurationError,
 )
-from on1builder.utils.constants import BALANCE_TIER_THRESHOLDS
 
 # ---------------------------------------------------------------------------
 # Balance Manager edge cases
@@ -200,7 +200,6 @@ class TestCustomExceptionEdgeCases:
     def test_exception_chain_propagation(self):
         """Exceptions should properly chain causes."""
         from on1builder.utils.custom_exceptions import (
-            TransactionError,
             ConnectionError,
         )
 
@@ -225,13 +224,12 @@ class TestCustomExceptionEdgeCases:
     def test_all_exceptions_are_subclass(self):
         """All custom exceptions should inherit from ON1BuilderError."""
         from on1builder.utils.custom_exceptions import (
-            ON1BuilderError,
             ConfigurationError,
             ConnectionError,
-            TransactionError,
-            InsufficientFundsError,
-            StrategyExecutionError,
             InitializationError,
+            ON1BuilderError,
+            StrategyExecutionError,
+            TransactionError,
         )
 
         for exc_class in [
@@ -287,11 +285,11 @@ class TestConstantsSanity:
     def test_cache_durations_positive(self):
         """All cache durations should be positive."""
         from on1builder.utils.constants import (
+            ABI_CACHE_DURATION,
             BALANCE_CACHE_DURATION,
-            TOKEN_PRICE_CACHE_DURATION,
             GAS_PRICE_CACHE_DURATION,
             MARKET_DATA_CACHE_DURATION,
-            ABI_CACHE_DURATION,
+            TOKEN_PRICE_CACHE_DURATION,
         )
 
         for duration in [
@@ -306,10 +304,11 @@ class TestConstantsSanity:
     def test_regex_patterns_valid(self):
         """Regex patterns should be compilable."""
         import re
+
         from on1builder.utils.constants import (
             ETHEREUM_ADDRESS_PATTERN,
-            TRANSACTION_HASH_PATTERN,
             PRIVATE_KEY_PATTERN,
+            TRANSACTION_HASH_PATTERN,
         )
 
         for pattern in [
@@ -323,6 +322,7 @@ class TestConstantsSanity:
     def test_address_pattern_matches(self):
         """Address pattern should match valid Ethereum addresses."""
         import re
+
         from on1builder.utils.constants import ETHEREUM_ADDRESS_PATTERN
 
         pattern = re.compile(ETHEREUM_ADDRESS_PATTERN)

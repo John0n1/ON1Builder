@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from web3 import AsyncWeb3
 
@@ -22,7 +21,7 @@ class NonceManager:
     and ensure sequential, unique nonces for all outgoing transactions.
     """
 
-    _instances: dict[str, "NonceManager"] = {}
+    _instances: dict[str, NonceManager] = {}
 
     def __new__(cls, web3: AsyncWeb3, address: str):
         key = cls._instance_key(address)

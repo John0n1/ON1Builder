@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 import time
-import asyncio
+from collections.abc import Callable
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from on1builder.config.loaders import settings
 from on1builder.core.balance_manager import BalanceManager
@@ -32,7 +33,7 @@ class StrategyExecutor:
         self._strategy_weights_path = get_strategy_weights_path()
 
         # - strategy mapping with metadata
-        self._strategies: Dict[str, Dict[str, Any]] = {
+        self._strategies: dict[str, dict[str, Any]] = {
             "arbitrage": {
                 "functions": [self._tx_manager.execute_arbitrage],
                 "risk_level": "low",
@@ -71,8 +72,8 @@ class StrategyExecutor:
         }
 
         # ML state
-        self._weights: Dict[str, List[float]] = {}
-        self._strategy_history: List[Dict[str, Any]] = []
+        self._weights: dict[str, list[float]] = {}
+        self._strategy_history: list[dict[str, Any]] = []
         self._execution_count = 0
         self._last_weight_update = 0
 
@@ -82,7 +83,7 @@ class StrategyExecutor:
         self._decay_rate = settings.ml_decay_rate
 
         # Performance tracking
-        self._strategy_performance: Dict[str, Dict[str, float]] = {}
+        self._strategy_performance: dict[str, dict[str, float]] = {}
 
         self._load_weights()
         self._initialize_performance_tracking()
@@ -91,14 +92,14 @@ class StrategyExecutor:
         )
 
     @staticmethod
-    def _mean(values: List[float]) -> float:
+    def _mean(values: list[float]) -> float:
         return sum(values) / len(values) if values else 0.0
 
     def _load_weights(self):
         """weight loading with validation and migration."""
         try:
             if self._strategy_weights_path.exists():
-                with open(self._strategy_weights_path, "r") as f:
+                with open(self._strategy_weights_path) as f:
                     data = json.load(f)
 
                 # Support both old and new format
@@ -119,7 +120,7 @@ class StrategyExecutor:
                             ]
 
                 logger.debug("Loaded strategy weights from file.")
-        except (IOError, json.JSONDecodeError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(
                 f"Could not load strategy weights: {e}. Using default weights."
             )
@@ -172,7 +173,7 @@ class StrategyExecutor:
         try:
             with open(self._strategy_weights_path, "w") as f:
                 json.dump(data, f, indent=2)
-        except IOError as e:
+        except OSError as e:
             logger.error(f"Failed to save strategy weights: {e}")
 
     def _initialize_performance_tracking(self):
@@ -187,7 +188,7 @@ class StrategyExecutor:
                 "last_execution": 0.0,
             }
 
-    async def _get_eligible_strategies(self, opportunity: Dict[str, Any]) -> List[str]:
+    async def _get_eligible_strategies(self, opportunity: dict[str, Any]) -> list[str]:
         """
         Filters strategies based on balance tier, risk tolerance, and opportunity type.
         """
@@ -221,9 +222,11 @@ class StrategyExecutor:
 
             # Check if strategy matches opportunity type
             opportunity_type = opportunity.get("strategy_type", "")
-            if opportunity_type and strategy_name.startswith(opportunity_type):
-                eligible.append(strategy_name)
-            elif not opportunity_type:
+            if (
+                opportunity_type
+                and strategy_name.startswith(opportunity_type)
+                or not opportunity_type
+            ):
                 eligible.append(strategy_name)
 
         # Require simulation unless bypassed globally; treat missing flag as simulated for legacy callers.
@@ -240,7 +243,7 @@ class StrategyExecutor:
         return eligible
 
     def _calculate_strategy_score(
-        self, strategy_name: str, opportunity: Dict[str, Any]
+        self, strategy_name: str, opportunity: dict[str, Any]
     ) -> float:
         """
         Calculates a comprehensive score for strategy selection.
@@ -289,8 +292,8 @@ class StrategyExecutor:
         return total_score
 
     async def _select_strategy(
-        self, opportunity: Dict[str, Any]
-    ) -> Tuple[Optional[Callable], str]:
+        self, opportunity: dict[str, Any]
+    ) -> tuple[Callable | None, str]:
         """
         ON1Builder strategy selection with multi-factor optimization.
         """
@@ -329,7 +332,7 @@ class StrategyExecutor:
         )
         return best_function, best_strategy
 
-    async def simulate_opportunity(self, opportunity: Dict[str, Any]) -> bool:
+    async def simulate_opportunity(self, opportunity: dict[str, Any]) -> bool:
         """
         Attempt to simulate the opportunity before execution. For swap-based strategies,
         reuse the transaction manager's simulate-only path.
@@ -351,12 +354,12 @@ class StrategyExecutor:
             return False
 
     async def simulate_opportunities_batch(
-        self, opportunities: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, opportunities: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Simulate a batch of opportunities with limited concurrency."""
         semaphore = asyncio.Semaphore(settings.simulation_concurrency)
 
-        async def _simulate_one(opp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        async def _simulate_one(opp: dict[str, Any]) -> dict[str, Any] | None:
             async with semaphore:
                 ok = await self.simulate_opportunity(opp)
                 return opp if ok else None
@@ -365,7 +368,7 @@ class StrategyExecutor:
         results = await asyncio.gather(*tasks, return_exceptions=False)
         return [r for r in results if r]
 
-    async def execute_opportunity(self, opportunity: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_opportunity(self, opportunity: dict[str, Any]) -> dict[str, Any]:
         """
         ON1Builder opportunity execution with comprehensive tracking and learning.
         """
@@ -450,8 +453,8 @@ class StrategyExecutor:
             )
 
     async def _ON1Builder_opportunity_with_balance(
-        self, opportunity: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, opportunity: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         ON1Builders opportunity parameters based on current balance situation.
         """
@@ -520,7 +523,7 @@ class StrategyExecutor:
         strategy_name: str,
         success: bool,
         profit: float,
-        opportunity: Dict[str, Any],
+        opportunity: dict[str, Any],
     ):
         """ML weight update with contextual learning."""
         if strategy_name not in self._weights:
@@ -603,7 +606,7 @@ class StrategyExecutor:
 
         return total_success / total_executions if total_executions > 0 else 0.5
 
-    async def get_strategy_report(self) -> Dict[str, Any]:
+    async def get_strategy_report(self) -> dict[str, Any]:
         """Returns comprehensive strategy performance report."""
         return {
             "execution_count": self._execution_count,
