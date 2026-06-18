@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 119
+extend-ignore = E203,W503,W504
+per-file-ignores =
+    tests/*:F401,F811
+exclude = .venv,build,dist,.git

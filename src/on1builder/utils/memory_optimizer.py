@@ -4,13 +4,14 @@
 
 from __future__ import annotations
 
-import gc
-import sys
-import psutil
 import asyncio
-from typing import Dict, Any, Optional, List, Callable
-from datetime import datetime
+import gc
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+import psutil
 
 from .logging_config import get_logger
 
@@ -44,11 +45,11 @@ class MemoryOptimizer:
         self._memory_warning_threshold = memory_warning_threshold
 
         # Memory tracking
-        self._metrics_history: List[MemoryMetrics] = []
-        self._cleanup_callbacks: List[Callable[[], None]] = []
+        self._metrics_history: list[MemoryMetrics] = []
+        self._cleanup_callbacks: list[Callable[[], None]] = []
         self._last_cleanup = datetime.now()
         self._is_running = False
-        self._monitor_task: Optional[asyncio.Task] = None
+        self._monitor_task: asyncio.Task | None = None
 
         # Process reference for memory monitoring
         self._process = psutil.Process()
@@ -108,7 +109,7 @@ class MemoryOptimizer:
             python_objects_count=objects_count,
         )
 
-    async def force_cleanup(self) -> Dict[str, Any]:
+    async def force_cleanup(self) -> dict[str, Any]:
         """Force immediate memory cleanup and return statistics."""
         logger.info("Forcing memory cleanup")
 
@@ -119,7 +120,7 @@ class MemoryOptimizer:
         cleanup_results = []
         for callback in self._cleanup_callbacks:
             try:
-                result = callback()
+                callback()
                 cleanup_results.append(f"Success: {callback.__name__}")
             except Exception as e:
                 cleanup_results.append(f"Failed: {callback.__name__} - {e}")
@@ -210,7 +211,7 @@ class MemoryOptimizer:
                 logger.error(f"Error in memory monitoring loop: {e}")
                 await asyncio.sleep(60)  # Back off on error
 
-    def get_memory_analytics(self) -> Dict[str, Any]:
+    def get_memory_analytics(self) -> dict[str, Any]:
         """Get comprehensive memory analytics."""
         if not self._metrics_history:
             return {"error": "No metrics available"}
@@ -267,7 +268,7 @@ class MemoryOptimizer:
 
 
 # Global memory optimizer instance
-_memory_optimizer: Optional[MemoryOptimizer] = None
+_memory_optimizer: MemoryOptimizer | None = None
 
 
 def get_memory_optimizer() -> MemoryOptimizer:

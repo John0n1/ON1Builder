@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, cast
 
 from eth_account.signers.local import LocalAccount
 from web3 import AsyncWeb3
+from web3.types import TxParams
 
 from on1builder.config.loaders import settings
 from on1builder.core.balance_manager import BalanceManager
@@ -35,20 +36,20 @@ class ChainWorker:
     def __init__(self, chain_id: int):
         self.chain_id = chain_id
         self.is_running = False
-        self._tasks = []
+        self._tasks: list[asyncio.Task[Any]] = []
 
         # Core components
-        self.web3: Optional[AsyncWeb3] = None
-        self.account: Optional[LocalAccount] = None
-        self.balance_manager: Optional[BalanceManager] = None
+        self.web3: AsyncWeb3 | None = None
+        self.account: LocalAccount | None = None
+        self.balance_manager: BalanceManager | None = None
 
         # Managers
-        self.market_feed: Optional[MarketDataFeed] = None
-        self.tx_scanner: Optional[TxPoolScanner] = None
-        self.tx_manager: Optional[TransactionManager] = None
-        self.strategy_executor: Optional[StrategyExecutor] = None
-        self.safety_guard: Optional[SafetyGuard] = None
-        self.nonce_manager: Optional[NonceManager] = None
+        self.market_feed: MarketDataFeed | None = None
+        self.tx_scanner: TxPoolScanner | None = None
+        self.tx_manager: TransactionManager | None = None
+        self.strategy_executor: StrategyExecutor | None = None
+        self.safety_guard: SafetyGuard | None = None
+        self.nonce_manager: NonceManager | None = None
 
         # Performance tracking with ON1Builder metrics
         self._performance_stats = {
@@ -214,7 +215,7 @@ class ChainWorker:
         # Final performance report
         await self._generate_final_report()
 
-        logger.info(f"Closing ChainWorker...")
+        logger.info("Closing ChainWorker...")
 
     async def _run_startup_test_transaction(self) -> None:
         """Attempt a startup test transaction for diagnostics."""
@@ -244,15 +245,18 @@ class ChainWorker:
             nonce = (
                 await self.nonce_manager.get_next_nonce() if self.nonce_manager else 0
             )
-            tx_params = {
-                "from": self.account.address,
-                "to": self.account.address,
-                "value": 0,
-                "gas": 21000,
-                "gasPrice": gas_price,
-                "nonce": nonce,
-                "chainId": self.chain_id,
-            }
+            tx_params = cast(
+                TxParams,
+                {
+                    "from": self.account.address,
+                    "to": self.account.address,
+                    "value": 0,
+                    "gas": 21000,
+                    "gasPrice": gas_price,
+                    "nonce": nonce,
+                    "chainId": self.chain_id,
+                },
+            )
 
             try:
                 await self.tx_manager._simulate_transaction(tx_params)
@@ -320,7 +324,7 @@ class ChainWorker:
                 # Get comprehensive status
                 balance_summary = await self.balance_manager.get_balance_summary()
                 tx_manager_stats = await self.tx_manager.get_performance_stats()
-                strategy_report = await self.strategy_executor.get_strategy_report()
+                await self.strategy_executor.get_strategy_report()
 
                 # Get memory metrics
                 memory_metrics = self._memory_optimizer.get_current_metrics()
@@ -442,7 +446,7 @@ class ChainWorker:
             # Get final stats
             balance_summary = await self.balance_manager.get_balance_summary()
             tx_stats = await self.tx_manager.get_performance_stats()
-            strategy_report = await self.strategy_executor.get_strategy_report()
+            await self.strategy_executor.get_strategy_report()
 
             total_time_hours = self._performance_stats["uptime_seconds"] / 3600
 
@@ -475,12 +479,17 @@ class ChainWorker:
                 f"[Chain {self.chain_id}] Failed to generate final report: {e}"
             )
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status(self) -> dict[str, Any]:
         """Get comprehensive worker status."""
         if not self.is_running:
             return {"status": "stopped", "chain_id": self.chain_id}
 
         try:
+            assert self.balance_manager is not None
+            assert self.tx_manager is not None
+            assert self.strategy_executor is not None
+            assert self.tx_scanner is not None
+
             balance_summary = await self.balance_manager.get_balance_summary()
             tx_stats = await self.tx_manager.get_performance_stats()
             strategy_report = await self.strategy_executor.get_strategy_report()

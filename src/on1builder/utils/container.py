@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, Callable, Dict, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from .logging_config import get_logger
 
@@ -17,10 +18,10 @@ class Container:
     """A dependency injection container for managing component lifecycles with async support."""
 
     def __init__(self) -> None:
-        self._instances: Dict[str, Any] = {}
-        self._providers: Dict[str, Callable[[], T]] = {}
+        self._instances: dict[str, Any] = {}
+        self._providers: dict[str, Callable[[], T]] = {}
         self._resolving: set[str] = set()
-        self._singleton_instances: Dict[str, Any] = {}
+        self._singleton_instances: dict[str, Any] = {}
 
     def register_instance(self, key: str, instance: Any) -> None:
         """Registers a pre-instantiated object in the container."""
@@ -78,7 +79,7 @@ class Container:
 
         return instance
 
-    def get_or_none(self, key: str) -> Optional[Any]:
+    def get_or_none(self, key: str) -> Any | None:
         """Safely resolves a component, returning None if not registered."""
         try:
             return self.get(key)

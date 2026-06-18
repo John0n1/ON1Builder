@@ -1,16 +1,17 @@
 """Comprehensive tests for logging_config module."""
 
-import pytest
 import logging
 import os
-from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
+
 from on1builder.utils.logging_config import (
+    HAVE_COLORLOG,
     JsonFormatter,
-    setup_logging,
     get_logger,
     reset_logging,
-    HAVE_COLORLOG,
+    setup_logging,
 )
 
 
@@ -251,7 +252,7 @@ class TestGetLogger:
         """Test get_logger initializes logging if not setup."""
         reset_logging()
 
-        logger = get_logger("test")
+        get_logger("test")
 
         # Root logger should be initialized
         root_logger = logging.getLogger("on1builder")

@@ -8,8 +8,8 @@ import json
 import logging
 import os
 import sys
+
 import dotenv
-from typing import Dict
 
 from on1builder.utils.path_helpers import get_base_dir
 
@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAVE_COLORLOG = False
 
-_loggers: Dict[str, logging.Logger] = {}
+_loggers: dict[str, logging.Logger] = {}
 _logging_initialized = False
 dotenv.load_dotenv()
 
@@ -186,7 +186,6 @@ def get_logger(name: str) -> logging.Logger:
 
 def reset_logging() -> None:
     """Reset logging configuration. Mainly used for testing."""
-    global _loggers
     _loggers.clear()
 
     # Clear all handlers from the root logger

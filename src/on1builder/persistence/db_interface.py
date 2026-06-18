@@ -4,16 +4,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import asyncio
+from typing import Any
 
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from on1builder.config.loaders import settings
 from on1builder.config.settings import DatabaseSettings
 from on1builder.utils.logging_config import get_logger
-from .db_models import Base, Transaction, ProfitRecord, MarketPrice
-import asyncio
+
+from .db_models import Base, MarketPrice, ProfitRecord, Transaction
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,7 @@ class DatabaseInterface:
     Handles engine creation, session management, and provides a clean API for CRUD operations.
     """
 
-    _instance: Optional["DatabaseInterface"] = None
+    _instance: DatabaseInterface | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -60,7 +61,7 @@ class DatabaseInterface:
         self._initialized_once = True
         logger.debug("DatabaseInterface initialized for URL: %s", self._db_url)
 
-    async def __aenter__(self) -> "DatabaseInterface":
+    async def __aenter__(self) -> DatabaseInterface:
         await self.initialize_db()
         return self
 
@@ -113,8 +114,8 @@ class DatabaseInterface:
             return False
 
     async def save_transaction(
-        self, tx_data: Dict[str, Any], retries: int = 2
-    ) -> Optional[Transaction]:
+        self, tx_data: dict[str, Any], retries: int = 2
+    ) -> Transaction | None:
         """
         Saves a single transaction record to the database.
 
@@ -149,8 +150,8 @@ class DatabaseInterface:
                 await asyncio.sleep(0.5 * attempt)
 
     async def save_profit_record(
-        self, profit_data: Dict[str, Any], retries: int = 2
-    ) -> Optional[ProfitRecord]:
+        self, profit_data: dict[str, Any], retries: int = 2
+    ) -> ProfitRecord | None:
         """
         Saves a single profit record to the database.
 
@@ -177,7 +178,11 @@ class DatabaseInterface:
             except Exception as e:
                 attempt += 1
                 logger.error(
-                    f"Failed to save profit record for tx {profit_data.get('tx_hash')}: {e} (attempt {attempt}/{retries + 1})",
+                    "Failed to save profit record for tx %s: %s (attempt %s/%s)",
+                    profit_data.get("tx_hash"),
+                    e,
+                    attempt,
+                    retries + 1,
                     exc_info=True,
                 )
                 if attempt > retries:
@@ -185,8 +190,8 @@ class DatabaseInterface:
                 await asyncio.sleep(0.5 * attempt)
 
     async def save_market_price(
-        self, price_data: Dict[str, Any], retries: int = 1
-    ) -> Optional[MarketPrice]:
+        self, price_data: dict[str, Any], retries: int = 1
+    ) -> MarketPrice | None:
         """
         Saves a single market price snapshot to the database.
 
@@ -226,7 +231,7 @@ class DatabaseInterface:
 
     async def get_latest_market_price(
         self, chain_id: int, symbol: str
-    ) -> Optional[MarketPrice]:
+    ) -> MarketPrice | None:
         """
         Retrieves the most recent market price for a token on a chain.
 
@@ -258,7 +263,7 @@ class DatabaseInterface:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_transaction_by_hash(self, tx_hash: str) -> Optional[Transaction]:
+    async def get_transaction_by_hash(self, tx_hash: str) -> Transaction | None:
         """
         Retrieves a transaction from the database by its hash.
 
@@ -281,7 +286,7 @@ class DatabaseInterface:
 
     async def get_recent_transactions(
         self, chain_id: int, limit: int = 100
-    ) -> List[Transaction]:
+    ) -> list[Transaction]:
         """
         Retrieves the most recent transactions for a given chain.
 
@@ -310,9 +315,7 @@ class DatabaseInterface:
             result = await session.execute(stmt)
             return result.scalars().all()
 
-    async def get_profit_summary(
-        self, chain_id: Optional[int] = None
-    ) -> Dict[str, Any]:
+    async def get_profit_summary(self, chain_id: int | None = None) -> dict[str, Any]:
         """
         Aggregates and returns a summary of profits.
 

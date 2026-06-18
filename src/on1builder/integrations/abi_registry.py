@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from on1builder.utils.logging_config import get_logger
-from on1builder.utils.path_helpers import get_resource_dir, get_monitored_tokens_path
+from on1builder.utils.path_helpers import get_monitored_tokens_path, get_resource_dir
 from on1builder.utils.singleton import SingletonMeta
 
 logger = get_logger(__name__)
@@ -21,15 +21,15 @@ class ABIRegistry(metaclass=SingletonMeta):
     """
 
     def __init__(self):
-        self._abis: Dict[str, List[Dict[str, Any]]] = {}
-        self._tokens: List[Dict[str, Any]] = []
-        self._token_map_by_symbol: Dict[int, Dict[str, str]] = (
+        self._abis: dict[str, list[dict[str, Any]]] = {}
+        self._tokens: list[dict[str, Any]] = []
+        self._token_map_by_symbol: dict[int, dict[str, str]] = (
             {}
         )  # chain_id -> {SYMBOL: address}
-        self._token_map_by_address: Dict[int, Dict[str, str]] = (
+        self._token_map_by_address: dict[int, dict[str, str]] = (
             {}
         )  # chain_id -> {address: SYMBOL}
-        self._token_info_by_address: Dict[int, Dict[str, Dict[str, Any]]] = (
+        self._token_info_by_address: dict[int, dict[str, dict[str, Any]]] = (
             {}
         )  # chain_id -> {address: info}
         self._loaded = False
@@ -50,7 +50,7 @@ class ABIRegistry(metaclass=SingletonMeta):
             for file_path in abi_dir.glob("*.json"):
                 try:
                     name = file_path.stem.lower().replace("_abi", "")
-                    with open(file_path, "r") as f:
+                    with open(file_path) as f:
                         abi_data = json.load(f)
                         # ABI can be a list directly or inside an 'abi' key
                         self._abis[name] = (
@@ -62,7 +62,7 @@ class ABIRegistry(metaclass=SingletonMeta):
                             logger.warning(
                                 f"No ABI content found for '{name}' in {file_path}"
                             )
-                except (json.JSONDecodeError, IOError) as e:
+                except (OSError, json.JSONDecodeError) as e:
                     logger.error(f"Failed to load or parse ABI file {file_path}: {e}")
 
         logger.debug("Loaded %s contract ABIs.", len(self._abis))
@@ -73,11 +73,11 @@ class ABIRegistry(metaclass=SingletonMeta):
             logger.warning(f"Monitored tokens file not found at: {tokens_file_path}")
         else:
             try:
-                with open(tokens_file_path, "r") as f:
+                with open(tokens_file_path) as f:
                     self._tokens = json.load(f)
                 self._build_token_maps()
                 logger.debug("Loaded and mapped %s tokens.", len(self._tokens))
-            except (json.JSONDecodeError, IOError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 logger.error(
                     f"Failed to load or parse tokens file {tokens_file_path}: {e}"
                 )
@@ -125,7 +125,7 @@ class ABIRegistry(metaclass=SingletonMeta):
                         f"Invalid chain ID '{chain_id_str}' for token {symbol}"
                     )
 
-    def get_abi(self, name: str) -> Optional[List[Dict[str, Any]]]:
+    def get_abi(self, name: str) -> list[dict[str, Any]] | None:
         """
         Retrieves a contract ABI by its common name.
 
@@ -137,7 +137,7 @@ class ABIRegistry(metaclass=SingletonMeta):
         """
         return self._abis.get(name.lower().replace("_abi", ""))
 
-    def get_token_address(self, symbol: str, chain_id: int) -> Optional[str]:
+    def get_token_address(self, symbol: str, chain_id: int) -> str | None:
         """
         Retrieves a token's contract address for a specific chain.
 
@@ -150,7 +150,7 @@ class ABIRegistry(metaclass=SingletonMeta):
         """
         return self._token_map_by_symbol.get(chain_id, {}).get(symbol.upper())
 
-    def get_token_symbol(self, address: str, chain_id: int) -> Optional[str]:
+    def get_token_symbol(self, address: str, chain_id: int) -> str | None:
         """
         Retrieves a token's symbol from its contract address for a specific chain.
 
@@ -163,7 +163,7 @@ class ABIRegistry(metaclass=SingletonMeta):
         """
         return self._token_map_by_address.get(chain_id, {}).get(address.lower())
 
-    def get_monitored_tokens(self, chain_id: int) -> Dict[str, str]:
+    def get_monitored_tokens(self, chain_id: int) -> dict[str, str]:
         """
         Returns a dictionary of all monitored tokens (symbol: address) for a given chain.
 
@@ -179,8 +179,8 @@ class ABIRegistry(metaclass=SingletonMeta):
     # Additional helpers for token metadata
     # ------------------------------------------------------------------
     def get_token_symbol_by_address(
-        self, address: str, chain_id: Optional[int] = None
-    ) -> Optional[str]:
+        self, address: str, chain_id: int | None = None
+    ) -> str | None:
         """Public-friendly alias that optionally searches across chains when chain_id is unknown."""
         address = address.lower()
         if chain_id is not None:
@@ -193,8 +193,8 @@ class ABIRegistry(metaclass=SingletonMeta):
         return None
 
     def get_token_info_by_address(
-        self, address: str, chain_id: Optional[int] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, address: str, chain_id: int | None = None
+    ) -> dict[str, Any] | None:
         """Return stored token metadata (symbol, name, decimals) for an address."""
         address = address.lower()
         if chain_id is not None:

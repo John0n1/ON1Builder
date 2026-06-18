@@ -1,17 +1,19 @@
 """Comprehensive tests for error_handling module."""
 
-import pytest
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
-from on1builder.utils.error_handling import (
-    RecoveryError,
-    ComponentInitializationError,
-    with_error_handling,
-    safe_call,
-    ComponentHealthTracker,
-    get_health_tracker,
-)
+from unittest.mock import patch
+
+import pytest
+
 from on1builder.utils.custom_exceptions import InitializationError
+from on1builder.utils.error_handling import (
+    ComponentHealthTracker,
+    ComponentInitializationError,
+    RecoveryError,
+    get_health_tracker,
+    safe_call,
+    with_error_handling,
+)
 
 
 class TestRecoveryError:

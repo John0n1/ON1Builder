@@ -11,8 +11,8 @@ import pytest
 def test_custom_exceptions_exist():
     """Test that custom exception classes exist and are properly defined."""
     from on1builder.utils.custom_exceptions import (
-        ConnectionError,
         ConfigurationError,
+        ConnectionError,
         StrategyExecutionError,
         TransactionError,
     )
@@ -27,8 +27,8 @@ def test_custom_exceptions_exist():
 def test_exception_instantiation():
     """Test that exceptions can be instantiated with messages."""
     from on1builder.utils.custom_exceptions import (
-        ConnectionError,
         ConfigurationError,
+        ConnectionError,
         StrategyExecutionError,
         TransactionError,
     )

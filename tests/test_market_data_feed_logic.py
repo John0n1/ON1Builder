@@ -1,6 +1,5 @@
 """Behavior-first tests for MarketDataFeed without touching real networks."""
 
-import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace

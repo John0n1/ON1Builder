@@ -1,15 +1,13 @@
 """Comprehensive tests for BalanceManager."""
 
-import pytest
-import asyncio
 from decimal import Decimal
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
-from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from on1builder.core.balance_manager import BalanceManager
 from on1builder.utils.custom_exceptions import (
     InsufficientFundsError,
-    ConnectionError as ON1ConnectionError,
 )
 
 

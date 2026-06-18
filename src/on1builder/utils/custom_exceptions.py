@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, Union
+from typing import Any, Union
 
 
 class ON1BuilderError(Exception):
@@ -13,8 +13,8 @@ class ON1BuilderError(Exception):
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ) -> None:
         self.message = message
         self.details = details or {}
@@ -26,7 +26,7 @@ class ON1BuilderError(Exception):
             return f"{self.message} | Details: {self.details}"
         return self.message
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for serialization."""
         return {
             "error_type": self.__class__.__name__,
@@ -42,12 +42,12 @@ class ConfigurationError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Configuration error",
-        key: Optional[str] = None,
-        value: Optional[Any] = None,
-        details: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        key: str | None = None,
+        value: Any | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ) -> None:
-        detail_payload: Dict[str, Any] = dict(details or {})
+        detail_payload: dict[str, Any] = dict(details or {})
         if key:
             detail_payload.setdefault("key", key)
         if value is not None:
@@ -61,8 +61,8 @@ class InitializationError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Component initialization failed",
-        component: Optional[str] = None,
-        cause: Optional[Exception] = None,
+        component: str | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {"component": component} if component else {}
         super().__init__(message, details, cause)
@@ -74,10 +74,10 @@ class ConnectionError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Connection failed",
-        endpoint: Optional[str] = None,
-        chain_id: Optional[int] = None,
-        retry_count: Optional[int] = None,
-        cause: Optional[Exception] = None,
+        endpoint: str | None = None,
+        chain_id: int | None = None,
+        retry_count: int | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {}
         if endpoint:
@@ -95,12 +95,12 @@ class TransactionError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Transaction failed",
-        tx_hash: Optional[str] = None,
-        reason: Optional[str] = None,
-        gas_used: Optional[int] = None,
-        gas_price: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        tx_hash: str | None = None,
+        reason: str | None = None,
+        gas_used: int | None = None,
+        gas_price: int | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ) -> None:
         final_details = details.copy() if details else {}
 
@@ -122,9 +122,9 @@ class StrategyExecutionError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Strategy execution failed",
-        strategy: Optional[str] = None,
-        opportunity: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        strategy: str | None = None,
+        opportunity: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {}
         if strategy:
@@ -146,10 +146,10 @@ class InsufficientFundsError(TransactionError):
     def __init__(
         self,
         message: str = "Insufficient funds",
-        required_amount: Optional[Union[int, float]] = None,
-        available_amount: Optional[Union[int, float]] = None,
-        token: Optional[str] = None,
-        cause: Optional[Exception] = None,
+        required_amount: Union[int, float] | None = None,
+        available_amount: Union[int, float] | None = None,
+        token: str | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {}
         if required_amount is not None:
@@ -167,11 +167,11 @@ class APICallError(ON1BuilderError):
     def __init__(
         self,
         message: str = "API call failed",
-        api_name: Optional[str] = None,
-        endpoint: Optional[str] = None,
-        status_code: Optional[int] = None,
-        response_body: Optional[str] = None,
-        cause: Optional[Exception] = None,
+        api_name: str | None = None,
+        endpoint: str | None = None,
+        status_code: int | None = None,
+        response_body: str | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {}
         if api_name:
@@ -191,10 +191,10 @@ class ValidationError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Validation failed",
-        field: Optional[str] = None,
-        value: Optional[Any] = None,
-        expected_type: Optional[str] = None,
-        cause: Optional[Exception] = None,
+        field: str | None = None,
+        value: Any | None = None,
+        expected_type: str | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {}
         if field:
@@ -212,10 +212,10 @@ class SafetyCheckError(ON1BuilderError):
     def __init__(
         self,
         message: str = "Safety check failed",
-        check_name: Optional[str] = None,
-        threshold: Optional[Union[int, float]] = None,
-        actual_value: Optional[Union[int, float]] = None,
-        cause: Optional[Exception] = None,
+        check_name: str | None = None,
+        threshold: Union[int, float] | None = None,
+        actual_value: Union[int, float] | None = None,
+        cause: Exception | None = None,
     ) -> None:
         details = {}
         if check_name:

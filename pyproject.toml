@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-on1builder"
-version = "2.3.0"
+version = "2.3.1"
 description = "ON1Builder is a cross-chain arbitrage bot for Ethereum and EVM-compatible networks, designed to automate profitable trading opportunities."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -71,3 +71,51 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 on1builder = ["resources/**/*"]
+
+[tool.ruff]
+line-length = 119
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E203", "E501"]
+fixable = ["ALL"]
+
+[tool.isort]
+profile = "black"
+line_length = 119
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = false
+no_strict_optional = false
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+  "on1builder.core.balance_manager",
+  "on1builder.core.nonce_manager",
+  "on1builder.core.transaction_manager",
+  "on1builder.engines.safety_guard",
+  "on1builder.engines.strategy_executor",
+  "on1builder.integrations.external_apis",
+  "on1builder.monitoring.market_data_feed",
+  "on1builder.monitoring.txpool_scanner",
+  "on1builder.persistence.db_interface",
+  "on1builder.persistence.db_models",
+  "on1builder.config.loaders",
+  "on1builder.config.settings",
+  "on1builder.utils.cli_helpers",
+  "on1builder.utils.container",
+  "on1builder.utils.custom_exceptions",
+  "on1builder.utils.error_handling",
+  "on1builder.utils.error_recovery",
+  "on1builder.utils.gas_optimizer",
+  "on1builder.utils.logging_config",
+  "on1builder.utils.notification_service",
+  "on1builder.utils.profit_calculator",
+  "on1builder.utils.singleton",
+  "on1builder.utils.web3_factory",
+]
+ignore_errors = true

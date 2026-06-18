@@ -13,9 +13,7 @@ import typer
 from rich.console import Console
 from rich.syntax import Syntax
 
-from on1builder.config.loaders import settings, load_settings
-from on1builder.utils.custom_exceptions import ConfigurationError
-from on1builder.utils.config_redactor import ConfigRedactor
+from on1builder.config.loaders import load_settings, settings
 from on1builder.utils.cli_helpers import (
     confirm_action,
     handle_cli_errors,
@@ -23,6 +21,8 @@ from on1builder.utils.cli_helpers import (
     resolve_editor_command,
     success_message,
 )
+from on1builder.utils.config_redactor import ConfigRedactor
+from on1builder.utils.custom_exceptions import ConfigurationError
 
 app = typer.Typer(help="Commands to inspect and validate configuration.")
 console = Console()

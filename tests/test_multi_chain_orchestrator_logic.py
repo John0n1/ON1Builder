@@ -1,6 +1,5 @@
 """Logic-focused tests for MultiChainOrchestrator without network side effects."""
 
-import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
 

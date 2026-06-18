@@ -6,7 +6,6 @@ Test websocket handling for proper None responses.
 """
 
 import pytest
-import asyncio
 
 
 @pytest.mark.asyncio

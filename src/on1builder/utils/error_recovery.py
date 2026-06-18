@@ -3,20 +3,20 @@
 # Copyright (c) 2026 John Hauger Mitander
 
 from __future__ import annotations
+
 import asyncio
 import functools
-from typing import Any, Callable, Dict, Optional, TypeVar, List
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from typing import Any, TypeVar
 
-from .logging_config import get_logger
 from .custom_exceptions import (
-    ON1BuilderError,
     ConnectionError,
-    TransactionError,
-    StrategyExecutionError,
     InsufficientFundsError,
-    InitializationError,
+    StrategyExecutionError,
+    TransactionError,
 )
+from .logging_config import get_logger
 
 F = TypeVar("F", bound=Callable[..., Any])
 logger = get_logger(__name__)
@@ -36,7 +36,7 @@ class CircuitBreaker:
         self.expected_exception = expected_exception
 
         self.failure_count = 0
-        self.last_failure_time: Optional[datetime] = None
+        self.last_failure_time: datetime | None = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
 
     def __call__(self, func: F) -> F:
@@ -159,9 +159,9 @@ class ErrorRecoveryManager:
     """Centralized error recovery and monitoring."""
 
     def __init__(self):
-        self.error_counts: Dict[str, int] = {}
-        self.last_errors: Dict[str, datetime] = {}
-        self.recovery_strategies: Dict[type, List[Callable]] = {}
+        self.error_counts: dict[str, int] = {}
+        self.last_errors: dict[str, datetime] = {}
+        self.recovery_strategies: dict[type, list[Callable]] = {}
 
         # Register default recovery strategies
         self._register_default_strategies()
@@ -187,7 +187,7 @@ class ErrorRecoveryManager:
         ]
 
     async def handle_error(
-        self, error: Exception, context: Dict[str, Any], component_name: str
+        self, error: Exception, context: dict[str, Any], component_name: str
     ) -> bool:
         """
         Handle error with appropriate recovery strategy.
@@ -242,12 +242,12 @@ class ErrorRecoveryManager:
 
         return False
 
-    async def _reconnect_web3(self, error: Exception, context: Dict[str, Any]) -> bool:
+    async def _reconnect_web3(self, error: Exception, context: dict[str, Any]) -> bool:
         """Attempt to reconnect Web3 connections."""
         try:
             logger.info("Attempting to reconnect Web3 connections...")
-            from on1builder.utils.web3_factory import Web3ConnectionFactory
             from on1builder.core.nonce_manager import NonceManager
+            from on1builder.utils.web3_factory import Web3ConnectionFactory
 
             chain_id = context.get("chain_id")
             tm = context.get("transaction_manager")
@@ -269,7 +269,7 @@ class ErrorRecoveryManager:
             return False
 
     async def _switch_rpc_endpoint(
-        self, error: Exception, context: Dict[str, Any]
+        self, error: Exception, context: dict[str, Any]
     ) -> bool:
         """Switch to backup RPC endpoint."""
         try:
@@ -280,13 +280,13 @@ class ErrorRecoveryManager:
             return False
 
     async def _reduce_connection_pool(
-        self, error: Exception, context: Dict[str, Any]
+        self, error: Exception, context: dict[str, Any]
     ) -> bool:
         """Reduce connection pool size to handle connection issues."""
         logger.info("Reducing connection pool size...")
         return True
 
-    async def _wait_for_funds(self, error: Exception, context: Dict[str, Any]) -> bool:
+    async def _wait_for_funds(self, error: Exception, context: dict[str, Any]) -> bool:
         """Wait for additional funds to be available."""
         logger.info("Pausing trading due to insufficient funds (no blocking wait).")
         context["trading_paused"] = True
@@ -294,7 +294,7 @@ class ErrorRecoveryManager:
         return False
 
     async def _reduce_position_size(
-        self, error: Exception, context: Dict[str, Any]
+        self, error: Exception, context: dict[str, Any]
     ) -> bool:
         """Reduce position size to conserve funds."""
         logger.info("Reducing position size due to insufficient funds...")
@@ -303,14 +303,14 @@ class ErrorRecoveryManager:
         )
         return True
 
-    async def _pause_trading(self, error: Exception, context: Dict[str, Any]) -> bool:
+    async def _pause_trading(self, error: Exception, context: dict[str, Any]) -> bool:
         """Pause trading temporarily."""
         logger.info("Pausing trading due to insufficient funds...")
         context["trading_paused"] = True
         context["pause_until"] = datetime.now() + timedelta(minutes=10)
         return True
 
-    async def _resync_nonce(self, error: Exception, context: Dict[str, Any]) -> bool:
+    async def _resync_nonce(self, error: Exception, context: dict[str, Any]) -> bool:
         """Resync transaction nonce."""
         logger.info("Resyncing transaction nonce...")
         tm = context.get("transaction_manager")
@@ -321,7 +321,7 @@ class ErrorRecoveryManager:
         return True
 
     async def _increase_gas_price(
-        self, error: Exception, context: Dict[str, Any]
+        self, error: Exception, context: dict[str, Any]
     ) -> bool:
         """Increase gas price for failed transactions."""
         logger.info("Increasing gas price for transaction retry...")
@@ -337,7 +337,7 @@ class ErrorRecoveryManager:
         return True
 
     async def _reduce_gas_limit(
-        self, error: Exception, context: Dict[str, Any]
+        self, error: Exception, context: dict[str, Any]
     ) -> bool:
         """Reduce gas limit for failed transactions."""
         logger.info("Reducing gas limit for transaction retry...")
@@ -350,7 +350,7 @@ class ErrorRecoveryManager:
         context["retry"] = True
         return True
 
-    def get_error_statistics(self) -> Dict[str, Any]:
+    def get_error_statistics(self) -> dict[str, Any]:
         """Get error statistics for monitoring."""
         return {
             "error_counts": self.error_counts.copy(),

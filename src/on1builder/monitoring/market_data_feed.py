@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple, Set
-from datetime import datetime, timedelta
 import statistics
+import time
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any
 
 from cachetools import TTLCache
 
@@ -30,24 +30,24 @@ class MarketDataFeed:
         self._db_interface = DatabaseInterface()
         self._db_ready = False
         # Only price a small, well-known universe to avoid log spam and flaky lookups
-        self._allowed_symbols: Set[str] = set(
+        self._allowed_symbols: set[str] = set(
             self._api_manager.WELL_KNOWN_TOKENS
         ).union({"ETH", "WETH", "WBTC", "BTC", "DAI"})
         self._price_cache: TTLCache = TTLCache(
             maxsize=1000, ttl=settings.heartbeat_interval / 2
         )
-        self._price_history: Dict[str, List[Tuple[datetime, Decimal]]] = {}
-        self._failed_tokens: Set[str] = set()
-        self._failed_token_counts: Dict[str, int] = {}
+        self._price_history: dict[str, list[tuple[datetime, Decimal]]] = {}
+        self._failed_tokens: set[str] = set()
+        self._failed_token_counts: dict[str, int] = {}
         self._failed_token_threshold: int = 5
         self._volatility_cache: TTLCache = TTLCache(
             maxsize=500, ttl=300
         )  # 5-minute volatility cache
-        self._market_sentiment: Dict[str, float] = {}  # -1 to 1 scale
+        self._market_sentiment: dict[str, float] = {}  # -1 to 1 scale
         self._is_running = False
-        self._update_task: Optional[asyncio.Task] = None
-        self._analysis_task: Optional[asyncio.Task] = None
-        self._last_persisted: Dict[str, float] = {}
+        self._update_task: asyncio.Task | None = None
+        self._analysis_task: asyncio.Task | None = None
+        self._last_persisted: dict[str, float] = {}
         self._persist_interval = float(
             getattr(
                 settings, "market_price_persist_interval", settings.heartbeat_interval
@@ -112,7 +112,7 @@ class MarketDataFeed:
         await self._api_manager.close()
         logger.info("Closing Market Data Feed.")
 
-    async def get_price(self, token_symbol: str) -> Optional[Decimal]:
+    async def get_price(self, token_symbol: str) -> Decimal | None:
         """Get current price with automatic caching and history tracking."""
         if not token_symbol.isascii():
             logger.debug("Skipping non-ASCII token symbol: %s", token_symbol)
@@ -210,7 +210,7 @@ class MarketDataFeed:
 
     async def get_volatility(
         self, token_symbol: str, timeframe_minutes: int = 60
-    ) -> Optional[float]:
+    ) -> float | None:
         """Calculate volatility for a token over the specified timeframe."""
         symbol_upper = token_symbol.upper()
         cache_key = f"{symbol_upper}_{timeframe_minutes}m"
@@ -250,7 +250,7 @@ class MarketDataFeed:
 
     async def get_price_trend(
         self, token_symbol: str, timeframe_minutes: int = 60
-    ) -> Optional[str]:
+    ) -> str | None:
         """Determine price trend: 'bullish', 'bearish', or 'sideways'."""
         symbol_upper = token_symbol.upper()
         history = self._price_history.get(symbol_upper, [])
@@ -333,9 +333,7 @@ class MarketDataFeed:
 
         return False
 
-    async def get_prices(
-        self, token_symbols: List[str]
-    ) -> Dict[str, Optional[Decimal]]:
+    async def get_prices(self, token_symbols: list[str]) -> dict[str, Decimal | None]:
         # Create tasks explicitly to avoid "Passing coroutines is forbidden" error
         tasks = [
             asyncio.create_task(self.get_price(symbol)) for symbol in token_symbols
@@ -485,7 +483,7 @@ class MarketDataFeed:
         self._failed_token_counts.clear()
         self._api_manager.reset_failed_tokens()
 
-    def get_failed_tokens(self) -> Set[str]:
+    def get_failed_tokens(self) -> set[str]:
         """Return tokens that are currently blacklisted due to repeated failures."""
         tokens = set(self._failed_tokens)
         api_tokens = getattr(self._api_manager, "_failed_tokens", None)
@@ -504,7 +502,7 @@ class MarketDataFeed:
             self._failed_token_counts.pop(symbol_upper, None)
         self._failed_tokens.discard(symbol_upper)
 
-    def get_market_data_summary(self) -> Dict[str, Any]:
+    def get_market_data_summary(self) -> dict[str, Any]:
         """Get comprehensive market data summary for monitoring."""
         summary = {
             "total_tracked_symbols": len(self._price_history),

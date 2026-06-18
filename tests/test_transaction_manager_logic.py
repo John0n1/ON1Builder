@@ -10,8 +10,8 @@ from pytest import approx
 
 from on1builder.core.transaction_manager import TransactionManager
 from on1builder.utils.custom_exceptions import (
-    StrategyExecutionError,
     InsufficientFundsError,
+    StrategyExecutionError,
     TransactionError,
 )
 
@@ -50,27 +50,29 @@ class StubWeb3ForBuild(StubWeb3):
 
 def build_manager(override_sign_send: bool = True):
     tm = TransactionManager.__new__(TransactionManager)
-    tm._web3 = StubWeb3()
+    tm._web3 = StubWeb3()  # type: ignore[assignment]
     tm._chain_id = 1
-    tm._address = "0xabc"
-    tm._balance_manager = SimpleNamespace(
+    tm._address = "0xabc"  # type: ignore[assignment]
+    tm._balance_manager = SimpleNamespace(  # type: ignore[assignment]
         update_balance=AsyncMock(side_effect=[Decimal("1.0"), Decimal("1.3")]),
         record_profit=AsyncMock(return_value=None),
     )
-    tm._safety_guard = SimpleNamespace(
+    tm._safety_guard = SimpleNamespace(  # type: ignore[assignment]
         check_transaction=AsyncMock(return_value=(True, ""))
     )
-    tm._account = SimpleNamespace(
+    tm._account = SimpleNamespace(  # type: ignore[assignment]
         sign_transaction=lambda params: SimpleNamespace(rawTransaction=b"0x")
     )
-    tm._nonce_manager = SimpleNamespace(
+    tm._nonce_manager = SimpleNamespace(  # type: ignore[assignment]
         get_next_nonce=AsyncMock(return_value=1), resync_nonce=AsyncMock()
     )
-    tm._db_interface = SimpleNamespace(
+    tm._db_interface = SimpleNamespace(  # type: ignore[assignment]
         save_transaction=AsyncMock(return_value=None),
         save_profit_record=AsyncMock(return_value=None),
     )
-    tm._notification_service = SimpleNamespace(send_alert=AsyncMock(return_value=None))
+    tm._notification_service = SimpleNamespace(  # type: ignore[assignment]
+        send_alert=AsyncMock(return_value=None)
+    )
     tm._execution_stats = {
         "total_transactions": 0,
         "successful_transactions": 0,
@@ -79,8 +81,8 @@ def build_manager(override_sign_send: bool = True):
     }
     # override network calls when desired
     if override_sign_send:
-        tm._sign_and_send = AsyncMock(return_value="0xtxhash")
-    tm.wait_for_receipt = AsyncMock(
+        tm._sign_and_send = AsyncMock(return_value="0xtxhash")  # type: ignore[method-assign]
+    tm.wait_for_receipt = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "gasUsed": 100000,
             "effectiveGasPrice": 10 * 10**9,

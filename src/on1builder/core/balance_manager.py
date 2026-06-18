@@ -6,25 +6,24 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-from typing import Dict, Optional, Tuple, List, Any
-from datetime import datetime, timedelta
+from typing import Any
 
 from web3 import AsyncWeb3
 
 from on1builder.config.loaders import settings
+from on1builder.utils.constants import (
+    BALANCE_CACHE_DURATION,
+    BALANCE_TIER_THRESHOLDS,
+    LOW_BALANCE_THRESHOLD_ETH,
+    MIN_PROFIT_THRESHOLD_ETH,
+    TOKEN_INFO_CACHE_DURATION,
+)
+from on1builder.utils.custom_exceptions import ConnectionError as ON1ConnectionError
 from on1builder.utils.custom_exceptions import (
     InsufficientFundsError,
-    ConnectionError as ON1ConnectionError,
 )
 from on1builder.utils.logging_config import get_logger
 from on1builder.utils.notification_service import NotificationService
-from on1builder.utils.constants import (
-    BALANCE_TIER_THRESHOLDS,
-    MIN_PROFIT_THRESHOLD_ETH,
-    BALANCE_CACHE_DURATION,
-    LOW_BALANCE_THRESHOLD_ETH,
-    TOKEN_INFO_CACHE_DURATION,
-)
 
 logger = get_logger(__name__)
 
@@ -60,7 +59,7 @@ class BalanceManager:
         except Exception:
             # Best effort only; keep the provided address on any failure.
             self.wallet_address = wallet_address
-        self.current_balance: Optional[Decimal] = None
+        self.current_balance: Decimal | None = None
         self.balance_tier: str = "unknown"
         self.notification_service = NotificationService()
 
@@ -68,13 +67,13 @@ class BalanceManager:
         self._balance_lock = asyncio.Lock()
         self._token_lock = asyncio.Lock()
         self._last_balance_check = 0
-        self._token_balance_cache: Dict[str, Tuple[Decimal, float]] = {}
+        self._token_balance_cache: dict[str, tuple[Decimal, float]] = {}
 
         # - profit tracking with granular metrics
         self._total_profit: Decimal = Decimal("0")
         self._session_profit: Decimal = Decimal("0")
-        self._profit_by_strategy: Dict[str, Decimal] = {}
-        self._profit_history: List[Dict] = []
+        self._profit_by_strategy: dict[str, Decimal] = {}
+        self._profit_history: list[dict] = []
         self._performance_metrics = {
             "total_trades": 0,
             "profitable_trades": 0,
@@ -84,7 +83,7 @@ class BalanceManager:
         }
 
         # Multi-token balance tracking
-        self.balances: Dict[str, Decimal] = {}
+        self.balances: dict[str, Decimal] = {}
 
         logger.debug(
             "ON1Builder BalanceManager initialized for wallet: %s", wallet_address
@@ -165,7 +164,10 @@ class BalanceManager:
 
         await self.notification_service.send_alert(
             title=f"Balance Tier Changed: {old_tier} → {new_tier}",
-            message=f"Wallet balance tier changed from {old_tier} to {new_tier}. Current balance: {self.current_balance:.6f} ETH",
+            message=(
+                f"Wallet balance tier changed from {old_tier} to {new_tier}. "
+                f"Current balance: {self.current_balance:.6f} ETH"
+            ),
             level=level,
             details={
                 "old_tier": old_tier,
@@ -278,7 +280,7 @@ class BalanceManager:
 
     async def calculate_optimal_gas_price(
         self, expected_profit: Decimal
-    ) -> Tuple[int, bool]:
+    ) -> tuple[int, bool]:
         """
         Calculates optimal gas price based on expected profit and balance tier.
         Returns (gas_price_gwei, should_proceed)
@@ -329,7 +331,7 @@ class BalanceManager:
             return settings.fallback_gas_price_gwei, True
 
     async def get_balance(
-        self, token_identifier: Optional[str] = None, force_refresh: bool = False
+        self, token_identifier: str | None = None, force_refresh: bool = False
     ) -> Decimal:
         """
         ON1Builder balance retrieval supporting both token symbols and addresses.
@@ -401,7 +403,7 @@ class BalanceManager:
         self,
         token_address: str,
         force_refresh: bool = False,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
     ) -> Decimal:
         """Get token balance using contract address."""
         try:
@@ -475,7 +477,7 @@ class BalanceManager:
         if not identifier.startswith("0x"):  # Only update balances dict for symbols
             self.balances[identifier] = balance
 
-    async def get_balances(self, token_identifiers: List[str]) -> Dict[str, Decimal]:
+    async def get_balances(self, token_identifiers: list[str]) -> dict[str, Decimal]:
         """
         ON1Builder method to get balances for multiple tokens efficiently using concurrent calls.
 
@@ -507,7 +509,7 @@ class BalanceManager:
         required_amount: Decimal,
         *,
         token: str = "ETH",
-        buffer: Optional[Decimal] = None,
+        buffer: Decimal | None = None,
     ) -> Decimal:
         """Ensure the wallet holds enough balance for the requested operation."""
         await self.update_balance(force=True)
@@ -548,7 +550,7 @@ class BalanceManager:
         """Returns the profit earned in the current session."""
         return self._session_profit
 
-    def get_profit_by_strategy(self) -> Dict[str, Decimal]:
+    def get_profit_by_strategy(self) -> dict[str, Decimal]:
         """Returns profit breakdown by strategy."""
         return self._profit_by_strategy.copy()
 
@@ -556,7 +558,7 @@ class BalanceManager:
         self,
         profit_amount: Decimal,
         strategy: str,
-        context: Optional[str] = None,
+        context: str | None = None,
         gas_cost: Decimal = Decimal("0"),
     ):
         """profit recording with comprehensive analytics."""
@@ -619,7 +621,7 @@ class BalanceManager:
             f"Profit recorded: {profit_amount:.6f} ETH from {strategy} (net: {profit_amount - gas_cost:.6f} ETH)"
         )
 
-    def get_profit_summary(self) -> Dict[str, Any]:
+    def get_profit_summary(self) -> dict[str, Any]:
         """Get comprehensive profit summary with ON1Builder metrics."""
         total_trades = self._performance_metrics["total_trades"]
         profitable_trades = self._performance_metrics["profitable_trades"]
@@ -650,7 +652,7 @@ class BalanceManager:
             "balance_tier": self.balance_tier,
         }
 
-    def get_profit_stats(self, recent_limit: int = 50) -> Dict[str, Any]:
+    def get_profit_stats(self, recent_limit: int = 50) -> dict[str, Any]:
         """Return precise profit metrics for analytics and testing."""
         net_profit = self._total_profit - self._performance_metrics["total_gas_spent"]
 
@@ -676,7 +678,7 @@ class BalanceManager:
             "total_trades": self._performance_metrics["total_trades"],
         }
 
-    def get_recent_performance(self, hours: int = 24) -> Dict[str, Any]:
+    def get_recent_performance(self, hours: int = 24) -> dict[str, Any]:
         """Get performance metrics for recent period."""
         import time
 
@@ -707,7 +709,7 @@ class BalanceManager:
             "strategy_breakdown": self._analyze_strategy_performance(recent_trades),
         }
 
-    def _analyze_strategy_performance(self, trades: List[Dict]) -> Dict[str, Dict]:
+    def _analyze_strategy_performance(self, trades: list[dict]) -> dict[str, dict]:
         """Analyze performance by strategy."""
         strategy_stats = {}
 
@@ -789,7 +791,7 @@ class BalanceManager:
 
         return max(Decimal("0"), adjusted_amount - gas_reserve)
 
-    async def get_balance_summary(self) -> Dict[str, Any]:
+    async def get_balance_summary(self) -> dict[str, Any]:
         """
         Get comprehensive balance summary including current balance and tier.
 

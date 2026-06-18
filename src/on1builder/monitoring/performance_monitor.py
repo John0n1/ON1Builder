@@ -5,12 +5,12 @@
 from __future__ import annotations
 
 import asyncio
-import psutil
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 from decimal import Decimal
+from typing import Any
+
+import psutil
 
 from ..utils.logging_config import get_logger
 
@@ -66,12 +66,12 @@ class PerformanceMonitor:
 
     def __init__(self, collection_interval: int = 60):
         self.collection_interval = collection_interval
-        self._metrics_history: List[PerformanceMetrics] = []
-        self._chain_metrics: Dict[int, ChainMetrics] = {}
+        self._metrics_history: list[PerformanceMetrics] = []
+        self._chain_metrics: dict[int, ChainMetrics] = {}
         self._is_running = False
-        self._monitor_task: Optional[asyncio.Task] = None
+        self._monitor_task: asyncio.Task | None = None
         self._max_history_size = 1440  # 24 hours of minute-by-minute data
-        self._transaction_times: List[float] = []
+        self._transaction_times: list[float] = []
         self._last_cleanup = datetime.now()
 
     async def start(self):
@@ -173,8 +173,8 @@ class PerformanceMonitor:
         chain_id: int,
         success: bool,
         execution_time_ms: float,
-        profit_eth: Optional[Decimal] = None,
-        gas_used_eth: Optional[Decimal] = None,
+        profit_eth: Decimal | None = None,
+        gas_used_eth: Decimal | None = None,
     ):
         """Record a transaction for performance tracking."""
         try:
@@ -240,11 +240,11 @@ class PerformanceMonitor:
             self._chain_metrics[chain_id].connection_status = reason
             logger.warning(f"Chain {chain_id} marked as unhealthy: {reason}")
 
-    def get_current_metrics(self) -> Optional[PerformanceMetrics]:
+    def get_current_metrics(self) -> PerformanceMetrics | None:
         """Get the most recent performance metrics."""
         return self._metrics_history[-1] if self._metrics_history else None
 
-    def get_metrics_summary(self, hours: int = 1) -> Dict[str, Any]:
+    def get_metrics_summary(self, hours: int = 1) -> dict[str, Any]:
         """Get a summary of performance metrics for the specified time period."""
         if not self._metrics_history:
             return {"error": "No metrics available"}
@@ -296,7 +296,7 @@ class PerformanceMonitor:
             },
         }
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """Get overall system health status."""
         current_metrics = self.get_current_metrics()
 

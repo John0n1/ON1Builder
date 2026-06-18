@@ -8,7 +8,7 @@ import asyncio
 import json
 import smtplib
 from email.mime.text import MIMEText
-from typing import Any, Dict, Optional
+from typing import Any
 
 import aiohttp
 
@@ -39,9 +39,9 @@ def _coerce_notification_settings(raw: Any) -> NotificationSettings:
 class NotificationService(metaclass=SingletonMeta):
     """Manages sending notifications through various configured channels."""
 
-    def __init__(self, settings_override: Optional[Any] = None):
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._config: Optional[NotificationSettings] = None
+    def __init__(self, settings_override: Any | None = None):
+        self._session: aiohttp.ClientSession | None = None
+        self._config: NotificationSettings | None = None
         self._configured_channels: list[str] = []
         self._min_level_value = self._level_to_int("ERROR")
         self._config_loaded = False
@@ -66,14 +66,14 @@ class NotificationService(metaclass=SingletonMeta):
     # Backward compatibility helpers
     # ------------------------------------------------------------------
     @property
-    def config(self) -> Optional[NotificationSettings]:
+    def config(self) -> NotificationSettings | None:
         """Expose resolved notification settings for legacy callers."""
         if not self._config_loaded:
             self._load_configuration()
         return self._config
 
     @property
-    def settings(self) -> Optional[NotificationSettings]:
+    def settings(self) -> NotificationSettings | None:
         """Alias for :pyattr:`config` kept for compatibility."""
         return self.config
 
@@ -138,7 +138,7 @@ class NotificationService(metaclass=SingletonMeta):
         title: str,
         message: str,
         level: str = "ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """
         Sends a notification if its level is at or above the configured minimum.
@@ -183,7 +183,7 @@ class NotificationService(metaclass=SingletonMeta):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    def _format_details(self, details: Optional[Dict[str, Any]]) -> str:
+    def _format_details(self, details: dict[str, Any] | None) -> str:
         """Formats the details dictionary into a string for message bodies."""
         if not details:
             return ""
@@ -195,7 +195,7 @@ class NotificationService(metaclass=SingletonMeta):
         )
 
     async def _send_slack(
-        self, title: str, message: str, level: str, details: Optional[Dict[str, Any]]
+        self, title: str, message: str, level: str, details: dict[str, Any] | None
     ):
         color_map = {
             "INFO": "#439FE0",
@@ -252,7 +252,7 @@ class NotificationService(metaclass=SingletonMeta):
             logger.error(f"Error sending Slack notification: {e}", exc_info=True)
 
     async def _send_discord(
-        self, title: str, message: str, level: str, details: Optional[Dict[str, Any]]
+        self, title: str, message: str, level: str, details: dict[str, Any] | None
     ):
         color_map = {
             "INFO": 3447003,
@@ -295,7 +295,7 @@ class NotificationService(metaclass=SingletonMeta):
             logger.error(f"Error sending Discord notification: {e}", exc_info=True)
 
     async def _send_telegram(
-        self, title: str, message: str, level: str, details: Optional[Dict[str, Any]]
+        self, title: str, message: str, level: str, details: dict[str, Any] | None
     ):
         text = f"*{level.upper()}: {title}*\n\n{message}\n\n{self._format_details(details)}"
         url = (
@@ -317,7 +317,7 @@ class NotificationService(metaclass=SingletonMeta):
             logger.error(f"Error sending Telegram notification: {e}", exc_info=True)
 
     async def _send_email(
-        self, title: str, message: str, level: str, details: Optional[Dict[str, Any]]
+        self, title: str, message: str, level: str, details: dict[str, Any] | None
     ):
         subject = f"[ON1Builder Alert - {level.upper()}] {title}"
         body = f"{message}\n\n--- Details ---\n{json.dumps(details, indent=2, default=str)}"
@@ -337,7 +337,7 @@ class NotificationService(metaclass=SingletonMeta):
             server.login(self._config.smtp_username, self._config.smtp_password)
             server.send_message(msg)
 
-    async def __aenter__(self) -> "NotificationService":
+    async def __aenter__(self) -> NotificationService:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:

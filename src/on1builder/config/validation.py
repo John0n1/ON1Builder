@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import os
 import re
-from decimal import Decimal
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
+from typing import Any, Union
 
 from ..utils.custom_exceptions import ConfigurationError, ValidationError
 from ..utils.logging_config import get_logger
@@ -76,7 +75,7 @@ class ConfigValidator:
         return private_key.replace("0x", "")
 
     @classmethod
-    def validate_chain_ids(cls, chain_ids: List[int]) -> List[int]:
+    def validate_chain_ids(cls, chain_ids: list[int]) -> list[int]:
         """Validate list of chain IDs."""
         if not chain_ids:
             raise ValidationError(
@@ -96,8 +95,8 @@ class ConfigValidator:
 
     @classmethod
     def validate_rpc_urls(
-        cls, rpc_urls: Dict[int, str], chain_ids: List[int]
-    ) -> Dict[int, str]:
+        cls, rpc_urls: dict[int, str], chain_ids: list[int]
+    ) -> dict[int, str]:
         """Validate RPC URLs for specified chains."""
         missing_rpcs = [cid for cid in chain_ids if cid not in rpc_urls]
         if missing_rpcs:
@@ -288,7 +287,7 @@ class ConfigValidator:
 
     @classmethod
     def validate_notification_settings(
-        cls, channels: List[str], min_level: str
+        cls, channels: list[str], min_level: str
     ) -> None:
         """Validate notification settings."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -313,7 +312,7 @@ class ConfigValidator:
             )
 
     @classmethod
-    def validate_file_paths(cls, paths: Dict[str, Union[str, Path]]) -> None:
+    def validate_file_paths(cls, paths: dict[str, Union[str, Path]]) -> None:
         """Validate file paths exist and are accessible."""
         for path_name, path_value in paths.items():
             if not path_value:
@@ -361,7 +360,7 @@ class ConfigValidator:
                                 cause=e,
                             )
 
-    def validate_complete_config(self, config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_complete_config(self, config_dict: dict[str, Any]) -> dict[str, Any]:
         """
         Perform complete validation of configuration dictionary.
 
@@ -584,7 +583,7 @@ class ConfigValidator:
 
 
 # Provide a module-level wrapper to keep the public API simple
-def validate_complete_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+def validate_complete_config(config_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Convenience helper that mirrors :meth:`ConfigValidator.validate_complete_config`.
 

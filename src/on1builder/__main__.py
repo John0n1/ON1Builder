@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-import typer
 import sys
+
+import typer
 
 from on1builder.cli.config_cmd import app as config_app
 from on1builder.cli.run_cmd import app as run_app

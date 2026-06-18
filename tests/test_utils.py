@@ -5,9 +5,9 @@
 Tests for utility modules.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
-from decimal import Decimal
 
 
 def test_gas_optimizer_initialization():

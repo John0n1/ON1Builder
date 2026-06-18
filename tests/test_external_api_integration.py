@@ -1,6 +1,7 @@
 """Live integration checks for ExternalAPIManager (skipped unless opted in)."""
 
 import os
+
 import pytest
 
 from on1builder.integrations.external_apis import ExternalAPIManager
