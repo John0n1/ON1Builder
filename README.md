@@ -5,7 +5,7 @@
 [![CI](https://github.com/John0n1/ON1Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/John0n1/ON1Builder/actions/workflows/ci.yml)
 
 ```bash
-pip install -e .
+pip install py-on1builder
 ```
 
 Async, multi-chain MEV/arbitrage engine with safety rails, flashloan support, and live telemetry. Highly customizable via config.
