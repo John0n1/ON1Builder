@@ -12,4 +12,4 @@ questionary>=2,<3
 rich>=13
 sqlalchemy[asyncio]>=2,<3
 typer>=0.9
-web3>=7,<8
+web3>=7,<9
